@@ -80,7 +80,7 @@ jobs:
       - name: Push to GitHub Packages
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         env:
-          GITHUB_PKG_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_PKG_TOKEN: ${{ secrets.GH_PKG_TOKEN }}
         run: >
           dotnet nuget push "src/**/bin/Release/*.nupkg"
           --source "https://nuget.pkg.github.com/DSoftStudio/index.json"
