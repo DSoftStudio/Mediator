@@ -49,7 +49,7 @@ jobs:
           /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
           /d:sonar.cs.vscoveragexml.reportsPaths="coverage.xml"
           /d:sonar.coverage.exclusions="**/samples/**,**/benchmarks/**,**/tests/**"
-          /d:sonar.exclusions="**/obj/**,**/bin/**"
+          /d:sonar.exclusions="**/obj/**,**/bin/**,**/samples/**,**/benchmarks/**"
 
       - name: Build
         run: dotnet build DSoftStudio.Mediator.slnx -c Release
