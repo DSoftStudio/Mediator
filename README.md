@@ -2,8 +2,8 @@
 
 [![NuGet](https://img.shields.io/nuget/v/DSoftStudio.Mediator.svg)](https://www.nuget.org/packages/DSoftStudio.Mediator)
 [![NuGet Downloads](https://img.shields.io/nuget/dt/DSoftStudio.Mediator.svg)](https://www.nuget.org/packages/DSoftStudio.Mediator)
-[![CI](https://github.com/DSoftStudio/DSoftStudio.Mediator/actions/workflows/ci.yml/badge.svg)](https://github.com/DSoftStudio/DSoftStudio.Mediator/actions/workflows/ci.yml)
-[![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=DSoftStudio_DSoftStudio.Mediator&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=DSoftStudio_DSoftStudio.Mediator)
+[![CI](https://github.com/DSoftStudio/Mediator/actions/workflows/ci.yml/badge.svg)](https://github.com/DSoftStudio/Mediator/actions/workflows/ci.yml)
+[![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=DSoftStudio_Mediator&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=DSoftStudio_Mediator)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
 ![Publish](https://img.shields.io/badge/publish-18ns-brightgreen)
 ![Send](https://img.shields.io/badge/send-18ns-blue)
