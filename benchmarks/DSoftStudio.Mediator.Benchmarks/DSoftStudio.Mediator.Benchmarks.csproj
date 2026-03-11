@@ -1,0 +1,29 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+	<OutputType>Exe</OutputType>
+	<TargetFramework>net10.0</TargetFramework>
+	<ImplicitUsings>enable</ImplicitUsings>
+	<Nullable>enable</Nullable>
+	<IsPackable>false</IsPackable>
+	<InterceptorsPreviewNamespaces>$(InterceptorsPreviewNamespaces);DSoftStudio.Mediator.Generated</InterceptorsPreviewNamespaces>
+	<InterceptorsNamespaces>$(InterceptorsNamespaces);DSoftStudio.Mediator.Generated</InterceptorsNamespaces>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+    <PackageReference Include="DispatchR.Mediator" Version="2.1.1" />
+    <PackageReference Include="MediatR" Version="14.1" />
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="10.0.3" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.3" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DSoftStudio.Mediator.Abstractions\DSoftStudio.Mediator.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\DSoftStudio.Mediator\DSoftStudio.Mediator.csproj" />
+    <ProjectReference Include="..\..\src\DSoftStudio.Mediator.Generators\DSoftStudio.Mediator.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

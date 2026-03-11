@@ -1,0 +1,38 @@
+<Solution>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/DSoftStudio.Mediator.Benchmarks/DSoftStudio.Mediator.Benchmarks.csproj" />
+  </Folder>
+  <Folder Name="/samples/" />
+  <Folder Name="/samples/basic-api/">
+    <Project Path="samples/basic-api/DSoft.Sample.Application/DSoft.Sample.Application.csproj" />
+    <Project Path="samples/basic-api/DSoft.Sample.Api/DSoft.Sample.Api.csproj" />
+  </Folder>
+  <Folder Name="/samples/pipeline-logging/">
+    <Project Path="samples/pipeline-logging/DSoft.Sample.Pipeline.Application/DSoft.Sample.Pipeline.Application.csproj" />
+    <Project Path="samples/pipeline-logging/DSoft.Sample.Pipeline.Api/DSoft.Sample.Pipeline.Api.csproj" />
+  </Folder>
+  <Folder Name="/samples/domain-events/">
+    <Project Path="samples/domain-events/DSoft.Sample.DomainEvents.Application/DSoft.Sample.DomainEvents.Application.csproj" />
+    <Project Path="samples/domain-events/DSoft.Sample.DomainEvents.Api/DSoft.Sample.DomainEvents.Api.csproj" />
+  </Folder>
+  <Folder Name="/samples/pre-post-processors/">
+    <Project Path="samples/pre-post-processors/DSoft.Sample.Processors.Api/DSoft.Sample.Processors.Api.csproj" />
+    <Project Path="samples/pre-post-processors/DSoft.Sample.Processors.Application/DSoft.Sample.Processors.Application.csproj" />
+  </Folder>
+  <Folder Name="/samples/streaming/">
+    <Project Path="samples/streaming/DSoft.Sample.Streaming.Application/DSoft.Sample.Streaming.Application.csproj" />
+    <Project Path="samples/streaming/DSoft.Sample.Streaming.Api/DSoft.Sample.Streaming.Api.csproj" />
+  </Folder>
+  <Folder Name="/samples/di-lifetimes/">
+    <Project Path="samples/di-lifetimes/DSoft.Sample.Lifetimes.Application/DSoft.Sample.Lifetimes.Application.csproj" />
+    <Project Path="samples/di-lifetimes/DSoft.Sample.Lifetimes.Api/DSoft.Sample.Lifetimes.Api.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/DSoftStudio.Mediator.Abstractions/DSoftStudio.Mediator.Abstractions.csproj" />
+    <Project Path="src/DSoftStudio.Mediator.Generators/DSoftStudio.Mediator.Generators.csproj" />
+    <Project Path="src/DSoftStudio.Mediator/DSoftStudio.Mediator.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DSoftStudio.Mediator.Tests/DSoftStudio.Mediator.Tests.csproj" />
+  </Folder>
+</Solution>

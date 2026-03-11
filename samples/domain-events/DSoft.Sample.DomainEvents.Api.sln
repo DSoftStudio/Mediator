@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 18
+VisualStudioVersion = 18.3.11520.95 d18.3
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DSoft.Sample.DomainEvents.Api", "DSoft.Sample.DomainEvents.Api\DSoft.Sample.DomainEvents.Api.csproj", "{CE7D285A-58B3-F640-DE7F-67531EFB6EEC}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DSoft.Sample.DomainEvents.Application", "DSoft.Sample.DomainEvents.Application\DSoft.Sample.DomainEvents.Application.csproj", "{E82FADBB-AC89-4444-41FF-9FEC309C84A2}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{CE7D285A-58B3-F640-DE7F-67531EFB6EEC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CE7D285A-58B3-F640-DE7F-67531EFB6EEC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CE7D285A-58B3-F640-DE7F-67531EFB6EEC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CE7D285A-58B3-F640-DE7F-67531EFB6EEC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E82FADBB-AC89-4444-41FF-9FEC309C84A2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E82FADBB-AC89-4444-41FF-9FEC309C84A2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E82FADBB-AC89-4444-41FF-9FEC309C84A2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E82FADBB-AC89-4444-41FF-9FEC309C84A2}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {6D32B92A-C31B-406E-B16D-33A9D9A1B88C}
+	EndGlobalSection
+EndGlobal

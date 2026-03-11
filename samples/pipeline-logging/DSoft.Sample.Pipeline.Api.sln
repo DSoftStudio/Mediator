@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 18
+VisualStudioVersion = 18.3.11520.95 d18.3
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DSoft.Sample.Pipeline.Api", "DSoft.Sample.Pipeline.Api\DSoft.Sample.Pipeline.Api.csproj", "{AC8CA8C1-5AEC-2996-7BA6-F75D015DB3B0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DSoft.Sample.Pipeline.Application", "DSoft.Sample.Pipeline.Application\DSoft.Sample.Pipeline.Application.csproj", "{68C84FD9-FA16-FB72-BCEA-DEC722391068}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{AC8CA8C1-5AEC-2996-7BA6-F75D015DB3B0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AC8CA8C1-5AEC-2996-7BA6-F75D015DB3B0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AC8CA8C1-5AEC-2996-7BA6-F75D015DB3B0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AC8CA8C1-5AEC-2996-7BA6-F75D015DB3B0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{68C84FD9-FA16-FB72-BCEA-DEC722391068}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{68C84FD9-FA16-FB72-BCEA-DEC722391068}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{68C84FD9-FA16-FB72-BCEA-DEC722391068}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{68C84FD9-FA16-FB72-BCEA-DEC722391068}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {28BE8A16-2787-42E6-AE51-B6EDA20BF58F}
+	EndGlobalSection
+EndGlobal

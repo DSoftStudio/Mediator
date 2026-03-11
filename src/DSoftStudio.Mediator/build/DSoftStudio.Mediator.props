@@ -1,0 +1,9 @@
+<Project>
+  <PropertyGroup>
+    <!-- Enable interceptors for the DSoftStudio.Mediator source generator.
+         The generator emits interceptor methods in this namespace to replace
+         ISender.Send<,>() calls with direct pipeline invocation. -->
+    <InterceptorsPreviewNamespaces>$(InterceptorsPreviewNamespaces);DSoftStudio.Mediator.Generated</InterceptorsPreviewNamespaces>
+    <InterceptorsNamespaces>$(InterceptorsNamespaces);DSoftStudio.Mediator.Generated</InterceptorsNamespaces>
+  </PropertyGroup>
+</Project>

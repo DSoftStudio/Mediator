@@ -1,0 +1,67 @@
+name: SonarCloud
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  sonar:
+    name: SonarCloud Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          dotnet-quality: 'preview'
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install SonarScanner
+        run: dotnet tool install --global dotnet-sonarscanner
+
+      - name: Install coverage tool
+        run: dotnet tool install --global dotnet-coverage
+
+      - name: Begin SonarCloud analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: >
+          dotnet sonarscanner begin
+          /k:"${{ vars.SONAR_PROJECT_KEY }}"
+          /o:"${{ vars.SONAR_ORG }}"
+          /d:sonar.host.url="https://sonarcloud.io"
+          /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
+          /d:sonar.cs.vscoveragexml.reportsPaths="coverage.xml"
+          /d:sonar.coverage.exclusions="**/samples/**,**/benchmarks/**,**/tests/**"
+          /d:sonar.exclusions="**/obj/**,**/bin/**"
+
+      - name: Build
+        run: dotnet build DSoftStudio.Mediator.slnx -c Release
+
+      - name: Test with coverage
+        run: >
+          dotnet-coverage collect
+          "dotnet test tests/DSoftStudio.Mediator.Tests/DSoftStudio.Mediator.Tests.csproj -c Release --no-build"
+          -f xml
+          -o coverage.xml
+
+      - name: End SonarCloud analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: dotnet sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN }}"

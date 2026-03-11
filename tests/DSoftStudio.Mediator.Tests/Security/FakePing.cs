@@ -1,0 +1,10 @@
+// Copyright (c) DSoftStudio. All rights reserved.
+// Licensed under the MIT License. See LICENSE in the project root for license information.
+
+using DSoftStudio.Mediator.Abstractions;
+
+namespace DSoftStudio.Mediator.Tests.Security;
+
+public sealed class FakePing : IRequest<int>
+{
+}
