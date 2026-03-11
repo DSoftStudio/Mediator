@@ -57,7 +57,7 @@ services
 Send a request:
 
 ```csharp
-var result = await mediator.Send<Ping, int>(new Ping());
+var result = await mediator.Send(new Ping());
 ```
 
 ---
@@ -248,7 +248,7 @@ public class CreateUserHandler : ICommandHandler<CreateUser, Guid>
 Send a command:
 
 ```csharp
-var userId = await mediator.Send<CreateUser, Guid>(new CreateUser("Alice"));
+var userId = await mediator.Send(new CreateUser("Alice"));
 ```
 
 ### Queries
@@ -270,7 +270,7 @@ public class GetUserHandler : IQueryHandler<GetUser, UserDto>
 Send a query:
 
 ```csharp
-var user = await mediator.Send<GetUser, UserDto>(new GetUser(userId));
+var user = await mediator.Send(new GetUser(userId));
 ```
 
 ### Targeting Behaviors by Message Type
