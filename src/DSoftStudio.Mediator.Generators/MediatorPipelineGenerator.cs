@@ -160,7 +160,12 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
         sb.AppendLine("                if (st == typeof(global::DSoftStudio.Mediator.Abstractions.IPipelineBehavior<TRequest, TResponse>) ||");
         sb.AppendLine("                    st == typeof(global::DSoftStudio.Mediator.Abstractions.IRequestPreProcessor<TRequest>) ||");
         sb.AppendLine("                    st == typeof(global::DSoftStudio.Mediator.Abstractions.IRequestPostProcessor<TRequest, TResponse>) ||");
-        sb.AppendLine("                    st == typeof(global::DSoftStudio.Mediator.Abstractions.IRequestExceptionHandler<TRequest, TResponse>))");
+        sb.AppendLine("                    st == typeof(global::DSoftStudio.Mediator.Abstractions.IRequestExceptionHandler<TRequest, TResponse>) ||");
+        sb.AppendLine("                    (st.IsGenericTypeDefinition && (");
+        sb.AppendLine("                        st == typeof(global::DSoftStudio.Mediator.Abstractions.IPipelineBehavior<,>) ||");
+        sb.AppendLine("                        st == typeof(global::DSoftStudio.Mediator.Abstractions.IRequestPreProcessor<>) ||");
+        sb.AppendLine("                        st == typeof(global::DSoftStudio.Mediator.Abstractions.IRequestPostProcessor<,>) ||");
+        sb.AppendLine("                        st == typeof(global::DSoftStudio.Mediator.Abstractions.IRequestExceptionHandler<,>))))");
         sb.AppendLine("                {");
         sb.AppendLine("                    needsChain = true;");
         sb.AppendLine("                    if (descriptor.Lifetime != global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton)");
