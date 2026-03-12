@@ -57,3 +57,6 @@ nunit-*.xml
 **/.vs/
 *.log
 
+/.sonarqube
+/analize.ps1
+/analyze-src.ps1

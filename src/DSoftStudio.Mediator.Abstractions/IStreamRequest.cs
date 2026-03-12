@@ -8,7 +8,7 @@ namespace DSoftStudio.Mediator.Abstractions
 {
     public interface IStreamRequest<out TResponse> { }
 
-    public interface IStreamRequestHandler<in TRequest, TResponse>
+    public interface IStreamRequestHandler<in TRequest, out TResponse>
         where TRequest : IStreamRequest<TResponse>
     {
         IAsyncEnumerable<TResponse> Handle(
