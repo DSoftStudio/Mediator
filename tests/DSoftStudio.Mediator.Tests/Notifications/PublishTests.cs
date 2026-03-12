@@ -53,7 +53,10 @@ public class PublishTests : IDisposable
     public async Task Publish_NoHandlersRegistered_CompletesWithoutError()
     {
         // UnregisteredNotification has no dispatch table entry — Handlers is null by default.
-        await _mediator.Publish(new UnregisteredNotification());
+        var task = _mediator.Publish(new UnregisteredNotification());
+        await task;
+
+        task.IsCompletedSuccessfully.ShouldBeTrue();
     }
 
     [Fact]
@@ -62,6 +65,9 @@ public class PublishTests : IDisposable
         // Initialize with an empty array — first write wins (write-once).
         NotificationDispatch<UnregisteredNotification>.TryInitialize([]);
 
-        await _mediator.Publish(new UnregisteredNotification());
+        var task = _mediator.Publish(new UnregisteredNotification());
+        await task;
+
+        task.IsCompletedSuccessfully.ShouldBeTrue();
     }
 }

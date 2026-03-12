@@ -40,25 +40,33 @@ namespace DSoftStudio.Mediator.Generators
                 if (compilation.GetAssemblyOrModuleSymbol(reference) is not IAssemblySymbol assembly)
                     continue;
 
-                foreach (var attr in assembly.GetAttributes())
-                {
-                    if (!SymbolEqualityComparer.Default.Equals(attr.AttributeClass, attrType))
-                        continue;
-
-                    if (attr.ConstructorArguments.Length < 2)
-                        continue;
-
-                    if (attr.ConstructorArguments[0].Value is not INamedTypeSymbol serviceType)
-                        continue;
-
-                    if (attr.ConstructorArguments[1].Value is not INamedTypeSymbol implType)
-                        continue;
-
-                    results.Add(new ExternalHandlerInfo(serviceType, implType));
-                }
+                CollectHandlersFromAssembly(assembly, attrType, results);
             }
 
             return results;
+        }
+
+        private static void CollectHandlersFromAssembly(
+            IAssemblySymbol assembly,
+            INamedTypeSymbol attrType,
+            List<ExternalHandlerInfo> results)
+        {
+            foreach (var attr in assembly.GetAttributes())
+            {
+                if (!SymbolEqualityComparer.Default.Equals(attr.AttributeClass, attrType))
+                    continue;
+
+                if (attr.ConstructorArguments.Length < 2)
+                    continue;
+
+                if (attr.ConstructorArguments[0].Value is not INamedTypeSymbol serviceType)
+                    continue;
+
+                if (attr.ConstructorArguments[1].Value is not INamedTypeSymbol implType)
+                    continue;
+
+                results.Add(new ExternalHandlerInfo(serviceType, implType));
+            }
         }
 
         // ── Filtered helpers for each generator ──────────────────────────

@@ -9,7 +9,8 @@ namespace DSoftStudio.Mediator.Tests.Wrappers;
 
 /// <summary>
 /// Tests the runtime object-based Publish(object) path which uses
-/// NotificationHandlerWrapperImpl&lt;T&gt; via reflection + expression cache.
+/// the AOT-safe <see cref="NotificationObjectDispatch"/> table
+/// populated at startup by the generated NotificationRegistry.
 /// </summary>
 public class NotificationWrapperTests : IDisposable
 {
