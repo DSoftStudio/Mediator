@@ -19,7 +19,7 @@ public sealed class ValidationBehavior<TRequest, TResponse>
         CancellationToken cancellationToken)
     {
         // Only validate commands, skip queries
-        if (request is not ICommand)
+         if (request is not ICommand)
             return next.Handle(request, cancellationToken);
 
         // Example: validate that command properties are not null/default

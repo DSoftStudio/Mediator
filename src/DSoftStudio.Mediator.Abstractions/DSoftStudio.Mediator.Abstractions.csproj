@@ -8,6 +8,10 @@
 
 	  <!-- This project is embedded inside DSoftStudio.Mediator.nupkg — not published separately -->
 	  <IsPackable>false</IsPackable>
+
+	  <!-- AOT / trimming -->
+	  <IsTrimmable>true</IsTrimmable>
+	  <IsAotCompatible Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net7.0'))">true</IsAotCompatible>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">

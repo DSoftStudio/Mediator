@@ -2,11 +2,7 @@
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using DSoftStudio.Mediator.Abstractions;
-using DSoftStudio.Mediator.Wrappers;
 using Microsoft.Extensions.DependencyInjection;
-using System.Collections.Concurrent;
-using System.Linq.Expressions;
-using System.Reflection;
 
 namespace DSoftStudio.Mediator
 {
@@ -15,6 +11,7 @@ namespace DSoftStudio.Mediator
     /// <para>
     /// All dispatch is static-generic — single CLR field lookup per call.
     /// No runtime reflection, no dictionary lookup, no wrapper allocation.
+    /// Fully AOT and trimming compatible.
     /// </para>
     /// Thread-safe and stateless — safe to register as scoped.
     /// </summary>
@@ -22,9 +19,6 @@ namespace DSoftStudio.Mediator
     {
         private readonly IServiceProvider _serviceProvider = serviceProvider;
         private readonly INotificationPublisher? _notificationPublisher = serviceProvider.GetService<INotificationPublisher>();
-
-        /// <summary>Notification wrapper cache for <see cref="Publish(object, CancellationToken)"/>.</summary>
-        private static readonly ConcurrentDictionary<Type, NotificationHandlerWrapper> NotificationWrapperCache = new();
 
         /// <inheritdoc />
         IServiceProvider IServiceProviderAccessor.ServiceProvider => _serviceProvider;
@@ -42,13 +36,15 @@ namespace DSoftStudio.Mediator
             // when static flag and DI container are out of sync (e.g. test isolation).
             if (RequestDispatch<TRequest, TResponse>.HasPipelineChain)
             {
-                var chain = _serviceProvider.GetService<PipelineChainHandler<TRequest, TResponse>>();
+                var chain = RequestDispatch<TRequest, TResponse>.IsPipelineChainCacheable
+                    ? PipelineChainCache<TRequest, TResponse>.Resolve(_serviceProvider)
+                    : _serviceProvider.GetService<PipelineChainHandler<TRequest, TResponse>>();
                 if (chain is not null)
                     return chain.Handle(request, cancellationToken);
             }
 
-            return _serviceProvider
-                .GetRequiredService<IRequestHandler<TRequest, TResponse>>()
+            return HandlerCache<TRequest, TResponse>
+                .Resolve(_serviceProvider)
                 .Handle(request, cancellationToken);
         }
 
@@ -66,7 +62,7 @@ namespace DSoftStudio.Mediator
                 return _notificationPublisher.Publish(handlers, notification, cancellationToken);
             }
 
-            return NotificationDispatcher.DispatchSequential(notification, _serviceProvider, cancellationToken);
+            return NotificationCachedDispatcher.DispatchSequential(notification, _serviceProvider, cancellationToken);
         }
 
         /// <inheritdoc />
@@ -81,14 +77,10 @@ namespace DSoftStudio.Mediator
                     nameof(notification));
             }
 
-            var notificationType = notification.GetType();
-            var wrapper = NotificationWrapperCache.GetOrAdd(notificationType, static nt =>
-            {
-                var wrapperType = typeof(NotificationHandlerWrapperImpl<>).MakeGenericType(nt);
-                return (NotificationHandlerWrapper)CompileFactory(wrapperType)();
-            });
-
-            return wrapper.Handle(notification, _serviceProvider, _notificationPublisher, cancellationToken);
+            // AOT-safe: uses compile-time generated dispatch table populated by
+            // NotificationRegistry.Register(). No MakeGenericType, no Expression.Compile.
+            return NotificationObjectDispatch.Dispatch(
+                notification, _serviceProvider, _notificationPublisher, cancellationToken);
         }
 
         // ── Streaming ──────────────────────────────────────────────────
@@ -107,18 +99,6 @@ namespace DSoftStudio.Mediator
             // Fallback for non-precompiled streams.
             return StreamPipelineInvoker.Invoke<TRequest, TResponse>(
                 request, _serviceProvider, cancellationToken);
-        }
-
-        // ── Shared helper ─────────────────────────────────────────────────
-
-        private static Func<object> CompileFactory(Type wrapperType)
-        {
-            var ctor = wrapperType.GetConstructor(BindingFlags.Instance | BindingFlags.Public, Type.EmptyTypes)
-                ?? throw new InvalidOperationException($"No parameterless constructor found on {wrapperType.Name}.");
-
-            var newExpr = Expression.New(ctor);
-            var lambda = Expression.Lambda<Func<object>>(Expression.Convert(newExpr, typeof(object)));
-            return lambda.Compile();
         }
     }
 

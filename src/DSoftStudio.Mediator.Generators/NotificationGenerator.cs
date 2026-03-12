@@ -155,8 +155,24 @@ public sealed class NotificationGenerator : IIncrementalGenerator
 
             sb.AppendLine("                });");
             sb.AppendLine();
+
+            // AOT-safe Publish(object) dispatch — no MakeGenericType, no Expression.Compile.
+            sb.AppendLine($"            global::DSoftStudio.Mediator.NotificationObjectDispatch.Register<{group.Key}>(");
+            sb.AppendLine("                static (notification, sp, publisher, ct) =>");
+            sb.AppendLine("                {");
+            sb.AppendLine($"                    var typed = ({group.Key})notification;");
+            sb.AppendLine("                    if (publisher is not null)");
+            sb.AppendLine("                    {");
+            sb.AppendLine($"                        var handlers = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetServices<global::DSoftStudio.Mediator.Abstractions.INotificationHandler<{group.Key}>>(sp);");
+            sb.AppendLine("                        return publisher.Publish(handlers, typed, ct);");
+            sb.AppendLine("                    }");
+            sb.AppendLine("                    return global::DSoftStudio.Mediator.NotificationCachedDispatcher.DispatchSequential(typed, sp, ct);");
+            sb.AppendLine("                });");
+            sb.AppendLine();
         }
 
+        // Freeze the dispatch table after all registrations.
+        sb.AppendLine("            global::DSoftStudio.Mediator.NotificationObjectDispatch.Freeze();");
         sb.AppendLine("        }");
         sb.AppendLine("    }");
         sb.AppendLine();

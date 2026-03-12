@@ -24,6 +24,7 @@ namespace DSoftStudio.Mediator
     {
         private static Func<TRequest, IServiceProvider, CancellationToken, ValueTask<TResponse>>? _pipeline;
         private static bool _hasPipelineChain;
+        private static bool _isPipelineChainCacheable;
 
         /// <summary>
         /// The cached pipeline dispatch delegate. <see langword="null"/> until initialized.
@@ -43,7 +44,18 @@ namespace DSoftStudio.Mediator
         public static bool HasPipelineChain
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => _hasPipelineChain;
+            get => Volatile.Read(ref _hasPipelineChain);
+        }
+
+        /// <summary>
+        /// <see langword="true"/> when the <see cref="PipelineChainHandler{TRequest, TResponse}"/>
+        /// is registered as Scoped or Singleton (safe to cache per thread).
+        /// <see langword="false"/> for Transient registrations (must resolve fresh each call).
+        /// </summary>
+        public static bool IsPipelineChainCacheable
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => Volatile.Read(ref _isPipelineChainCacheable);
         }
 
         /// <summary>
@@ -64,6 +76,13 @@ namespace DSoftStudio.Mediator
         /// in DI for this request type. Called once at startup by generated code.
         /// </summary>
         [EditorBrowsable(EditorBrowsableState.Never)]
-        public static void MarkPipelineChainRegistered() => _hasPipelineChain = true;
+        public static void MarkPipelineChainRegistered() => Volatile.Write(ref _hasPipelineChain, true);
+
+        /// <summary>
+        /// Marks the pipeline chain as cacheable (Scoped or Singleton lifetime).
+        /// Called once at startup by generated code alongside <see cref="MarkPipelineChainRegistered"/>.
+        /// </summary>
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public static void MarkPipelineChainCacheable() => Volatile.Write(ref _isPipelineChainCacheable, true);
     }
 }

@@ -7,15 +7,20 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 
+		<!-- AOT / trimming -->
+		<IsTrimmable>true</IsTrimmable>
+		<IsAotCompatible>true</IsAotCompatible>
+		<EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+
 		<!-- NuGet -->
 		<PackageId>DSoftStudio.Mediator</PackageId>
-		<Version>1.0.5</Version>
+		<Version>1.0.6</Version>
 
 		<Authors>DSoftStudio</Authors>
 		<Company>DSoftStudio</Company>
 
 		<Description>
-			High-performance mediator for .NET with compile-time pipeline generation, zero-allocation dispatch, and a familiar MediatR-style API.
+			Ultra-low-latency mediator for .NET with compile-time dispatch, zero-allocation pipelines, and a familiar MediatR-style API.
 		</Description>
 
 		<PackageTags>
@@ -64,22 +69,24 @@
 		<PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.3" />
 	</ItemGroup>
 
+	<!-- Test visibility -->
+	<ItemGroup>
+		<InternalsVisibleTo Include="DSoftStudio.Mediator.Tests" />
+	</ItemGroup>
+
 	<!-- Project references -->
 	<ItemGroup>
 
 		<!-- Abstractions: PrivateAssets="all" prevents NuGet from listing it as
 			 a separate dependency — we embed the DLL directly via TargetsForTfmSpecificBuildOutput. -->
-		<ProjectReference Include="..\DSoftStudio.Mediator.Abstractions\DSoftStudio.Mediator.Abstractions.csproj"
-						  PrivateAssets="all" />
+		<ProjectReference Include="..\DSoftStudio.Mediator.Abstractions\DSoftStudio.Mediator.Abstractions.csproj" PrivateAssets="all" />
 
 		<!-- Source generator: build-order dependency only.
 			 Do NOT add OutputItemType="Analyzer" here — the generator must NOT run
 			 during the library's own build, otherwise its output gets compiled into
 			 DSoftStudio.Mediator.dll and conflicts with the generator output in
 			 consumer projects (CS0121 ambiguous call). -->
-		<ProjectReference Include="..\DSoftStudio.Mediator.Generators\DSoftStudio.Mediator.Generators.csproj"
-						  ReferenceOutputAssembly="false"
-						  PrivateAssets="all" />
+		<ProjectReference Include="..\DSoftStudio.Mediator.Generators\DSoftStudio.Mediator.Generators.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
 
 	</ItemGroup>
 
@@ -106,17 +113,12 @@
 	<!-- Resolve the generator's output path dynamically via GetTargetPath
 		 so we never hardcode the TFM (netstandard2.0) in the csproj. -->
 	<Target Name="_PackGeneratorDll" BeforeTargets="_GetPackageFiles">
-		<MSBuild Projects="..\DSoftStudio.Mediator.Generators\DSoftStudio.Mediator.Generators.csproj"
-				 Targets="GetTargetPath"
-				 Properties="Configuration=$(Configuration)">
+		<MSBuild Projects="..\DSoftStudio.Mediator.Generators\DSoftStudio.Mediator.Generators.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration)">
 			<Output TaskParameter="TargetOutputs" ItemName="_GeneratorOutputPath" />
 		</MSBuild>
 
 		<ItemGroup>
-			<None Include="@(_GeneratorOutputPath)"
-				  Pack="true"
-				  PackagePath="analyzers/dotnet/cs"
-				  Visible="false" />
+			<None Include="@(_GeneratorOutputPath)" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
 		</ItemGroup>
 	</Target>
 

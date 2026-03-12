@@ -193,6 +193,11 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
         sb.AppendLine("                // Mark the static dispatch table so the interceptor can branch without a delegate.");
         sb.AppendLine("                global::DSoftStudio.Mediator.RequestDispatch<TRequest, TResponse>.MarkPipelineChainRegistered();");
         sb.AppendLine();
+        sb.AppendLine("                // Scoped and Singleton chains are safe to cache per thread (same instance within a scope).");
+        sb.AppendLine("                // Transient chains must be resolved fresh each call.");
+        sb.AppendLine("                if (!hasTransientPipelineComponent)");
+        sb.AppendLine("                    global::DSoftStudio.Mediator.RequestDispatch<TRequest, TResponse>.MarkPipelineChainCacheable();");
+        sb.AppendLine();
         sb.AppendLine("                // Pipeline with behaviors: resolve PipelineChainHandler directly — single DI lookup.");
         sb.AppendLine("                global::DSoftStudio.Mediator.RequestDispatch<TRequest, TResponse>.TryInitialize(");
         sb.AppendLine("                    static (request, sp, ct) =>");

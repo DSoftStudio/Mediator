@@ -18,6 +18,7 @@ namespace DSoftStudio.Mediator
     {
         private static Func<IServiceProvider, IStreamRequestHandler<TRequest, TResponse>>? _handler;
         private static Func<TRequest, IServiceProvider, CancellationToken, IAsyncEnumerable<TResponse>>? _pipeline;
+        private static bool _isStreamChainCacheable;
 
         public static Func<IServiceProvider, IStreamRequestHandler<TRequest, TResponse>>? Handler
         {
@@ -32,6 +33,16 @@ namespace DSoftStudio.Mediator
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => _pipeline;
+        }
+
+        /// <summary>
+        /// <see langword="true"/> when the <see cref="StreamPipelineChainHandler{TRequest, TResponse}"/>
+        /// is registered as Scoped or Singleton (safe to cache per thread).
+        /// </summary>
+        public static bool IsStreamChainCacheable
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => Volatile.Read(ref _isStreamChainCacheable);
         }
 
         [EditorBrowsable(EditorBrowsableState.Never)]
@@ -49,5 +60,12 @@ namespace DSoftStudio.Mediator
             ArgumentNullException.ThrowIfNull(pipeline);
             return Interlocked.CompareExchange(ref _pipeline, pipeline, null) == null;
         }
+
+        /// <summary>
+        /// Marks the stream pipeline chain as cacheable (Scoped or Singleton lifetime).
+        /// Called once at startup by generated code.
+        /// </summary>
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public static void MarkStreamChainCacheable() => Volatile.Write(ref _isStreamChainCacheable, true);
     }
 }

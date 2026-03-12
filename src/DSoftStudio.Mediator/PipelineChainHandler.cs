@@ -65,13 +65,9 @@ namespace DSoftStudio.Mediator
                 ? exArray
                 : [.. exceptionHandlers];
 
-            _pipelineMode = (_behaviors.Length == 0 && _preProcessors.Length == 0
-                    && _postProcessors.Length == 0 && _exceptionHandlers.Length == 0)
-                ? (byte)0  // PassThrough
-                : (_preProcessors.Length == 0 && _postProcessors.Length == 0
-                    && _exceptionHandlers.Length == 0)
-                    ? (byte)1  // BehaviorsOnly
-                    : (byte)2; // Full
+            _pipelineMode = ComputePipelineMode(
+                _behaviors.Length, _preProcessors.Length,
+                _postProcessors.Length, _exceptionHandlers.Length);
 
             // Pre-link behavior chain: adapter0 → adapter1 → ... → handler.
             // Built once at construction (per scope). Zero mutable state on hot path.
@@ -79,6 +75,21 @@ namespace DSoftStudio.Mediator
             for (int i = _behaviors.Length - 1; i >= 0; i--)
                 chain = new BehaviorHandlerAdapter<TRequest, TResponse>(_behaviors[i], chain);
             _prelinkedChain = chain;
+        }
+
+        /// <summary>
+        /// 0 = PassThrough (no pipeline components), 1 = BehaviorsOnly, 2 = Full.
+        /// </summary>
+        private static byte ComputePipelineMode(
+            int behaviors, int pre, int post, int exceptions)
+        {
+            if (behaviors == 0 && pre == 0 && post == 0 && exceptions == 0)
+                return 0; // PassThrough
+
+            if (pre == 0 && post == 0 && exceptions == 0)
+                return 1; // BehaviorsOnly
+
+            return 2; // Full
         }
 
         /// <summary>
@@ -143,7 +154,7 @@ namespace DSoftStudio.Mediator
             {
                 var task = _postProcessors[i].Process(request, response, cancellationToken);
                 if (!task.IsCompletedSuccessfully)
-                    return AwaitPostProcessorAndContinue(request, response, cancellationToken, i, task);
+                    return AwaitPostProcessorAndContinue(request, response, i, task, cancellationToken);
             }
 
             return new ValueTask<TResponse>(response);
@@ -192,8 +203,8 @@ namespace DSoftStudio.Mediator
         }
 
         private async ValueTask<TResponse> AwaitPostProcessorAndContinue(
-            TRequest request, TResponse response, CancellationToken cancellationToken,
-            int postIndex, ValueTask pendingPostTask)
+            TRequest request, TResponse response,
+            int postIndex, ValueTask pendingPostTask, CancellationToken cancellationToken)
         {
             await pendingPostTask.ConfigureAwait(false);
 

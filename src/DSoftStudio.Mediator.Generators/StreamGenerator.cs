@@ -119,13 +119,6 @@ public sealed class StreamGenerator : IIncrementalGenerator
                 $"                static sp => global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{handler.HandlerType}>(sp));");
 
             sb.AppendLine(
-                $"            // Register the pre-wired chain handler for DI scope-level caching");
-            sb.AppendLine(
-                $"            global::Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddTransient<");
-            sb.AppendLine(
-                $"                global::DSoftStudio.Mediator.StreamPipelineChainHandler<{handler.RequestType}, {handler.ResponseType}>>(services);");
-
-            sb.AppendLine(
                 $"            RegisterStreamPipeline<{handler.RequestType}, {handler.ResponseType}>(services);");
 
             sb.AppendLine();
@@ -134,18 +127,60 @@ public sealed class StreamGenerator : IIncrementalGenerator
         sb.AppendLine("        }");
         sb.AppendLine();
 
-        // Generic helper that sets the stream dispatch pipeline
+        // Generic helper that inspects service collection and sets optimal stream dispatch
         sb.AppendLine("        private static void RegisterStreamPipeline<TRequest, TResponse>(global::Microsoft.Extensions.DependencyInjection.IServiceCollection services)");
         sb.AppendLine("            where TRequest : global::DSoftStudio.Mediator.Abstractions.IStreamRequest<TResponse>");
         sb.AppendLine("        {");
-        sb.AppendLine("            // Route through StreamPipelineChainHandler which resolves handler + behaviors");
-        sb.AppendLine("            // once per DI scope — no per-call GetServices().ToArray().");
+        sb.AppendLine("            bool hasBehaviors = false;");
+        sb.AppendLine("            bool allSingleton = true;");
+        sb.AppendLine("            bool hasTransientComponent = false;");
+        sb.AppendLine("            foreach (var descriptor in services)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                if (descriptor.ServiceType == typeof(global::DSoftStudio.Mediator.Abstractions.IStreamPipelineBehavior<TRequest, TResponse>))");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    hasBehaviors = true;");
+        sb.AppendLine("                    if (descriptor.Lifetime != global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton)");
+        sb.AppendLine("                        allSingleton = false;");
+        sb.AppendLine("                    if (descriptor.Lifetime == global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)");
+        sb.AppendLine("                        hasTransientComponent = true;");
+        sb.AppendLine("                }");
+        sb.AppendLine("            }");
+        sb.AppendLine();
+        sb.AppendLine("            // Only register StreamPipelineChainHandler when behaviors exist.");
+        sb.AppendLine("            if (hasBehaviors)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                if (allSingleton)");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    global::Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<global::DSoftStudio.Mediator.StreamPipelineChainHandler<TRequest, TResponse>>(services);");
+        sb.AppendLine("                }");
+        sb.AppendLine("                else if (hasTransientComponent)");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    global::Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddTransient<global::DSoftStudio.Mediator.StreamPipelineChainHandler<TRequest, TResponse>>(services);");
+        sb.AppendLine("                }");
+        sb.AppendLine("                else");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    global::Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddScoped<global::DSoftStudio.Mediator.StreamPipelineChainHandler<TRequest, TResponse>>(services);");
+        sb.AppendLine("                }");
+        sb.AppendLine();
+        sb.AppendLine("                // Scoped and Singleton chains are safe to cache per thread.");
+        sb.AppendLine("                if (!hasTransientComponent)");
+        sb.AppendLine("                    global::DSoftStudio.Mediator.StreamDispatch<TRequest, TResponse>.MarkStreamChainCacheable();");
+        sb.AppendLine("            }");
+        sb.AppendLine();
+        sb.AppendLine("            // Set the stream pipeline delegate — handles both with-behaviors and no-behaviors paths.");
         sb.AppendLine("            global::DSoftStudio.Mediator.StreamDispatch<TRequest, TResponse>.TryInitializePipeline(");
         sb.AppendLine("                static (request, sp, ct) =>");
         sb.AppendLine("                {");
-        sb.AppendLine("                    var chain = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions");
-        sb.AppendLine("                        .GetRequiredService<global::DSoftStudio.Mediator.StreamPipelineChainHandler<TRequest, TResponse>>(sp);");
-        sb.AppendLine("                    return chain.Handle(request, ct);");
+        sb.AppendLine("                    // Resolve chain: uses ThreadStatic cache for Scoped/Singleton, GetService for Transient.");
+        sb.AppendLine("                    // Returns null when no behaviors are registered (chain not in DI).");
+        sb.AppendLine("                    var chain = global::DSoftStudio.Mediator.StreamDispatch<TRequest, TResponse>.IsStreamChainCacheable");
+        sb.AppendLine("                        ? global::DSoftStudio.Mediator.StreamPipelineChainCache<TRequest, TResponse>.Resolve(sp)");
+        sb.AppendLine("                        : global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions");
+        sb.AppendLine("                            .GetService<global::DSoftStudio.Mediator.StreamPipelineChainHandler<TRequest, TResponse>>(sp);");
+        sb.AppendLine("                    if (chain is not null)");
+        sb.AppendLine("                        return chain.Handle(request, ct);");
+        sb.AppendLine("                    // No-behaviors fast path: resolve handler directly, skip chain allocation.");
+        sb.AppendLine("                    return global::DSoftStudio.Mediator.StreamDispatch<TRequest, TResponse>.Handler!(sp).Handle(request, ct);");
         sb.AppendLine("                });");
         sb.AppendLine("        }");
 

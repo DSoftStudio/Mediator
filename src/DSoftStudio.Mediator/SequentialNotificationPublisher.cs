@@ -17,11 +17,16 @@ namespace DSoftStudio.Mediator
             CancellationToken cancellationToken)
             where TNotification : INotification
         {
-            foreach (var handler in handlers)
+            // Materialize once — MS DI returns an array, so this cast is free.
+            var array = handlers is INotificationHandler<TNotification>[] a
+                ? a
+                : System.Linq.Enumerable.ToArray(handlers);
+
+            for (int i = 0; i < array.Length; i++)
             {
-                var task = handler.Handle(notification, cancellationToken);
+                var task = array[i].Handle(notification, cancellationToken);
                 if (!task.IsCompletedSuccessfully)
-                    return AwaitRemaining(task, handlers, handler, notification, cancellationToken);
+                    return AwaitRemaining(task, array, notification, i, cancellationToken);
             }
 
             return Task.CompletedTask;
@@ -29,25 +34,19 @@ namespace DSoftStudio.Mediator
 
         private static async Task AwaitRemaining<TNotification>(
             Task pendingTask,
-            IEnumerable<INotificationHandler<TNotification>> handlers,
-            INotificationHandler<TNotification> current,
+            INotificationHandler<TNotification>[] handlers,
             TNotification notification,
+            int currentIndex,
             CancellationToken cancellationToken)
             where TNotification : INotification
         {
             await pendingTask.ConfigureAwait(false);
 
-            bool found = false;
-            foreach (var handler in handlers)
+            for (int i = currentIndex + 1; i < handlers.Length; i++)
             {
-                if (!found)
-                {
-                    if (ReferenceEquals(handler, current))
-                        found = true;
-                    continue;
-                }
-
-                await handler.Handle(notification, cancellationToken).ConfigureAwait(false);
+                var task = handlers[i].Handle(notification, cancellationToken);
+                if (!task.IsCompletedSuccessfully)
+                    await task.ConfigureAwait(false);
             }
         }
     }

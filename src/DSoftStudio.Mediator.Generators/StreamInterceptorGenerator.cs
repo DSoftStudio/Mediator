@@ -15,22 +15,22 @@ using Microsoft.CodeAnalysis.Text;
 namespace DSoftStudio.Mediator.Generators;
 
 /// <summary>
-/// Incremental generator that intercepts <c>ISender.Send&lt;TRequest, TResponse&gt;()</c> call sites
-/// and replaces them with direct pipeline invocation — eliminating virtual dispatch, the
-/// <c>Mediator.Send</c> method frame, and the delegate indirection on the hot path.
+/// Incremental generator that intercepts <c>IMediator.CreateStream&lt;TRequest, TResponse&gt;()</c>
+/// call sites and replaces them with direct pipeline invocation — eliminating virtual dispatch,
+/// the <c>Mediator.CreateStream</c> method frame, and the delegate indirection on the hot path.
+/// Mirrors the <see cref="SendInterceptorGenerator"/> pattern for streams.
 /// </summary>
 [Generator]
-public sealed class SendInterceptorGenerator : IIncrementalGenerator
+public sealed class StreamInterceptorGenerator : IIncrementalGenerator
 {
-    private const string SenderInterfaceMetadataName =
-        "DSoftStudio.Mediator.Abstractions.ISender";
+    private const string MediatorInterfaceMetadataName =
+        "DSoftStudio.Mediator.Abstractions.IMediator";
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        // ── Call-site discovery (existing) ────────────────────────
         var callSites = context.SyntaxProvider
             .CreateSyntaxProvider(
-                predicate: static (node, _) => IsSendCandidate(node),
+                predicate: static (node, _) => IsCreateStreamCandidate(node),
                 transform: static (ctx, ct) => GetInterceptInfo(ctx, ct))
             .Where(static info => info is not null)
             .Select(static (info, _) => info!.Value);
@@ -46,31 +46,30 @@ public sealed class SendInterceptorGenerator : IIncrementalGenerator
             var code = GenerateInterceptors(unique);
 
             spc.AddSource(
-                "MediatorInterceptors.g.cs",
+                "StreamInterceptors.g.cs",
                 SourceText.From(code, Encoding.UTF8));
         });
     }
 
     /// <summary>
-    /// Lightweight syntactic check: is this an invocation of .Send?
-    /// Matches both explicit generic (.Send&lt;T,R&gt;) and type-inferred (.Send) call sites.
+    /// Lightweight syntactic check: is this an invocation of .CreateStream?
+    /// Matches both explicit generic (.CreateStream&lt;T,R&gt;) and type-inferred (.CreateStream) call sites.
     /// </summary>
-    private static bool IsSendCandidate(SyntaxNode node)
+    private static bool IsCreateStreamCandidate(SyntaxNode node)
     {
         if (node is not InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax memberAccess })
             return false;
 
         return memberAccess.Name switch
         {
-            GenericNameSyntax { Identifier.Text: "Send", TypeArgumentList.Arguments.Count: 2 } => true,
-            IdentifierNameSyntax { Identifier.Text: "Send" } => true,
+            GenericNameSyntax { Identifier.Text: "CreateStream", TypeArgumentList.Arguments.Count: 2 } => true,
+            IdentifierNameSyntax { Identifier.Text: "CreateStream" } => true,
             _ => false
         };
     }
 
     /// <summary>
-    /// Semantic check: verify the call resolves to ISender.Send and extract type info + location.
-    /// Uses GetInterceptableLocation API (Roslyn 4.12+) for the opaque location format.
+    /// Semantic check: verify the call resolves to IMediator.CreateStream and extract type info + location.
     /// </summary>
     private static InterceptCallInfo? GetInterceptInfo(
         GeneratorSyntaxContext ctx,
@@ -81,7 +80,7 @@ public sealed class SendInterceptorGenerator : IIncrementalGenerator
         if (ctx.SemanticModel.GetSymbolInfo(invocation, ct).Symbol is not IMethodSymbol method)
             return null;
 
-        if (method.Name != "Send")
+        if (method.Name != "CreateStream")
             return null;
 
         string requestType;
@@ -89,7 +88,7 @@ public sealed class SendInterceptorGenerator : IIncrementalGenerator
 
         if (method.TypeArguments.Length == 2)
         {
-            // Explicit generic: sender.Send<Ping, int>(request)
+            // Explicit generic: mediator.CreateStream<PingStream, int>(request)
             requestType = method.TypeArguments[0]
                 .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             responseType = method.TypeArguments[1]
@@ -105,16 +104,13 @@ public sealed class SendInterceptorGenerator : IIncrementalGenerator
             return null;
         }
 
-        if (!InterceptorHelpers.ImplementsInterface(method.ContainingType, ctx.SemanticModel.Compilation, SenderInterfaceMetadataName))
+        if (!InterceptorHelpers.ImplementsInterface(method.ContainingType, ctx.SemanticModel.Compilation, MediatorInterfaceMetadataName))
             return null;
 
-        // Use the new GetInterceptableLocation API (Roslyn 4.12+)
         var interceptableLocation = ctx.SemanticModel.GetInterceptableLocation(invocation, ct);
         if (interceptableLocation is null)
             return null;
 
-        // GetInterceptsLocationAttributeSyntax returns the full attribute text:
-        // [global::System.Runtime.CompilerServices.InterceptsLocationAttribute(1, "base64data")]
         var attributeSyntax = interceptableLocation.GetInterceptsLocationAttributeSyntax();
 
         return new InterceptCallInfo(
@@ -137,7 +133,7 @@ public sealed class SendInterceptorGenerator : IIncrementalGenerator
         requestType = requestParam.Type
             .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
-        // Return type is ValueTask<TResponse> — extract TResponse
+        // Return type is IAsyncEnumerable<TResponse> — extract TResponse
         if (method.ReturnType is not INamedTypeSymbol { TypeArguments.Length: 1 } returnType)
             return false;
 
@@ -168,10 +164,9 @@ public sealed class SendInterceptorGenerator : IIncrementalGenerator
 
         sb.AppendLine("namespace DSoftStudio.Mediator.Generated");
         sb.AppendLine("{");
-        sb.AppendLine("    file static class SendInterceptors");
+        sb.AppendLine("    file static class StreamInterceptors");
         sb.AppendLine("    {");
 
-        // Group by (requestType, responseType) — multiple call sites can share one method
         var groups = calls
             .GroupBy(c => (c.RequestType, c.ResponseType))
             .ToList();
@@ -189,51 +184,55 @@ public sealed class SendInterceptorGenerator : IIncrementalGenerator
                 sb.AppendLine(call.AttributeSyntax);
             }
 
-            sb.Append("        internal static global::System.Threading.Tasks.ValueTask<");
+            // Extension method on IMediator that replaces CreateStream call sites
+            sb.Append("        internal static global::System.Collections.Generic.IAsyncEnumerable<");
             sb.Append(resType);
-            sb.Append("> Send_");
+            sb.Append("> CreateStream_");
             sb.Append(methodIndex);
-            sb.Append("(this global::DSoftStudio.Mediator.Abstractions.ISender sender, ");
+            sb.Append("(this global::DSoftStudio.Mediator.Abstractions.IMediator mediator, ");
             sb.Append(reqType);
             sb.AppendLine(" request, global::System.Threading.CancellationToken cancellationToken = default)");
             sb.AppendLine("        {");
             sb.AppendLine("            global::System.ArgumentNullException.ThrowIfNull(request);");
-            sb.AppendLine("            var sp = ((global::DSoftStudio.Mediator.IServiceProviderAccessor)sender).ServiceProvider;");
-            sb.AppendLine("            // Zero-delegate dispatch: static bool skips the GetService probe for the");
-            sb.AppendLine("            // no-behaviors path (~0 ns branch vs ~5 ns failed DI lookup).");
-            sb.Append("            if (global::DSoftStudio.Mediator.RequestDispatch<");
-            sb.Append(reqType);
-            sb.Append(", ");
-            sb.Append(resType);
-            sb.AppendLine(">.HasPipelineChain)");
-            sb.AppendLine("            {");
+            sb.AppendLine("            var sp = ((global::DSoftStudio.Mediator.IServiceProviderAccessor)mediator).ServiceProvider;");
 
-            // ThreadStatic cache for Scoped/Singleton chains; direct GetService for Transient.
-            sb.Append("                var chain = global::DSoftStudio.Mediator.RequestDispatch<");
+            // Behaviors path: check for stream pipeline chain (cached or direct DI)
+            sb.Append("            var chain = global::DSoftStudio.Mediator.StreamDispatch<");
             sb.Append(reqType);
             sb.Append(", ");
             sb.Append(resType);
-            sb.AppendLine(">.IsPipelineChainCacheable");
-            sb.Append("                    ? global::DSoftStudio.Mediator.PipelineChainCache<");
+            sb.AppendLine(">.IsStreamChainCacheable");
+            sb.Append("                ? global::DSoftStudio.Mediator.StreamPipelineChainCache<");
             sb.Append(reqType);
             sb.Append(", ");
             sb.Append(resType);
             sb.AppendLine(">.Resolve(sp)");
-            sb.Append("                    : global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions");
-            sb.Append(".GetService<global::DSoftStudio.Mediator.PipelineChainHandler<");
+            sb.Append("                : global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions");
+            sb.Append(".GetService<global::DSoftStudio.Mediator.StreamPipelineChainHandler<");
             sb.Append(reqType);
             sb.Append(", ");
             sb.Append(resType);
             sb.AppendLine(">>(sp);");
 
-            sb.AppendLine("                if (chain is not null)");
-            sb.AppendLine("                    return chain.Handle(request, cancellationToken);");
-            sb.AppendLine("            }");
-            sb.Append("            return global::DSoftStudio.Mediator.HandlerCache<");
+            sb.AppendLine("            if (chain is not null)");
+            sb.AppendLine("                return chain.Handle(request, cancellationToken);");
+
+            // No-behaviors fast path: resolve stream handler directly via ThreadStatic cache.
+            // Null guard on Handler factory matches the InvalidOperationException contract.
+            sb.Append("            var factory = global::DSoftStudio.Mediator.StreamDispatch<");
+            sb.Append(reqType);
+            sb.Append(", ");
+            sb.Append(resType);
+            sb.AppendLine(">.Handler");
+            sb.Append("                ?? throw new global::System.InvalidOperationException(\"Stream handler for \" + typeof(");
+            sb.Append(reqType);
+            sb.AppendLine(").Name + \" not registered.\");");
+            sb.Append("            return global::DSoftStudio.Mediator.StreamHandlerCache<");
             sb.Append(reqType);
             sb.Append(", ");
             sb.Append(resType);
             sb.AppendLine(">.Resolve(sp).Handle(request, cancellationToken);");
+
             sb.AppendLine("        }");
             sb.AppendLine();
 
