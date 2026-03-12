@@ -26,15 +26,18 @@ public class StreamBenchmarks
     private static readonly PingStream StreamMessage = new();
     private static readonly PingStreamMediatR MediatRStreamMessage = new();
     private static readonly PingStreamDispatchR DispatchRStreamMessage = new();
+    private static readonly PingStreamMediatorSG MediatorSGStreamMessage = new();
 
     private IMediator _mediator = null!;
     private MediatR.IMediator _mediatr = null!;
     private DispatchR.IMediator _dispatchr = null!;
+    private global::Mediator.IMediator _mediatorsg = null!;
     private PingStreamHandler _directHandler = null!;
 
     private IServiceScope _scope = null!;
     private IServiceScope _mediatrScope = null!;
     private IServiceScope _dispatchrScope = null!;
+    private IServiceScope _mediatorsgScope = null!;
 
     [GlobalSetup]
     public void Setup()
@@ -45,7 +48,7 @@ public class StreamBenchmarks
         {
             var services = new ServiceCollection();
 
-            services.AddMediator()
+            DSoftStudio.Mediator.ServiceCollectionExtensions.AddMediator(services)
                 .RegisterMediatorHandlers()
                 .PrecompileStreams();
 
@@ -79,10 +82,21 @@ public class StreamBenchmarks
             _dispatchr = _dispatchrScope.ServiceProvider.GetRequiredService<DispatchR.IMediator>();
         }
 
+        // ── martinothamar/Mediator (source-generated) ──────────────────
+        {
+            var services = new ServiceCollection();
+            MediatorSGHelper.AddMediatorSG(services);
+
+            var provider = services.BuildServiceProvider();
+            _mediatorsgScope = provider.CreateScope();
+            _mediatorsg = _mediatorsgScope.ServiceProvider.GetRequiredService<global::Mediator.IMediator>();
+        }
+
         // Warmup all mediators
         Consume(_mediator.CreateStream<PingStream, int>(StreamMessage)).GetAwaiter().GetResult();
         Consume(_mediatr.CreateStream(MediatRStreamMessage)).GetAwaiter().GetResult();
         Consume(_dispatchr.CreateStream<PingStreamDispatchR, int>(DispatchRStreamMessage, default)).GetAwaiter().GetResult();
+        Consume(_mediatorsg.CreateStream(MediatorSGStreamMessage)).GetAwaiter().GetResult();
     }
 
     [GlobalCleanup]
@@ -91,6 +105,7 @@ public class StreamBenchmarks
         _scope?.Dispose();
         _mediatrScope?.Dispose();
         _dispatchrScope?.Dispose();
+        _mediatorsgScope?.Dispose();
     }
 
     private static async Task<int> Consume(IAsyncEnumerable<int> stream)
@@ -126,4 +141,10 @@ public class StreamBenchmarks
     [Benchmark]
     public async Task<int> DispatchR_Stream()
         => await Consume(_dispatchr.CreateStream<PingStreamDispatchR, int>(DispatchRStreamMessage, default));
+
+    // ── martinothamar/Mediator (source-generated) ─────────────────
+
+    [Benchmark]
+    public async Task<int> MediatorSG_Stream()
+        => await Consume(_mediatorsg.CreateStream(MediatorSGStreamMessage));
 }

@@ -8,34 +8,46 @@ echo.
 set PROJECT=DSoftStudio.Mediator.Benchmarks
 set CMD=dotnet run --project %PROJECT% -c Release --
 
-echo [1/10] DSoft Send - No Behaviors
+echo [1/14] DSoft Send - No Behaviors
 %CMD% --filter "*DSoftSendNoBehaviors*"
 
-echo [2/10] DSoft Send - 3 ^& 5 Behaviors
+echo [2/14] DSoft Send - 3 ^& 5 Behaviors
 %CMD% --filter "*DSoftSendBenchmarks*"
 
-echo [3/10] MediatR Send - No Behaviors
+echo [3/14] MediatR Send - No Behaviors
 %CMD% --filter "*MediatRSendNoBehaviors*"
 
-echo [4/10] MediatR Send - 3 ^& 5 Behaviors
+echo [4/14] MediatR Send - 3 ^& 5 Behaviors
 %CMD% --filter "*MediatRSendBenchmarks*"
 
-echo [5/10] DispatchR Send - No Behaviors
+echo [5/14] DispatchR Send - No Behaviors
 %CMD% --filter "*DispatchRSendNoBehaviors*"
 
-echo [6/10] DispatchR Send - 3 ^& 5 Behaviors
+echo [6/14] DispatchR Send - 3 ^& 5 Behaviors
 %CMD% --filter "*DispatchRSendBenchmarks*"
 
-echo [7/10] Publish
+echo [7/14] MediatorSG Send - No Behaviors
+%CMD% --filter "*MediatorSGSendNoBehaviors*"
+
+echo [8/14] MediatorSG Send - 3 ^& 5 Behaviors
+%CMD% --filter "*MediatorSGSendBenchmarks*"
+
+echo [9/14] Send - All Libraries (No Behaviors)
+%CMD% --filter "Benchmarks.SendNoBehaviorsBenchmarks*"
+
+echo [10/14] Send - All Libraries (Behaviors)
+%CMD% --filter "Benchmarks.SendBenchmarks*"
+
+echo [11/14] Publish
 %CMD% --filter "*PublishBenchmarks*"
 
-echo [8/10] Stream
+echo [12/14] Stream
 %CMD% --filter "*StreamBenchmarks*"
 
-echo [9/10] Concurrency
+echo [13/14] Concurrency
 %CMD% --filter "*ConcurrencyBenchmarks*"
 
-echo [10/10] ColdStart
+echo [14/14] ColdStart
 %CMD% --filter "*ColdStartBenchmarks*"
 
 echo.

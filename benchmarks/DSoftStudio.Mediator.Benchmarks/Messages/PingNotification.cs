@@ -13,3 +13,6 @@ public record PingNotificationMediatR : MediatR.INotification;
 
 // ── DispatchR ─────────────────────────────────────────────
 public sealed class PingNotificationDispatchR : global::DispatchR.Abstractions.Notification.INotification;
+
+// ── martinothamar/Mediator (source-generated) ─────────────
+public sealed record PingNotificationMediatorSG : global::Mediator.INotification;

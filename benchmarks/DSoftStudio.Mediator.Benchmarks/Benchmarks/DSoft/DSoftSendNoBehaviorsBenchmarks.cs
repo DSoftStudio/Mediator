@@ -30,7 +30,7 @@ public class DSoftSendNoBehaviorsBenchmarks
         _directHandler = new PingHandler();
 
         var services = new ServiceCollection();
-        services.AddMediator()
+        DSoftStudio.Mediator.ServiceCollectionExtensions.AddMediator(services)
             .RegisterMediatorHandlers()
             .PrecompilePipelines();
 

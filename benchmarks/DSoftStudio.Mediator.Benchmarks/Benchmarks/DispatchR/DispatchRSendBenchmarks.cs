@@ -177,6 +177,10 @@ public class DispatchRSendBenchmarks
     }
 
     [Benchmark(Baseline = true)]
+    public async Task<int> DirectCall()
+        => await new PingDispatchRHandler().Handle(Message, default);
+
+    [Benchmark]
     public async Task<int> DispatchR_Send()
         => await _noBehaviors.Send<PingDispatchR, ValueTask<int>>(Message, default);
 

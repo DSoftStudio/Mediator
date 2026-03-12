@@ -12,3 +12,6 @@ public record PingStreamMediatR : MediatR.IStreamRequest<int>;
 
 // ── DispatchR ─────────────────────────────────────────────
 public sealed class PingStreamDispatchR : global::DispatchR.Abstractions.Stream.IStreamRequest<PingStreamDispatchR, int>;
+
+// ── martinothamar/Mediator (source-generated) ─────────────
+public sealed record PingStreamMediatorSG : global::Mediator.IStreamRequest<int>;

@@ -35,9 +35,6 @@ jobs:
       - name: Install SonarScanner
         run: dotnet tool install --global dotnet-sonarscanner
 
-      - name: Install coverage tool
-        run: dotnet tool install --global dotnet-coverage
-
       - name: Begin SonarCloud analysis
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -47,19 +44,31 @@ jobs:
           /o:"${{ vars.SONAR_ORG }}"
           /d:sonar.host.url="https://sonarcloud.io"
           /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
-          /d:sonar.cs.vscoveragexml.reportsPaths="coverage.xml"
-          /d:sonar.coverage.exclusions="**/samples/**,**/benchmarks/**,**/tests/**"
-          /d:sonar.exclusions="**/obj/**,**/bin/**,**/samples/**,**/benchmarks/**"
+          /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml"
+          /d:sonar.exclusions="**/obj/**,**/bin/**,samples/**/*,benchmarks/**/*"
+          /d:sonar.coverage.exclusions="src/**/DSoftStudio.Mediator.Generators/**"
+          /d:sonar.cpd.exclusions="src/**/DSoftStudio.Mediator.Generators/**"
+          /d:sonar.issue.ignore.multicriteria="e1,e2,e3"
+          /d:sonar.issue.ignore.multicriteria.e1.ruleKey="csharpsquid:S2326"
+          /d:sonar.issue.ignore.multicriteria.e1.resourceKey="src/**/I*Request.cs"
+          /d:sonar.issue.ignore.multicriteria.e2.ruleKey="csharpsquid:S3267"
+          /d:sonar.issue.ignore.multicriteria.e2.resourceKey="src/**/DSoftStudio.Mediator.Generators/**"
+          /d:sonar.issue.ignore.multicriteria.e3.ruleKey="csharpsquid:S2743"
+          /d:sonar.issue.ignore.multicriteria.e3.resourceKey="src/**/DSoftStudio.Mediator/*Cache.cs"
 
       - name: Build
-        run: dotnet build DSoftStudio.Mediator.slnx -c Release
+        run: dotnet build DSoftStudio.Mediator.slnx -c Release --no-incremental
 
       - name: Test with coverage
         run: >
-          dotnet-coverage collect
-          "dotnet test tests/DSoftStudio.Mediator.Tests/DSoftStudio.Mediator.Tests.csproj -c Release --no-build"
-          -f xml
-          -o coverage.xml
+          dotnet test
+          tests/DSoftStudio.Mediator.Tests/DSoftStudio.Mediator.Tests.csproj
+          -c Release --no-build
+          --collect:"XPlat Code Coverage"
+          --results-directory:"./TestResults"
+          -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+          DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Include="[DSoftStudio.Mediator]*,[DSoftStudio.Mediator.Abstractions]*"
+          DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Exclude="[DSoftStudio.Mediator.Tests]*"
 
       - name: End SonarCloud analysis
         env:

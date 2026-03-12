@@ -41,6 +41,10 @@ public class MediatRSendNoBehaviorsBenchmarks
     [GlobalCleanup]
     public void Cleanup() => _scope?.Dispose();
 
+    [Benchmark(Baseline = true)]
+    public async Task<int> DirectCall()
+        => await new PingMediatRHandler().Handle(Message, default);
+
     [Benchmark]
     public async Task<int> MediatR_Send()
         => await _mediator.Send(Message);

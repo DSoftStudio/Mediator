@@ -7,16 +7,20 @@ param(
 )
 
 $titleMap = [ordered]@{
-    "Benchmarks.DSoftSendNoBehaviorsBenchmarks"     = "DSoft - Send (No Behaviors)"
-    "Benchmarks.DSoftSendBenchmarks"                = "DSoft - Send (Behaviors)"
-    "Benchmarks.MediatRSendNoBehaviorsBenchmarks"   = "MediatR - Send (No Behaviors)"
-    "Benchmarks.MediatRSendBenchmarks"              = "MediatR - Send (Behaviors)"
-    "Benchmarks.DispatchRSendNoBehaviorsBenchmarks" = "DispatchR - Send (No Behaviors)"
-    "Benchmarks.DispatchRSendBenchmarks"            = "DispatchR - Send (Behaviors)"
-    "Benchmarks.PublishBenchmarks"                  = "Publish"
-    "Benchmarks.StreamBenchmarks"                   = "Stream"
-    "Benchmarks.ConcurrencyBenchmarks"              = "Concurrency"
-    "Benchmarks.ColdStartBenchmarks"                = "Cold Start"
+    "Benchmarks.DSoftSendNoBehaviorsBenchmarks"         = "DSoft - Send (No Behaviors)"
+    "Benchmarks.DSoftSendBenchmarks"                    = "DSoft - Send (Behaviors)"
+    "Benchmarks.MediatRSendNoBehaviorsBenchmarks"       = "MediatR - Send (No Behaviors)"
+    "Benchmarks.MediatRSendBenchmarks"                  = "MediatR - Send (Behaviors)"
+    "Benchmarks.DispatchRSendNoBehaviorsBenchmarks"     = "DispatchR - Send (No Behaviors)"
+    "Benchmarks.DispatchRSendBenchmarks"                = "DispatchR - Send (Behaviors)"
+    "Benchmarks.MediatorSGSendNoBehaviorsBenchmarks"    = "Mediator (Source Gen) - Send (No Behaviors)"
+    "Benchmarks.MediatorSGSendBenchmarks"               = "Mediator (Source Gen) - Send (Behaviors)"
+    "Benchmarks.SendNoBehaviorsBenchmarks"               = "Send - All Libraries (No Behaviors)"
+    "Benchmarks.SendBenchmarks"                          = "Send - All Libraries (Behaviors)"
+    "Benchmarks.PublishBenchmarks"                      = "Publish"
+    "Benchmarks.StreamBenchmarks"                       = "Stream"
+    "Benchmarks.ConcurrencyBenchmarks"                  = "Concurrency"
+    "Benchmarks.ColdStartBenchmarks"                    = "Cold Start"
 }
 
 if (-not (Test-Path $ResultsDir)) {
@@ -51,6 +55,11 @@ if ($envInfo) {
     [void]$sb.AppendLine("``````")
     [void]$sb.AppendLine($envInfo)
     [void]$sb.AppendLine("``````")
+    [void]$sb.AppendLine()
+    [void]$sb.AppendLine("> **Note:** Per-library sections run in **isolated processes** (only that library active),")
+    [void]$sb.AppendLine("> while ``All Libraries`` sections run with **all mediators initialized** in the same process.")
+    [void]$sb.AppendLine("> Absolute numbers may differ between isolated and combined runs due to GC pressure, cache")
+    [void]$sb.AppendLine("> contention, and TLS overhead --- compare **Ratio** columns within each table, not across tables.")
     [void]$sb.AppendLine()
 }
 

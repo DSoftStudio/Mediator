@@ -39,6 +39,10 @@ public class DispatchRSendNoBehaviorsBenchmarks
     [GlobalCleanup]
     public void Cleanup() => _scope?.Dispose();
 
+    [Benchmark(Baseline = true)]
+    public async Task<int> DirectCall()
+        => await new PingDispatchRHandler().Handle(Message, default);
+
     [Benchmark]
     public async Task<int> DispatchR_Send()
         => await _mediator.Send<PingDispatchR, ValueTask<int>>(Message, default);

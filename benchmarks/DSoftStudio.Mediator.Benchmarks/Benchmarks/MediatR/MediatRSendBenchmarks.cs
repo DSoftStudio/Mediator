@@ -178,6 +178,10 @@ public class MediatRSendBenchmarks
     }
 
     [Benchmark(Baseline = true)]
+    public async Task<int> DirectCall()
+        => await new PingMediatRHandler().Handle(Message, default);
+
+    [Benchmark]
     public async Task<int> MediatR_Send()
         => await _noBehaviors.Send(Message);
 

@@ -10,7 +10,7 @@ BenchmarkDotNet v0.15.8, Windows 11 (10.0.26200.8037/25H2/2025Update/HudsonValle
 ```
 | Method                | Mean      | Error     | StdDev    | Ratio | RatioSD | Rank | Gen0   | Allocated | Alloc Ratio |
 |---------------------- |----------:|----------:|----------:|------:|--------:|-----:|-------:|----------:|------------:|
-| DirectCall            |  5.746 ns | 0.0370 ns | 0.0328 ns |  1.00 |    0.01 |    1 | 0.0055 |      72 B |        1.00 |
-| DSoft_Send            | 12.091 ns | 0.0355 ns | 0.0315 ns |  2.10 |    0.01 |    2 | 0.0055 |      72 B |        1.00 |
-| DSoft_Send_3Behaviors | 34.633 ns | 0.0897 ns | 0.0839 ns |  6.03 |    0.04 |    3 | 0.0055 |      72 B |        1.00 |
-| DSoft_Send_5Behaviors | 39.381 ns | 0.0665 ns | 0.0622 ns |  6.85 |    0.04 |    4 | 0.0055 |      72 B |        1.00 |
+| DirectCall            |  6.646 ns | 0.0289 ns | 0.0270 ns |  1.00 |    0.01 |    1 | 0.0055 |      72 B |        1.00 |
+| DSoft_Send            |  7.886 ns | 0.1765 ns | 0.1651 ns |  1.19 |    0.02 |    2 | 0.0055 |      72 B |        1.00 |
+| DSoft_Send_3Behaviors | 15.306 ns | 0.2072 ns | 0.1938 ns |  2.30 |    0.03 |    3 | 0.0055 |      72 B |        1.00 |
+| DSoft_Send_5Behaviors | 16.544 ns | 0.2509 ns | 0.2347 ns |  2.49 |    0.04 |    4 | 0.0055 |      72 B |        1.00 |

@@ -26,15 +26,18 @@ public class PublishBenchmarks
     private static readonly PingNotification Notification = new();
     private static readonly PingNotificationMediatR MediatRNotification = new();
     private static readonly PingNotificationDispatchR DispatchRNotification = new();
+    private static readonly PingNotificationMediatorSG MediatorSGNotification = new();
 
     private IMediator _mediator = default!;
     private MediatR.IMediator _mediatr = default!;
     private DispatchR.IMediator _dispatchr = default!;
+    private global::Mediator.IMediator _mediatorsg = default!;
     private PingNotificationHandler _directHandler = default!;
 
     private IServiceScope _scope = default!;
     private IServiceScope _mediatrScope = default!;
     private IServiceScope _dispatchrScope = default!;
+    private IServiceScope _mediatorsgScope = default!;
 
     [GlobalSetup]
     public void Setup()
@@ -45,7 +48,7 @@ public class PublishBenchmarks
         {
             var services = new ServiceCollection();
 
-            services.AddMediator()
+            DSoftStudio.Mediator.ServiceCollectionExtensions.AddMediator(services)
                 .RegisterMediatorHandlers()
                 .PrecompileNotifications();
 
@@ -80,10 +83,21 @@ public class PublishBenchmarks
             _dispatchr = _dispatchrScope.ServiceProvider.GetRequiredService<DispatchR.IMediator>();
         }
 
+        // ── martinothamar/Mediator (source-generated) ──────────────────
+        {
+            var services = new ServiceCollection();
+            MediatorSGHelper.AddMediatorSG(services);
+
+            var provider = services.BuildServiceProvider();
+            _mediatorsgScope = provider.CreateScope();
+            _mediatorsg = _mediatorsgScope.ServiceProvider.GetRequiredService<global::Mediator.IMediator>();
+        }
+
         // Warmup all mediators (avoid cold start in benchmarks)
         _mediator.Publish(Notification).GetAwaiter().GetResult();
         _mediatr.Publish(MediatRNotification).GetAwaiter().GetResult();
         _dispatchr.Publish(DispatchRNotification, default).GetAwaiter().GetResult();
+        _mediatorsg.Publish(MediatorSGNotification).GetAwaiter().GetResult();
     }
 
     [GlobalCleanup]
@@ -92,6 +106,7 @@ public class PublishBenchmarks
         _scope?.Dispose();
         _mediatrScope?.Dispose();
         _dispatchrScope?.Dispose();
+        _mediatorsgScope?.Dispose();
     }
 
     // ── Baseline ─────────────────────────────────────────────
@@ -124,5 +139,13 @@ public class PublishBenchmarks
     public async Task DispatchR_Publish()
     {
         await _dispatchr.Publish(DispatchRNotification, default);
+    }
+
+    // ── martinothamar/Mediator (source-generated) ─────────────────
+
+    [Benchmark]
+    public async Task MediatorSG_Publish()
+    {
+        await _mediatorsg.Publish(MediatorSGNotification);
     }
 }

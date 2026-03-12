@@ -5,19 +5,22 @@
 [![CI](https://github.com/DSoftStudio/Mediator/actions/workflows/ci.yml/badge.svg)](https://github.com/DSoftStudio/Mediator/actions/workflows/ci.yml)
 [![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=DSoftStudio_Mediator&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=DSoftStudio_Mediator)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
-![Publish](https://img.shields.io/badge/publish-18ns-brightgreen)
-![Send](https://img.shields.io/badge/send-18ns-blue)
+![Send](https://img.shields.io/badge/send-7ns-blue)
+![Publish](https://img.shields.io/badge/publish-8.5ns-brightgreen)
 ![Alloc](https://img.shields.io/badge/alloc-72B-orange)
+![NativeAOT](https://img.shields.io/badge/NativeAOT-compatible-success)
 
-High-performance mediator for .NET with compile-time pipeline generation, zero-allocation dispatch, and a familiar MediatR-style API.
+Ultra-low-latency mediator for .NET with compile-time dispatch, zero-allocation pipelines, and a familiar MediatR-style API.
 
-- **Fastest Send and Publish** — Send in 18 ns (2× faster than DispatchR), Publish in 18 ns (~2× faster than DispatchR, ~7× faster than MediatR)
-- **Zero-allocation dispatch** — 72 B per Send (same as DispatchR, 74% less than MediatR), 0 B Publish
+- **~0.6 ns over a direct call** — Send in ~7 ns, only ~0.6 ns above a raw `handler.Handle()` invocation
+- **Fastest .NET mediator tested** — ~1.8× faster Send than Mediator (SG), ~5× faster than DispatchR, ~6× faster than MediatR
+- **Zero-allocation dispatch** — 72 B per Send (74% less than MediatR), 0 B Publish
 - **Auto-Singleton handlers** — stateless handlers (no constructor params) are automatically registered as Singleton, eliminating per-call allocation
 - **Compile-time pipeline generation** — source generators discover handlers and precompile pipelines at build time, zero reflection at runtime
+- **Native AOT and trimming compatible** — no reflection, `MakeGenericType`, or dynamic code generation in hot paths; ships with `IsAotCompatible` and `IsTrimmable` enabled
 - **Familiar developer experience** — drop-in MediatR-style API with `IRequest`, `INotification`, pipeline behaviors, and streaming
 
-DSoftStudio.Mediator follows MediatR's programming model (`IRequest`, `INotification`, `IPipelineBehavior`) with the fastest Send (18 ns) and Publish (18 ns), 2× faster than DispatchR and up to 7× faster than MediatR — with 74% lower allocations. Migration requires mechanical code changes (namespaces, `Task` → `ValueTask`, behavior signatures) but no architectural rewrite.
+DSoftStudio.Mediator follows MediatR's programming model (`IRequest`, `INotification`, `IPipelineBehavior`) with the lowest dispatch latency of any .NET mediator tested — Send in ~7 ns (~0.6 ns overhead vs direct call), Publish in ~8.5 ns with zero allocation. Fully compatible with Native AOT and trimming. Migration from MediatR requires mechanical code changes (namespaces, `Task` → `ValueTask`, behavior signatures) but no architectural rewrite.
 
 ---
 
@@ -54,6 +57,8 @@ services
     .PrecompileStreams();
 ```
 
+> **Registration order matters.** The `Precompile*` methods inspect the service collection to determine dispatch strategies and lifetimes. Register all behaviors, processors, exception handlers, notification strategies, and handler lifetime overrides **before** calling `PrecompilePipelines()` / `PrecompileNotifications()` / `PrecompileStreams()`. See [Registration Order](#registration-order) for details.
+
 Send a request:
 
 ```csharp
@@ -69,14 +74,15 @@ DSoftStudio.Mediator is ideal for:
 - **High-throughput APIs** — where every nanosecond of mediator overhead adds up across millions of requests
 - **Financial and trading systems** — predictable latency with zero GC pressure from the pipeline
 - **Real-time services** — low-latency event dispatch for signaling, notifications, and streaming
-- **Event-driven architectures** — decouple producers and consumers with 18 ns Publish dispatch
-- **Microservices** — 18 ns / 72 B per dispatch means the mediator layer is negligible even at tens of thousands of requests per second
+- **Event-driven architectures** — decouple producers and consumers with ~8.5 ns zero-allocation Publish
+- **Microservices** — ~7 ns / 72 B per dispatch means the mediator layer is negligible even at tens of thousands of requests per second
 - **MediatR migrations** — same `IRequest` / `INotification` / `IPipelineBehavior` programming model. Migration requires namespace changes, `Task` → `ValueTask` in handlers, and `next()` → `next.Handle(request, ct)` in behaviors — but no architectural rewrite
 
 | Strength | Detail |
 |---|---|
-| **Notification speed** | Fastest Publish of any .NET mediator tested (18 ns, zero allocation) |
-| **Allocation efficiency** | Zero-alloc Send pipeline (72 B), on par with DispatchR and 74% less than MediatR |
+| **Near-direct-call latency** | Send in ~7 ns — only ~0.6 ns above a direct `handler.Handle()` call |
+| **Notification speed** | Fastest Publish of any .NET mediator tested (~8.5 ns, zero allocation) |
+| **Allocation efficiency** | Zero-alloc Send pipeline (72 B), 74% less than MediatR |
 | **Auto-Singleton handlers** | Stateless handlers are automatically Singleton — zero per-call allocation without manual configuration |
 | **MediatR compatibility** | Same `IRequest` / `INotification` / `IPipelineBehavior` programming model — minimal migration effort |
 | **Compile-time wiring** | Source generators emit dispatch tables at build time — no assembly scanning or reflection at runtime on the primary dispatch paths |
@@ -87,18 +93,60 @@ Instead of relying on runtime discovery and reflection, the library uses compile
 
 ## Benchmark Summary (.NET 10)
 
-Tested against MediatR 14.1 and DispatchR 2.1.1.
+Tested against [Mediator](https://github.com/martinothamar/Mediator) 3.0.1, [DispatchR](https://github.com/AterDev/DispatchR) 2.1.1, and [MediatR](https://github.com/jbogard/MediatR) 14.1.
 
-| Operation  | DSoft    | DispatchR  | MediatR   |
-|----------- |---------:|-----------:|----------:|
-| Send       | 18.0 ns  | 34.5 ns    | 46.8 ns   |
-| Publish    | 18.4 ns  | 35.2 ns    | 124.3 ns  |
-| Stream     | 56.4 ns  | 68.3 ns    | 123.1 ns  |
-| Cold Start | 1.62 µs  | 1.80 µs    | 3.11 µs   |
+### Latency
 
-DSoft leads every category. Send is 2× faster than DispatchR and 2.6× faster than MediatR. Publish is zero-allocation.
+| Operation             | **DSoft**   | Mediator (SG) | DispatchR   | MediatR     |
+|-----------------------|------------:|--------------:|------------:|------------:|
+| `Send()`              |  **7.1 ns** |      12.5 ns  |    33.4 ns  |    42.1 ns  |
+| `Send()` (5 behaviors)| **15.5 ns** |      21.2 ns  |    53.5 ns  |   150.2 ns  |
+| `Publish()`           |  **8.5 ns** |      10.2 ns  |    35.0 ns  |   136.1 ns  |
+| `CreateStream()`      |     45.8 ns |  **45.3 ns**  |    67.1 ns  |   124.2 ns  |
+| Cold Start            | **1.63 µs** |     7.41 µs   |   1.91 µs   |    3.10 µs  |
+
+### Allocations
+
+| Operation             | **DSoft** | Mediator (SG) | DispatchR | MediatR |
+|-----------------------|----------:|--------------:|----------:|--------:|
+| `Send()`              |    72 B   |        72 B   |    72 B   |   272 B |
+| `Send()` (5 behaviors)|    72 B   |        72 B   |    72 B   | 1,088 B |
+| `Publish()`           |     0 B   |         0 B   |     0 B   |   768 B |
+| `CreateStream()`      |   232 B   |       232 B   |   232 B   |   624 B |
+
+Both DSoft and Mediator (SG) achieve zero-allocation pipelines regardless of behavior count.  
+DSoft differentiates on latency: `Send()` is only ~0.6 ns above a direct handler call, making it ~1.8× faster than Mediator (SG), ~5× faster than DispatchR, and ~6× faster than MediatR.
+
+### Feature Comparison
+
+| Feature                   | DSoft | Mediator (SG) | DispatchR | MediatR |
+|---------------------------|:----:|:-------------:|:---------:|:-------:|
+| Source generators         | ✔️ | ✔️ | ❌ | ❌ |
+| Native AOT compatible     | ✔️ | ✔️ | ❌ | ❌ |
+| Reflection-free hot path  | ✔️ | ✔️ | ❌ | ❌ |
+| Zero-alloc pipeline       | ✔️ | ✔️ | ✔️ | ❌ |
+| Auto-Singleton handlers   | ✔️ | ❌ | ❌ | ❌ |
+| Compile-time pipeline     | ✔️ | ✔️ | ❌ | ❌ |
+| MediatR-style API         | ✔️ | ✔️ | ❌ | ✔️ |
 
 > Full BenchmarkDotNet results are available in the [`/benchmarks`](benchmarks) folder.
+
+---
+
+## Native AOT and Trimming
+
+DSoftStudio.Mediator is fully compatible with .NET Native AOT publishing and IL trimming.
+
+Both packages ship with `IsAotCompatible` and `IsTrimmable` enabled, and the trim analyzer is active at build time. The hot execution path uses no reflection, no `MakeGenericType`, no `Expression.Compile`, and no dynamic method generation — all handler discovery and dispatch wiring are performed at compile time by Roslyn source generators.
+
+This makes the mediator suitable for:
+
+- **Native AOT ASP.NET applications** — publish self-contained, ahead-of-time compiled APIs
+- **Serverless / cloud functions** — fast cold start with minimal memory footprint
+- **Containerized microservices** — smaller images, no JIT warm-up
+- **High-density cloud workloads** — reduced memory per instance
+
+The `Publish(object)` overload (runtime-typed notifications) is also AOT-safe — it uses a compile-time generated `FrozenDictionary<Type, DispatchDelegate>` dispatch table populated by the source generator, with no `MakeGenericType` at runtime.
 
 ---
 
@@ -132,14 +180,24 @@ Behavior1 → Behavior2 → … → Handler
 
 Each behavior can run logic before and after the next step in the pipeline. The `next` parameter is an `IRequestHandler` — calling `next.Handle(request, ct)` advances the chain via interface dispatch (virtual call) instead of a delegate invocation, enabling **zero-allocation behavior pipelines**.
 
-| Behaviors | DSoft (alloc)|
-|-----------|--------------|
-| 0         | 72 B         |
-| 1         | 72 B         |
-| 3         | 72 B         |
-| 5         | 72 B         |
+### Pipeline Allocation
 
-Allocations stay flat at 72 B regardless of pipeline depth.
+Allocations stay flat at 72 B regardless of pipeline depth:
+
+```mermaid
+xychart-beta
+    title "Allocation vs Pipeline Depth"
+    x-axis "Behaviors" [0, 1, 3, 5]
+    y-axis "Bytes" 0 --> 100
+    line [72, 72, 72, 72]
+```
+
+| Behaviors | DSoft (alloc) | MediatR (alloc) |
+|-----------|---------------|-----------------|
+| 0         | 72 B          | 272 B           |
+| 1         | 72 B          | 544 B           |
+| 3         | 72 B          | 800 B           |
+| 5         | 72 B          | 1,088 B         |
 
 ```csharp
 public class LoggingBehavior<TRequest, TResponse>
@@ -342,6 +400,38 @@ await mediator.Publish(new UserCreated(userId));
 
 Both `SendWelcomeEmail` and `AuditUserCreation` will execute in registration order. Handlers are resolved from DI, so each can have its own dependencies.
 
+### Notification Strategies
+
+By default, handlers run **sequentially** in registration order (if one throws, the rest are skipped). To run all handlers **in parallel**, register the built-in `ParallelNotificationPublisher`:
+
+```csharp
+services.AddSingleton<INotificationPublisher, ParallelNotificationPublisher>();
+```
+
+| Strategy | Behavior |
+|---|---|
+| Sequential (default) | Handlers run one at a time. If a handler throws, subsequent handlers are not invoked. |
+| `ParallelNotificationPublisher` | All handlers start concurrently via `Task.WhenAll`. If any throw, an `AggregateException` is raised after all complete. |
+
+You can also implement `INotificationPublisher` for custom strategies (fire-and-forget, batched, prioritized, etc.):
+
+```csharp
+public class FireAndForgetPublisher : INotificationPublisher
+{
+    public Task Publish<TNotification>(
+        IEnumerable<INotificationHandler<TNotification>> handlers,
+        TNotification notification,
+        CancellationToken cancellationToken)
+        where TNotification : INotification
+    {
+        foreach (var handler in handlers)
+            _ = handler.Handle(notification, cancellationToken);
+
+        return Task.CompletedTask;
+    }
+}
+```
+
 ---
 
 ## Streams
@@ -501,11 +591,20 @@ MediatR registers all handlers as **Transient** by default. DSoftStudio.Mediator
 - **Stateless handlers** (no constructor parameters) → **Singleton** (zero allocation per call)
 - **Handlers with DI dependencies** → **Transient** (safe default)
 
-You can override any handler’s lifetime after `RegisterMediatorHandlers()` — the last registration wins:
+You can override any handler’s lifetime after `RegisterMediatorHandlers()` — the last registration wins. Place overrides **before** `PrecompilePipelines()` so the pipeline chain picks up the correct lifetime:
 
 ```csharp
-// Force a specific handler to Transient (if needed)
-services.AddTransient<IRequestHandler<MyRequest, MyResponse>, MyHandler>();
+services
+    .AddMediator()
+    .RegisterMediatorHandlers();
+
+// Override before PrecompilePipelines so the chain lifetime is correct
+services.AddScoped<IRequestHandler<MyRequest, MyResponse>, MyHandler>();
+
+services
+    .PrecompilePipelines()
+    .PrecompileNotifications()
+    .PrecompileStreams();
 ```
 
 ### What stays the same
@@ -529,6 +628,43 @@ services.AddTransient<IRequestHandler<MyRequest, MyResponse>, MyHandler>();
 | Pre/Post processor return | `Task` | `ValueTask` |
 | Handler lifetime (default) | All Transient | Stateless → Singleton, with DI deps → Transient |
 | Namespace | `using MediatR;` | `using DSoftStudio.Mediator.Abstractions;` |
+
+---
+
+## Registration Order
+
+The `Precompile*` methods inspect the `IServiceCollection` at startup to determine dispatch strategies and chain lifetimes. **All service registrations must happen before the corresponding `Precompile*` call.**
+
+```csharp
+services
+    .AddMediator()                // 1. Core mediator services
+    .RegisterMediatorHandlers();  // 2. Source-generated handler registrations
+
+// 3. Register behaviors, processors, exception handlers
+services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
+services.AddTransient(typeof(IRequestPreProcessor<>), typeof(ValidationPreProcessor<>));
+services.AddTransient(typeof(IRequestPostProcessor<,>), typeof(AuditPostProcessor<,>));
+
+// 4. Override handler lifetimes (optional)
+services.AddScoped<IRequestHandler<MyRequest, MyResponse>, MyHandler>();
+
+// 5. Register notification strategies (optional)
+services.AddSingleton<INotificationPublisher, ParallelNotificationPublisher>();
+
+// 6. Precompile — inspects all registrations above
+services
+    .PrecompilePipelines()        // scans for IPipelineBehavior, Pre/Post processors, exception handlers
+    .PrecompileNotifications()    // builds static dispatch arrays for each INotification type
+    .PrecompileStreams();         // builds static factory delegates for each IStreamRequest type
+```
+
+| Method | What it inspects | What to register before |
+|---|---|---|
+| `PrecompilePipelines()` | `IPipelineBehavior<,>`, `IRequestPreProcessor<>`, `IRequestPostProcessor<,>`, `IRequestExceptionHandler<,>`, handler lifetimes | Behaviors, processors, exception handlers, handler overrides |
+| `PrecompileNotifications()` | `INotificationHandler<>` | Notification handler overrides |
+| `PrecompileStreams()` | `IStreamRequestHandler<,>` | Stream handler overrides |
+
+`PrecompilePipelines()` determines each `PipelineChainHandler` lifetime based on the registered components: **Singleton** when all components are Singleton, **Scoped** when any is Scoped, **Transient** when any is Transient. Registrations added after the `Precompile*` calls will not be picked up by the dispatch tables.
 
 ---
 
@@ -585,6 +721,14 @@ Four Roslyn incremental source generators handle all discovery and wiring at bui
 - **Stream dispatch** resolves handlers through a precompiled factory delegate stored in `StreamDispatch<TRequest, TResponse>.Handler`.
 
 The result is that every `Send()`, `Publish()`, and `CreateStream()` call at runtime uses precompiled dispatch tables with zero discovery overhead. Stateless handlers are Singleton — the DI container returns the cached instance with zero allocation. Handlers with DI dependencies remain Transient for correct lifetime semantics. Notification handlers are resolved per publish via factory delegates.
+
+---
+
+## Support
+
+If you find this project useful, consider supporting its development.
+
+❤️ [Sponsor on GitHub](https://github.com/sponsors/yandersr)
 
 ---
 

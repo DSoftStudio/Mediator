@@ -25,10 +25,12 @@ public class ColdStartBenchmarks
     private static readonly Ping PingMessage = new();
     private static readonly PingMediatR PingMediatRMessage = new();
     private static readonly PingDispatchR PingDispatchRMessage = new();
+    private static readonly PingMediatorSG PingMediatorSGMessage = new();
 
     private ServiceCollection _coldDSoft = null!;
     private ServiceCollection _coldMediatR = null!;
     private ServiceCollection _coldDispatchR = null!;
+    private ServiceCollection _coldMediatorSG = null!;
 
     [GlobalSetup]
     public void Setup()
@@ -37,7 +39,7 @@ public class ColdStartBenchmarks
         // Only BuildServiceProvider + resolve + send is measured.
 
         _coldDSoft = new ServiceCollection();
-        _coldDSoft.AddMediator()
+        DSoftStudio.Mediator.ServiceCollectionExtensions.AddMediator(_coldDSoft)
             .RegisterMediatorHandlers()
             .PrecompilePipelines();
 
@@ -48,6 +50,9 @@ public class ColdStartBenchmarks
 
         _coldDispatchR = new ServiceCollection();
         _coldDispatchR.AddDispatchR(typeof(PingDispatchRHandler).Assembly, withPipelines: false, withNotifications: false);
+
+        _coldMediatorSG = new ServiceCollection();
+        MediatorSGHelper.AddMediatorSG(_coldMediatorSG);
     }
 
     // ── Benchmarks ───────────────────────────────────────────────
@@ -74,5 +79,13 @@ public class ColdStartBenchmarks
         using var sp = _coldDispatchR.BuildServiceProvider();
         var mediator = sp.GetRequiredService<DispatchR.IMediator>();
         return await mediator.Send<PingDispatchR, ValueTask<int>>(PingDispatchRMessage, default);
+    }
+
+    [Benchmark]
+    public async Task<int> MediatorSG_ColdStart()
+    {
+        using var sp = _coldMediatorSG.BuildServiceProvider();
+        var mediator = sp.GetRequiredService<global::Mediator.IMediator>();
+        return await mediator.Send(PingMediatorSGMessage);
     }
 }

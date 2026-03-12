@@ -58,7 +58,7 @@ public class DSoftSendBenchmarks
         // before the no-behaviors setup, because TryInitialize is write-once static) ──
         {
             var services = new ServiceCollection();
-            services.AddMediator()
+            DSoftStudio.Mediator.ServiceCollectionExtensions.AddMediator(services)
                 .RegisterMediatorHandlers();
 
             services.AddScoped(typeof(IPipelineBehavior<PingWithPipeline, int>), typeof(LoggingBehavior<PingWithPipeline, int>));
@@ -91,7 +91,7 @@ public class DSoftSendBenchmarks
         // Build REAL benchmark provider with exactly 5 behaviors (no counter).
         {
             var services = new ServiceCollection();
-            services.AddMediator()
+            DSoftStudio.Mediator.ServiceCollectionExtensions.AddMediator(services)
                 .RegisterMediatorHandlers();
 
             services.AddScoped(typeof(IPipelineBehavior<PingWithPipeline, int>), typeof(LoggingBehavior<PingWithPipeline, int>));
@@ -110,7 +110,7 @@ public class DSoftSendBenchmarks
         // ── 3 behaviors ──────────────────────────────────────────────
         {
             var services = new ServiceCollection();
-            services.AddMediator()
+            DSoftStudio.Mediator.ServiceCollectionExtensions.AddMediator(services)
                 .RegisterMediatorHandlers();
 
             services.AddScoped(typeof(IPipelineBehavior<PingWithPipeline, int>), typeof(LoggingBehavior<PingWithPipeline, int>));
@@ -127,7 +127,7 @@ public class DSoftSendBenchmarks
         // ── No behaviors (Ping has its own dispatch table — no conflict) ──
         {
             var services = new ServiceCollection();
-            services.AddMediator()
+            DSoftStudio.Mediator.ServiceCollectionExtensions.AddMediator(services)
                 .RegisterMediatorHandlers()
                 .PrecompilePipelines();
 

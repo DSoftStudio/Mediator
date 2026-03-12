@@ -39,15 +39,18 @@ public class ConcurrencyBenchmarks
     private IMediator _dsoft = null!;
     private MediatR.IMediator _mediatr = null!;
     private DispatchR.IMediator _dispatchr = null!;
+    private global::Mediator.IMediator _mediatorsg = null!;
 
     private IServiceScope _dsoftScope = null!;
     private IServiceScope _mediatrScope = null!;
     private IServiceScope _dispatchrScope = null!;
+    private IServiceScope _mediatorsgScope = null!;
 
     private Task<int>[] _tasks = null!;
     private Ping[] _requests = null!;
     private PingMediatR[] _mediatrRequests = null!;
     private PingDispatchR[] _dispatchrRequests = null!;
+    private PingMediatorSG[] _mediatorsgRequests = null!;
 
     [GlobalSetup]
     public void Setup()
@@ -58,19 +61,21 @@ public class ConcurrencyBenchmarks
         _requests = new Ping[ConcurrentTasks];
         _mediatrRequests = new PingMediatR[ConcurrentTasks];
         _dispatchrRequests = new PingDispatchR[ConcurrentTasks];
+        _mediatorsgRequests = new PingMediatorSG[ConcurrentTasks];
 
         for (int i = 0; i < ConcurrentTasks; i++)
         {
             _requests[i] = new Ping();
             _mediatrRequests[i] = new PingMediatR();
             _dispatchrRequests[i] = new PingDispatchR();
+            _mediatorsgRequests[i] = new PingMediatorSG();
         }
 
         // ── DSoftStudio Mediator ──────────────────────────────────
         {
             var services = new ServiceCollection();
 
-            services.AddMediator()
+            DSoftStudio.Mediator.ServiceCollectionExtensions.AddMediator(services)
                 .RegisterMediatorHandlers()
                 .PrecompilePipelines();
 
@@ -104,10 +109,21 @@ public class ConcurrencyBenchmarks
             _dispatchr = _dispatchrScope.ServiceProvider.GetRequiredService<DispatchR.IMediator>();
         }
 
+        // ── martinothamar/Mediator (source-generated) ──────────────────
+        {
+            var services = new ServiceCollection();
+            MediatorSGHelper.AddMediatorSG(services);
+
+            var provider = services.BuildServiceProvider();
+            _mediatorsgScope = provider.CreateScope();
+            _mediatorsg = _mediatorsgScope.ServiceProvider.GetRequiredService<global::Mediator.IMediator>();
+        }
+
         // Warmup all mediators
         _ = _dsoft.Send<Ping, int>(new Ping()).GetAwaiter().GetResult();
         _ = _mediatr.Send(new PingMediatR()).GetAwaiter().GetResult();
         _ = _dispatchr.Send<PingDispatchR, ValueTask<int>>(new PingDispatchR(), default).GetAwaiter().GetResult();
+        _ = _mediatorsg.Send(new PingMediatorSG()).GetAwaiter().GetResult();
     }
 
     [GlobalCleanup]
@@ -116,6 +132,7 @@ public class ConcurrencyBenchmarks
         _dsoftScope?.Dispose();
         _mediatrScope?.Dispose();
         _dispatchrScope?.Dispose();
+        _mediatorsgScope?.Dispose();
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -178,6 +195,19 @@ public class ConcurrencyBenchmarks
         await Task.WhenAll(_tasks);
     }
 
+    /// <summary>
+    /// martinothamar/Mediator fan-out: returns <c>ValueTask&lt;int&gt;</c> — requires <c>.AsTask()</c>.
+    /// </summary>
+    [Benchmark]
+    [BenchmarkCategory("FanOut")]
+    public async Task MediatorSG_FanOut()
+    {
+        for (int i = 0; i < ConcurrentTasks; i++)
+            _tasks[i] = _mediatorsg.Send(_mediatorsgRequests[i]).AsTask();
+
+        await Task.WhenAll(_tasks);
+    }
+
     // ══════════════════════════════════════════════════════════════
     // Throughput
     // ══════════════════════════════════════════════════════════════
@@ -234,6 +264,19 @@ public class ConcurrencyBenchmarks
         int sum = 0;
         for (int i = 0; i < ConcurrentTasks; i++)
             sum += await _dispatchr.Send<PingDispatchR, ValueTask<int>>(_dispatchrRequests[i], default);
+        return sum;
+    }
+
+    /// <summary>
+    /// martinothamar/Mediator throughput: pure <c>await</c> on <c>ValueTask&lt;int&gt;</c>.
+    /// </summary>
+    [Benchmark]
+    [BenchmarkCategory("Throughput")]
+    public async Task<int> MediatorSG_Throughput()
+    {
+        int sum = 0;
+        for (int i = 0; i < ConcurrentTasks; i++)
+            sum += await _mediatorsg.Send(_mediatorsgRequests[i]);
         return sum;
     }
 }
