@@ -48,7 +48,7 @@ jobs:
           /o:"${{ vars.SONAR_ORG }}"
           /v:"${{ steps.version.outputs.VERSION }}"
           /d:sonar.host.url="https://sonarcloud.io"
-          /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
+          /d:sonar.token="$SONAR_TOKEN"
           /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml"
           /d:sonar.exclusions="**/obj/**,**/bin/**,samples/**/*,benchmarks/**/*"
           /d:sonar.coverage.exclusions="src/**/DSoftStudio.Mediator.Generators/**"
@@ -77,4 +77,4 @@ jobs:
       - name: End SonarCloud analysis
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: dotnet sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
+        run: dotnet sonarscanner end /d:sonar.token="$SONAR_TOKEN"
