@@ -61,14 +61,13 @@ jobs:
 
       - name: Test with coverage
         run: >
-          dotnet test
-          tests/DSoftStudio.Mediator.Tests/DSoftStudio.Mediator.Tests.csproj
+          dotnet test DSoftStudio.Mediator.slnx
           -c Release --no-build
           --collect:"XPlat Code Coverage"
           --results-directory:"./TestResults"
           -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
-          DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Include="[DSoftStudio.Mediator]*,[DSoftStudio.Mediator.Abstractions]*"
-          DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Exclude="[DSoftStudio.Mediator.Tests]*"
+          DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Include="[DSoftStudio.Mediator]*,[DSoftStudio.Mediator.Abstractions]*,[DSoftStudio.Mediator.OpenTelemetry]*,[DSoftStudio.Mediator.FluentValidation]*,[DSoftStudio.Mediator.HybridCache]*"
+          DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Exclude="[*.Tests]*"
 
       - name: End SonarCloud analysis
         env:
