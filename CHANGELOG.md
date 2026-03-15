@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] — Unreleased
+
+### Fixed
+
+- **`Send(object)` dispatch fails when multiple `ServiceProvider` instances coexist** —
+  The `Send(object)` runtime dispatch delegate referenced the static
+  `RequestDispatch<TRequest, TResponse>.Pipeline` field, which is write-once
+  (`Interlocked.CompareExchange`). When parallel test classes (or multi-tenant hosts)
+  created separate `ServiceProvider` instances with different pipeline configurations,
+  the first registration won the static slot. Subsequent providers that lacked
+  `PipelineChainHandler` registrations threw `InvalidOperationException`.
+  The delegate now resolves directly from the passed-in `IServiceProvider` via
+  `GetService<PipelineChainHandler<TRequest, TResponse>>()` (nullable probe) with
+  fallback to `GetRequiredService<IRequestHandler<TRequest, TResponse>>()`,
+  making it independent of static initialization order.
+
+---
+
 ## [1.1.0] — 2026-03-15
 
 ### Added
