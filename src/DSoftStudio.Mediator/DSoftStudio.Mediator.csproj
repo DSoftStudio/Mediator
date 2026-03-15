@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 
@@ -27,7 +27,7 @@
 			mediator;mediatr;mediatr-alternative;cqrs;pipeline;dotnet;performance;source-generator
 		</PackageTags>
 
-		<PackageProjectUrl>https://github.com/DSoftStudio/Mediator</PackageProjectUrl>
+		<PackageProjectUrl>https://docs.dsoftstudio.com/mediator</PackageProjectUrl>
 		<RepositoryUrl>https://github.com/DSoftStudio/Mediator</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
 
