@@ -60,6 +60,7 @@ samples/integration/
 nunit-*.xml
 *.csv
 *.html
+!docs/_layouts/*.html
 **/.vs/
 *.log
 
