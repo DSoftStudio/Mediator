@@ -2,7 +2,12 @@
   <Folder Name="/benchmarks/">
     <Project Path="benchmarks/DSoftStudio.Mediator.Benchmarks/DSoftStudio.Mediator.Benchmarks.csproj" />
   </Folder>
-  <Folder Name="/samples/" />
+  <Folder Name="/samples/">
+    <Project Path="samples/fluent-validation/DSoft.Sample.FluentValidation.Api/DSoft.Sample.FluentValidation.Api.csproj" />
+    <Project Path="samples/fluent-validation/DSoft.Sample.FluentValidation.Application/DSoft.Sample.FluentValidation.Application.csproj" />
+    <Project Path="samples/opentelemetry/DSoft.Sample.OpenTelemetry.Api/DSoft.Sample.OpenTelemetry.Api.csproj" />
+    <Project Path="samples/opentelemetry/DSoft.Sample.OpenTelemetry.Application/DSoft.Sample.OpenTelemetry.Application.csproj" />
+  </Folder>
   <Folder Name="/samples/basic-api/">
     <Project Path="samples/basic-api/DSoft.Sample.Application/DSoft.Sample.Application.csproj" />
     <Project Path="samples/basic-api/DSoft.Sample.Api/DSoft.Sample.Api.csproj" />
@@ -19,9 +24,17 @@
     <Project Path="samples/pre-post-processors/DSoft.Sample.Processors.Api/DSoft.Sample.Processors.Api.csproj" />
     <Project Path="samples/pre-post-processors/DSoft.Sample.Processors.Application/DSoft.Sample.Processors.Application.csproj" />
   </Folder>
+  <Folder Name="/samples/self-handling/">
+    <Project Path="samples/self-handling/DSoft.Sample.SelfHandling.Api/DSoft.Sample.SelfHandling.Api.csproj" />
+    <Project Path="samples/self-handling/DSoft.Sample.SelfHandling.Application/DSoft.Sample.SelfHandling.Application.csproj" />
+  </Folder>
   <Folder Name="/samples/streaming/">
     <Project Path="samples/streaming/DSoft.Sample.Streaming.Application/DSoft.Sample.Streaming.Application.csproj" />
     <Project Path="samples/streaming/DSoft.Sample.Streaming.Api/DSoft.Sample.Streaming.Api.csproj" />
+  </Folder>
+  <Folder Name="/samples/caching/">
+    <Project Path="samples/caching/DSoft.Sample.HybridCache.Api/DSoft.Sample.HybridCache.Api.csproj" />
+    <Project Path="samples/caching/DSoft.Sample.HybridCache.Application/DSoft.Sample.HybridCache.Application.csproj" />
   </Folder>
   <Folder Name="/samples/di-lifetimes/">
     <Project Path="samples/di-lifetimes/DSoft.Sample.Lifetimes.Application/DSoft.Sample.Lifetimes.Application.csproj" />
@@ -29,10 +42,16 @@
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/DSoftStudio.Mediator.Abstractions/DSoftStudio.Mediator.Abstractions.csproj" />
+    <Project Path="src/DSoftStudio.Mediator.FluentValidation/DSoftStudio.Mediator.FluentValidation.csproj" />
     <Project Path="src/DSoftStudio.Mediator.Generators/DSoftStudio.Mediator.Generators.csproj" />
+    <Project Path="src/DSoftStudio.Mediator.HybridCache/DSoftStudio.Mediator.HybridCache.csproj" />
+    <Project Path="src/DSoftStudio.Mediator.OpenTelemetry/DSoftStudio.Mediator.OpenTelemetry.csproj" />
     <Project Path="src/DSoftStudio.Mediator/DSoftStudio.Mediator.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/DSoftStudio.Mediator.FluentValidation.Tests/DSoftStudio.Mediator.FluentValidation.Tests.csproj" />
+    <Project Path="tests/DSoftStudio.Mediator.HybridCache.Tests/DSoftStudio.Mediator.HybridCache.Tests.csproj" />
+    <Project Path="tests/DSoftStudio.Mediator.OpenTelemetry.Tests/DSoftStudio.Mediator.OpenTelemetry.Tests.csproj" />
     <Project Path="tests/DSoftStudio.Mediator.Tests/DSoftStudio.Mediator.Tests.csproj" />
   </Folder>
 </Solution>

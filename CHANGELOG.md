@@ -5,6 +5,152 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.7] — Unreleased
+
+### Added
+
+- **Self-handling requests** — request classes (or records) that implement `IRequest<T>`,
+  `ICommand<T>`, or `IQuery<T>` and contain a `static Execute` method are automatically
+  discovered at compile time and wired into the mediator pipeline. No separate handler
+  class is required. The source generator emits an internal adapter that bridges the
+  static method to `IRequestHandler<TRequest, TResponse>`, preserving the same
+  zero-overhead dispatch path (`HandlerCache`, pipeline behaviors, typed extensions,
+  and handler validation).
+
+  Supported return types: `T` (sync), `Task<T>`, `ValueTask<T>`, `void` (Unit),
+  `Task` (async Unit).
+
+  DI injection: service parameters in the `Execute` signature are resolved from DI
+  automatically. Stateless self-handlers (no DI services) are registered as Singleton;
+  with DI dependencies as Transient.
+
+  Full pipeline integration: behaviors, pre/post processors, exception handlers,
+  typed `Send()` extensions, and `ValidateMediatorHandlers()` all work with
+  self-handling requests.
+
+- **Fail-fast handler validation** — new source-generated `ValidateMediatorHandlers()`
+  extension method on `IServiceProvider`. Resolves every mediator handler from DI at
+  startup and throws an `AggregateException` with all failures if any handler is
+  misconfigured. Detects missing registrations, broken constructor dependencies, and
+  incomplete pipeline configurations before the first request is processed.
+
+  ```csharp
+  var app = builder.Build();
+  app.Services.ValidateMediatorHandlers(); // throws AggregateException if misconfigured
+  ```
+
+- **DSOFT002: Duplicate request handler** — compile-time diagnostic (Warning) when
+  multiple `IRequestHandler<TRequest, TResponse>` implementations are found for the
+  same `<TRequest, TResponse>` pair. With Microsoft.Extensions.DI, only the last
+  registration is resolved via `GetRequiredService<T>()` — earlier handlers are
+  silently ignored. The diagnostic lists all conflicting implementations.
+
+- **DSOFT003: Duplicate stream handler** — compile-time diagnostic (Warning) when
+  multiple `IStreamRequestHandler<TRequest, TResponse>` implementations are found for
+  the same `<TRequest, TResponse>` pair. Same root cause as DSOFT002.
+
+- **Runtime-typed `Send(object)` dispatch** — new `Send(this ISender, object, CancellationToken)`
+  extension method for message bus / command queue scenarios where the consumer only has
+  an `object` reference at runtime. Uses a compile-time generated
+  `FrozenDictionary<Type, DispatchDelegate>` dispatch table (same architecture as
+  `Publish(object)`) — no reflection, no `MakeGenericType`, fully AOT-safe.
+
+  The extension method design preserves overload resolution: generated typed extensions
+  (e.g. `Send(this ISender, Ping)`) are always preferred when the compile-time type is
+  known. `Send(object)` is only selected when the argument is typed as `object`.
+
+  Zero impact on the existing `Send<TRequest, TResponse>()` hot path — completely
+  separate dispatch table and code path.
+
+  See [ADR-0003](docs/adr/0003-runtime-typed-send.md) for design rationale.
+
+- **`DSoftStudio.Mediator.OpenTelemetry` package** — New companion NuGet package providing
+  automatic distributed tracing and metrics for all mediator operations via standard
+  `IPipelineBehavior<,>`, `IStreamPipelineBehavior<,>`, and an `INotificationPublisher`
+  decorator — zero changes to the core mediator library.
+
+  **Tracing:** Single `ActivitySource("DSoftStudio.Mediator")` with span names following
+  `{TypeName} {kind}` convention (e.g. `CreateUser command`, `GetUsers query`).
+  Span attributes include `mediator.request.type`, `mediator.response.type`, and
+  `mediator.request.kind` (`command`/`query`/`request`/`notification`/`stream`).
+  Exception recording with configurable stack traces.
+
+  **Metrics:** Single `Meter("DSoftStudio.Mediator")` with three instruments:
+  `mediator.request.duration` (histogram, seconds), `mediator.request.active`
+  (up-down counter), `mediator.request.errors` (counter with `error.type` tag).
+
+  **Notification instrumentation:** `InstrumentedNotificationPublisher` decorator
+  creates a parent span per `Publish()` call with per-handler child spans — unique
+  among .NET mediator libraries.
+
+  **Zero-cost when unused:** `HasListeners()` / `Instrument.Enabled` short-circuits
+  add ~1 ns when no OTel exporter is configured.
+
+  **Configuration:** `AddMediatorInstrumentation()` with options for filtering
+  (suppress health checks), enrichment (custom tags), and independent tracing/metrics
+  toggles.
+
+  See [ADR-0004](docs/adr/0004-opentelemetry-instrumentation.md) for design rationale.
+
+- **`DSoftStudio.Mediator.FluentValidation` package** — New companion NuGet package
+  providing automatic request validation via FluentValidation. Registers a single
+  open-generic `ValidationBehavior<TRequest, TResponse>` pipeline behavior that
+  resolves all `IValidator<TRequest>` instances from DI, runs validation before the
+  handler, and throws `MediatorValidationException` on failure.
+
+  **Key features:**
+  - Aggregates failures from multiple validators per request type
+  - `MediatorValidationException.ErrorsByProperty` for easy `ValidationProblemDetails` mapping
+  - Zero-overhead pass-through when no validators are registered for a request type
+  - Validators support full DI (constructor injection) — no static registry
+  - Single extension method: `services.AddMediatorFluentValidation()`
+
+- **`DSoftStudio.Mediator.HybridCache` package** — New companion NuGet package
+  providing automatic query/request caching via Microsoft's `HybridCache`
+  (`Microsoft.Extensions.Caching.Hybrid`). Registers a single open-generic
+  `CachingBehavior<TRequest, TResponse>` pipeline behavior that checks if the
+  request implements `ICachedRequest` and caches results via `HybridCache.GetOrCreateAsync()`.
+
+  **Key features:**
+  - Multi-layer caching (L1 in-memory + optional L2 distributed) via `HybridCache`
+  - Built-in stampede prevention — concurrent requests for the same key share one execution
+  - `ICachedRequest` marker interface with `CacheKey` and `Duration` (default: 60s)
+  - Zero-overhead pass-through when the request does not implement `ICachedRequest`
+  - Single extension method: `services.AddMediatorHybridCache()`
+
+### Changed
+
+- Internal `HandlerInfo` struct in `DependencyInjectionGenerator` refactored to use
+  C# primary constructor (IDE0290).
+
+### Architecture Decisions Recorded
+
+- **ADR: Handler Interface Extension (ValueTask / ValueTask\<Unit\>)** — Rejected.
+  `ValueTask<Unit>` and `ValueTask` have identical heap allocation (0 bytes on sync
+  path). Adding a `TResponse`-less handler interface would either break the sync fast
+  path (adapter pattern adds async state machine) or duplicate the entire pipeline
+  infrastructure. The `Unit` pattern is retained as the canonical void handler approach.
+
+- **ADR: Smart Handler Registration** — Rejected. Not applicable to compile-time
+  source-generated architecture. The duplicate registration problem exists in MediatR's
+  runtime scanning model but not in DSoftStudio.Mediator: dispatch tables resolve by
+  concrete type via factory delegates, concrete registrations use `TryAdd*`, and
+  handler lifetimes are auto-detected by the source generator.
+
+- **ADR-0003: Runtime-Typed Send(object) Dispatch** — Accepted. Adds `Send(object)`
+  as an extension method (not interface method) using a compile-time generated
+  `FrozenDictionary` dispatch table. Extension method design is required because
+  `ISender.Send<TRequest, TResponse>` has two generic type parameters that cannot be
+  inferred — an instance `Send(object)` would shadow all generated typed extensions
+  due to C# overload resolution rules. See [`docs/adr/0003-runtime-typed-send.md`](docs/adr/0003-runtime-typed-send.md).
+
+- **ADR-0004: OpenTelemetry Instrumentation Package** — Accepted. Separate NuGet
+  package (`DSoftStudio.Mediator.OpenTelemetry`) providing automatic distributed
+  tracing and metrics via standard pipeline behaviors, with zero impact on the core
+  mediator library. See [`docs/adr/0004-opentelemetry-instrumentation.md`](docs/adr/0004-opentelemetry-instrumentation.md).
+
+---
+
 ## [1.0.6] - 2026-03-12
 
 ### Fixed
