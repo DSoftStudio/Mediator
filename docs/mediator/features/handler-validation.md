@@ -1,5 +1,7 @@
 ---
 layout: default
+title: "Handler Validation - DSoftStudio.Mediator"
+description: "Fail-fast compile-time validation for request handlers."
 ---
 <p align="center">
   <picture>

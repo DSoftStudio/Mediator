@@ -1,5 +1,7 @@
 ---
 layout: default
+title: "Dispatch Pipeline - DSoftStudio.Mediator"
+description: "Architecture of the zero-allocation dispatch pipeline."
 ---
 <p align="center">
   <picture>

@@ -1,5 +1,7 @@
 ---
 layout: default
+title: "Installation - DSoftStudio.Mediator"
+description: "Install DSoftStudio.Mediator and companion NuGet packages for .NET 8+ projects."
 ---
 <p align="center">
   <picture>

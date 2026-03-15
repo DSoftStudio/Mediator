@@ -1,5 +1,7 @@
 ---
 layout: default
+title: "Native AOT - DSoftStudio.Mediator"
+description: "Full Native AOT and trimming compatibility."
 ---
 <p align="center">
   <picture>

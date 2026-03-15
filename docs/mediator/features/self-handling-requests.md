@@ -1,5 +1,7 @@
 ---
 layout: default
+title: "Self-Handling Requests - DSoftStudio.Mediator"
+description: "Requests that handle themselves in a single type."
 ---
 <p align="center">
   <picture>

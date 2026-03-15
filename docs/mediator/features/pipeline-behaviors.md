@@ -1,5 +1,7 @@
 ---
 layout: default
+title: "Pipeline Behaviors - DSoftStudio.Mediator"
+description: "Zero-allocation pipeline behaviors via interface dispatch."
 ---
 <p align="center">
   <picture>

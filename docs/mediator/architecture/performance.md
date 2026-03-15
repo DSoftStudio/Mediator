@@ -1,5 +1,7 @@
 ---
 layout: default
+title: "Performance Architecture - DSoftStudio.Mediator"
+description: "Deep dive into zero-allocation performance architecture."
 ---
 <p align="center">
   <picture>

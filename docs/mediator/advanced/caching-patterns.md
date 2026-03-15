@@ -1,5 +1,7 @@
 ---
 layout: default
+title: "Caching Patterns - DSoftStudio.Mediator"
+description: "Query caching patterns with HybridCache integration."
 ---
 <p align="center">
   <picture>

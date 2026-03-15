@@ -1,5 +1,7 @@
 ---
 layout: default
+title: "CQRS - DSoftStudio.Mediator"
+description: "Implement CQRS with compile-time typed commands and queries."
 ---
 <p align="center">
   <picture>

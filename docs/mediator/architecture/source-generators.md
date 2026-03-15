@@ -1,5 +1,7 @@
 ---
 layout: default
+title: "Source Generators - DSoftStudio.Mediator"
+description: "Roslyn incremental source generators for handler discovery."
 ---
 <p align="center">
   <picture>

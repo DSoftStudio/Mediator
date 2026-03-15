@@ -1,5 +1,7 @@
 ---
 layout: default
+title: "FluentValidation - DSoftStudio.Mediator"
+description: "Automatic request validation with FluentValidation."
 ---
 <p align="center">
   <picture>

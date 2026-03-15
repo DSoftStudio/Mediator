@@ -1,5 +1,7 @@
 ---
 layout: default
+title: "Registration Order - DSoftStudio.Mediator"
+description: "Understand the correct DI registration order for handlers and pipelines."
 ---
 <p align="center">
   <picture>

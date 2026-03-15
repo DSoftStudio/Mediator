@@ -1,5 +1,7 @@
 ---
 layout: default
+title: "Runtime Dispatch - DSoftStudio.Mediator"
+description: "Send(object) and Publish(object) with static dispatch tables."
 ---
 <p align="center">
   <picture>

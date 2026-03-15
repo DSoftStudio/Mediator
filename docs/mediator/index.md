@@ -1,5 +1,7 @@
 ---
 layout: default
+title: "DSoftStudio.Mediator Documentation"
+description: "Ultra-low-latency mediator for .NET with compile-time dispatch, zero-allocation pipelines, and Native AOT support."
 ---
 <p align="center">
   <picture>

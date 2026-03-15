@@ -1,5 +1,7 @@
 ---
 layout: default
+title: "Benchmarks - DSoftStudio.Mediator"
+description: "Performance benchmarks comparing DSoftStudio.Mediator vs MediatR."
 ---
 <p align="center">
   <picture>

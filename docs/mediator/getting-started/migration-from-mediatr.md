@@ -1,5 +1,7 @@
 ---
 layout: default
+title: "Migration from MediatR - DSoftStudio.Mediator"
+description: "Step-by-step guide to migrate from MediatR to DSoftStudio.Mediator."
 ---
 <p align="center">
   <picture>

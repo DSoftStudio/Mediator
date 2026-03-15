@@ -1,5 +1,7 @@
 ---
 layout: default
+title: "HybridCache - DSoftStudio.Mediator"
+description: "Transparent query caching with Microsoft HybridCache."
 ---
 <p align="center">
   <picture>

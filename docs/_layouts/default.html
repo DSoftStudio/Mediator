@@ -9,6 +9,31 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv.min.js"></script>
     <![endif]-->
     {% seo %}
+    <!-- Structured data for Google -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "TechArticle",
+      "name": "{{ page.title | default: site.title }}",
+      "description": "{{ page.description | default: site.description }}",
+      "url": "{{ page.url | absolute_url }}",
+      "publisher": {
+        "@type": "Organization",
+        "name": "DSoftStudio",
+        "url": "https://dsoftstudio.com"
+      },
+      "isPartOf": {
+        "@type": "WebSite",
+        "name": "DSoftStudio Mediator Documentation",
+        "url": "{{ site.url }}"
+      }
+    }
+    </script>
+    <style>
+      /* Override minimal theme fixed-width section */
+      .wrapper { max-width: 960px; margin: 0 auto; padding: 20px; width: 100%; }
+      section { width: 100%; float: none; padding-bottom: 50px; }
+    </style>
   </head>
   <body>
     <div class="wrapper">

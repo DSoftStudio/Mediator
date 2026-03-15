@@ -1,5 +1,7 @@
 ---
 layout: default
+title: "Streams - DSoftStudio.Mediator"
+description: "Stream responses with IAsyncEnumerable."
 ---
 <p align="center">
   <picture>

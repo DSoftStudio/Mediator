@@ -1,5 +1,7 @@
 ---
 layout: default
+title: "Pre/Post Processors - DSoftStudio.Mediator"
+description: "Run logic before and after request handling."
 ---
 <p align="center">
   <picture>

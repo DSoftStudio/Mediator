@@ -1,5 +1,7 @@
 ---
 layout: default
+title: "Notifications - DSoftStudio.Mediator"
+description: "Publish notifications to multiple handlers with zero-allocation dispatch."
 ---
 <p align="center">
   <picture>

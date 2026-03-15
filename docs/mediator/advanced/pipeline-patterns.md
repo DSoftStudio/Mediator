@@ -1,5 +1,7 @@
 ---
 layout: default
+title: "Pipeline Patterns - DSoftStudio.Mediator"
+description: "Advanced pipeline behavior patterns."
 ---
 <p align="center">
   <picture>

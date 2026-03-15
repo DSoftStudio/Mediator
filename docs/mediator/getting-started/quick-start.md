@@ -1,5 +1,7 @@
 ---
 layout: default
+title: "Quick Start - DSoftStudio.Mediator"
+description: "Get started with DSoftStudio.Mediator in 5 minutes."
 ---
 <p align="center">
   <picture>

@@ -1,5 +1,7 @@
 ---
 layout: default
+title: "Requests and Handlers - DSoftStudio.Mediator"
+description: "Define requests and handlers with compile-time dispatch."
 ---
 <p align="center">
   <picture>

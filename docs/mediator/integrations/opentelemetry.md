@@ -1,5 +1,7 @@
 ---
 layout: default
+title: "OpenTelemetry - DSoftStudio.Mediator"
+description: "Distributed tracing and metrics with OpenTelemetry."
 ---
 <p align="center">
   <picture>
