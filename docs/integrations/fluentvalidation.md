@@ -1,3 +1,13 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudioBgWhite.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudio.svg">
+    <img alt="DSoftStudio Mediator" src="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudio.svg" height="120">
+  </picture>
+</p>
+
+[← Back to Documentation](../index.md)
+
 # FluentValidation Integration
 
 The companion package **`DSoftStudio.Mediator.FluentValidation`** provides automatic request validation via [FluentValidation](https://docs.fluentvalidation.net/) — a single pipeline behavior that resolves all `IValidator<TRequest>` instances from DI and short-circuits on failure.

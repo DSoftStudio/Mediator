@@ -1,3 +1,13 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudioBgWhite.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudio.svg">
+    <img alt="DSoftStudio Mediator" src="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudio.svg" height="120">
+  </picture>
+</p>
+
+[← Back to Documentation](../index.md)
+
 # Handler Validation
 
 Call `ValidateMediatorHandlers()` after building the service provider to detect misconfigured handlers at startup — before the first request is processed. The method resolves every registered handler, pipeline chain, and notification handler from DI, and throws an `AggregateException` containing all failures if any handler cannot be resolved.

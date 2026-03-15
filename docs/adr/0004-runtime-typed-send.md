@@ -1,12 +1,18 @@
-# ADR-0003: Runtime-Typed Send(object) Dispatch
+﻿<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudioBgWhite.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudio.svg">
+    <img alt="DSoftStudio Mediator" src="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudio.svg" height="120">
+  </picture>
+</p>
+
+[← Back to Documentation](../index.md)
+
+# ADR-0004: Runtime-Typed Send(object) Dispatch
 
 ## Status
 
-**Accepted**
-
-## Date
-
-2025-07-19
+**Released in v1.1.0**
 
 ## Context
 
@@ -105,3 +111,12 @@ always wins over `Publish(object)` without ambiguity.
 
 - Callers who don't use `Send(object)` pay zero cost — the dispatch table is populated
   at startup regardless (same as `NotificationObjectDispatch`), but never queried
+
+---
+
+## Document History
+
+| Date       | Version | Changes |
+|------------|---------|---------|
+| —          | Draft   | Initial ADR with design proposal |
+| 2026-03-15 | v1.1.0  | Released with FrozenDictionary-based dispatch |

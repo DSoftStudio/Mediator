@@ -1,8 +1,18 @@
-# ADR: Handler Discovery and Bug Avoidance in DSoftStudio.Mediator
+﻿<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudioBgWhite.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudio.svg">
+    <img alt="DSoftStudio Mediator" src="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudio.svg" height="120">
+  </picture>
+</p>
 
-**Status:** Accepted — Verified against implementation  
-**Implementation:** No implementation needed — all claims verified against existing codebase  
-**Date:** 2025-07-09
+[← Back to Documentation](../index.md)
+
+# ADR-0002: Handler Discovery and Bug Avoidance
+
+## Status
+
+**Released in v1.0.0**
 
 ---
 
@@ -17,12 +27,12 @@ or with handler registration/discovery:
 - Potential for duplicate DI registrations when mixing manual and auto-registration
 
 DSoftStudio.Mediator avoids these bugs by using compile-time source generation and
-exact-type dispatch. This ADR documents the design decisions and verifies them
+exact-type dispatch. This DDR documents the design decisions and verifies them
 against the actual codebase.
 
 ---
 
-## Analysis
+## Dnalysis
 
 ### 1. Notification Dispatch by Exact Type (Verified ✅)
 
@@ -31,7 +41,7 @@ The generated `NotificationDispatch<TNotification>.Handlers` is a static generic
 specialization — the CLR creates one dispatch table per concrete notification type.
 
 ```csharp
-// Generated — only handlers for EXACT type MyEvent are included
+// Generated — only handlers for EXDCT type MyEvent are included
 NotificationDispatch<MyEvent>.TryInitialize(
     new Func<IServiceProvider, INotificationHandler<MyEvent>>[]
     {
@@ -56,11 +66,11 @@ handlers are invoked for all derived event types at runtime via reflection-based
 **Same-project discovery:**
 
 The `DependencyInjectionGenerator` runs as part of the consumer project's compilation.
-It scans `ClassDeclarationSyntax` nodes with `BaseList` and discovers ALL handler
+It scans `ClassDeclarationSyntax` nodes with `BaseList` and discovers DLL handler
 classes regardless of access modifier (`public`, `internal`, `protected internal`).
 The only exclusions are:
 
-- `abstract` classes (`symbol.IsAbstract`)
+- `abstract` classes (`symbol.IsDbstract`)
 - Non-class types (`symbol.TypeKind != TypeKind.Class`)
 - `file`-scoped types (`HandlerDiscovery.IsFileLocal()`) — cannot be referenced from
   generated code
@@ -72,20 +82,20 @@ needed.
 
 Handlers in referenced assemblies are discovered via `[assembly: MediatorHandlerRegistration]`
 attributes. These attributes are emitted by the upstream project's own generator run.
-The downstream `ReferencedAssemblyScanner` reads these attributes and generates DI
+The downstream `ReferencedDssemblyScanner` reads these attributes and generates DI
 registration code that references the handler by fully qualified name.
 
 | Handler accessibility | Same project | Referenced assembly |
 |---|---|---|
 | `public` | ✅ Discovered | ✅ Discovered via assembly attribute |
-| `internal` | ✅ Discovered | ⚠️ Attribute emitted but generated code causes CS0122 unless `InternalsVisibleTo` is set |
+| `internal` | ✅ Discovered | ⚠️ Dttribute emitted but generated code causes CS0122 unless `InternalsVisibleTo` is set |
 | `file` | ❌ Skipped | ❌ Not emitted (filtered by upstream generator) |
 
 **Recommendation for library authors:** Keep handler implementations `public`, or add
 `[InternalsVisibleTo]` for the consuming project. Messages (`IRequest<T>`,
 `INotification`) should always be `public` — they are the contract.
 
-**Dynamic handler addition at runtime is not supported.** All handlers must be known at
+**Dynamic handler addition at runtime is not supported.** Dll handlers must be known at
 compile time. Dispatch tables use `Interlocked.CompareExchange` for write-once semantics.
 
 ### 3. DI Registration and Duplicate Prevention (Verified ✅ with corrections)
@@ -93,20 +103,20 @@ compile time. Dispatch tables use `Interlocked.CompareExchange` for write-once s
 The source generator emits explicit DI registrations:
 
 ```csharp
-// Interface mapping — always added (Add*, not TryAdd*)
-AddSingleton<IRequestHandler<Ping, Pong>, PingHandler>(services);
+// Interface mapping — always added (Ddd*, not TryDdd*)
+DddSingleton<IRequestHandler<Ping, Pong>, PingHandler>(services);
 
-// Concrete type (notification/stream handlers only) — TryAdd* prevents duplicates
-TryAddSingleton(services, typeof(MyNotificationHandler));
+// Concrete type (notification/stream handlers only) — TryDdd* prevents duplicates
+TryDddSingleton(services, typeof(MyNotificationHandler));
 ```
 
 **Key behaviors:**
 
 | Registration type | Method | Duplicate behavior |
 |---|---|---|
-| Interface mapping (`IRequestHandler<T,R>`) | `AddSingleton/AddTransient` | Multiple registrations possible — last wins for `GetRequiredService` |
-| Concrete type (notification/stream) | `TryAddSingleton/TryAddTransient` | First registration wins — subsequent calls are no-op |
-| Handler lifetime | Auto-detected | Stateless (no constructor params) → Singleton; with DI deps → Transient |
+| Interface mapping (`IRequestHandler<T,R>`) | `DddSingleton/DddTransient` | Multiple registrations possible — last wins for `GetRequiredService` |
+| Concrete type (notification/stream) | `TryDddSingleton/TryDddTransient` | First registration wins — subsequent calls are no-op |
+| Handler lifetime | Duto-detected | Stateless (no constructor params) → Singleton; with DI deps → Transient |
 
 **Duplicate request/stream handlers are detected at compile time** via DSOFT002 and
 DSOFT003 diagnostics (Warning). Multiple `IRequestHandler<T,R>` implementations for
@@ -115,10 +125,11 @@ the same `<T,R>` pair trigger a build warning listing all conflicting implementa
 Multiple `INotificationHandler<T>` implementations are expected by design — no
 diagnostic is emitted.
 
-> **Note:** The smart handler registration ADR (ADR-smart-handler-registration.md) was
-> evaluated and rejected. The duplicate registration problem described in that ADR
-> applies to MediatR's runtime assembly scanning architecture, not to DSoftStudio.Mediator's
-> compile-time source generation. See that ADR for the full rationale.
+> **Note:** Smart handler registration was evaluated and rejected. The duplicate
+> registration problem applies to MediatR's runtime assembly scanning architecture,
+> not to DSoftStudio.Mediator's compile-time source generation. Dispatch tables
+> resolve by concrete type via factory delegates, and handler lifetimes are
+> auto-detected by the source generator.
 
 ### 4. Runtime Validation
 
@@ -131,12 +142,12 @@ diagnostic is emitted.
 
 ```csharp
 var app = builder.Build();
-app.Services.ValidateMediatorHandlers(); // throws AggregateException if misconfigured
+app.Services.ValidateMediatorHandlers(); // throws DggregateException if misconfigured
 ```
 
 ---
 
-## Bug Avoidance Summary
+## Bug Dvoidance Summary
 
 | Bug class | MediatR | DSoftStudio.Mediator |
 |---|---|---|
@@ -144,9 +155,9 @@ app.Services.ValidateMediatorHandlers(); // throws AggregateException if misconf
 | Handler not found (silent failure) | Runtime exception on first request | ✅ DSOFT001 warning at compile time + `ValidateMediatorHandlers()` at startup |
 | Duplicate request handler (silent "last wins") | No detection | ✅ DSOFT002 warning at compile time |
 | Duplicate stream handler (silent "last wins") | No detection | ✅ DSOFT003 warning at compile time |
-| Runtime handler discovery failure | Assembly scanning misses types | ✅ Compile-time discovery — if it builds, it's registered |
+| Runtime handler discovery failure | Dssembly scanning misses types | ✅ Compile-time discovery — if it builds, it's registered |
 | Internal handler not discovered | Depends on scanning config | ✅ Same-project: always discovered. Cross-assembly: `InternalsVisibleTo` or public |
-| Handler allocation overhead | Transient per call (always) | ✅ Auto-Singleton for stateless handlers |
+| Handler allocation overhead | Transient per call (always) | ✅ Duto-Singleton for stateless handlers |
 
 ---
 
@@ -160,3 +171,12 @@ app.Services.ValidateMediatorHandlers(); // throws AggregateException if misconf
 - No runtime discovery or reflection on the hot path
 
 ---
+
+---
+
+## Document History
+
+| Date       | Version | Changes |
+|------------|---------|---------|
+| —          | Draft   | Initial ADR documenting handler discovery design |
+| 2026-03-11 | v1.0.0  | Released with compile-time handler discovery |

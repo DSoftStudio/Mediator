@@ -1,12 +1,18 @@
-# ADR-0004: OpenTelemetry Instrumentation Package
+﻿<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudioBgWhite.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudio.svg">
+    <img alt="DSoftStudio Mediator" src="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudio.svg" height="120">
+  </picture>
+</p>
+
+[← Back to Documentation](../index.md)
+
+# ADR-0005: OpenTelemetry Instrumentation Package
 
 ## Status
 
-**Accepted**
-
-## Date
-
-2025-07-19
+**Released in v1.0.0**
 
 ## Context
 
@@ -523,3 +529,12 @@ added if there is demand, but the default is full-enumeration spans.
   chain with no special treatment
 - Notification dispatch (`Publish`) gets a parent span with per-handler child spans via
   the `InstrumentedNotificationPublisher` decorator — no changes to the core `Mediator.cs`
+
+---
+
+## Document History
+
+| Date       | Version | Changes |
+|------------|---------|---------|
+| —          | Draft   | Initial ADR with instrumentation design |
+| 2026-03-15 | v1.0.0  | Released as DSoftStudio.Mediator.OpenTelemetry companion package |

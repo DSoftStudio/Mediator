@@ -1,10 +1,16 @@
-﻿# DSoftStudio.Mediator
+﻿<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudioBgWhite.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudio.svg">
+    <img alt="DSoftStudio Mediator" src="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudio.svg" height="200">
+  </picture>
+</p>
 
 [![NuGet](https://img.shields.io/nuget/v/DSoftStudio.Mediator.svg)](https://www.nuget.org/packages/DSoftStudio.Mediator)
 [![NuGet Downloads](https://img.shields.io/nuget/dt/DSoftStudio.Mediator.svg)](https://www.nuget.org/packages/DSoftStudio.Mediator)
 [![CI](https://github.com/DSoftStudio/Mediator/actions/workflows/ci.yml/badge.svg)](https://github.com/DSoftStudio/Mediator/actions/workflows/ci.yml)
 [![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=DSoftStudio_Mediator&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=DSoftStudio_Mediator)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/DSoftStudio/Mediator/blob/main/LICENSE.md)
 ![Send](https://img.shields.io/badge/send-7ns-blue)
 ![Publish](https://img.shields.io/badge/publish-8.5ns-brightgreen)
 ![Alloc](https://img.shields.io/badge/alloc-72B-orange)
@@ -29,7 +35,7 @@ Ultra-low-latency mediator for .NET with compile-time dispatch, zero-allocation 
 | Allocation per Send | 72 B |
 | Pipeline overhead | ~0.6 ns over direct call |
 | Reflection at runtime | None |
-| Native AOT compatible | ✔️ |
+| Native AOT compatible | ✅ |
 
 ---
 
@@ -37,14 +43,14 @@ Ultra-low-latency mediator for .NET with compile-time dispatch, zero-allocation 
 
 ```
 Send(new MyRequest())
-  │
-  ▼
-Pipeline Behaviors  (logging, validation, transactions…)
-  │
-  ▼
+  |
+  v
+Pipeline Behaviors  (logging, validation, transactions...)
+  |
+  v
 Request Handler     (your business logic)
-  │
-  ▼
+  |
+  v
 ValueTask<TResponse>
 ```
 
@@ -85,7 +91,7 @@ Send a request:
 var result = await mediator.Send(new Ping());
 ```
 
-> 📖 See the full [Quick Start Guide](docs/getting-started/quick-start.md) and [Installation](docs/getting-started/installation.md) for companion packages.
+> 👉 See the full [Quick Start Guide](docs/getting-started/quick-start.md) and [Installation](docs/getting-started/installation.md) for companion packages.
 
 ---
 
@@ -104,7 +110,7 @@ var result = await mediator.Send(new Ping());
 
 ## Benchmarks (.NET 10)
 
-Tested against [Mediator](https://github.com/martinothamar/Mediator) 3.0.1, [DispatchR](https://github.com/AterDev/DispatchR) 2.1.1, and [MediatR](https://github.com/jbogard/MediatR) 14.1.
+Tested against [Mediator](https://github.com/martinothamar/Mediator) 3.0.1, [DispatchR](https://github.com/hasanxdev/DispatchR) 2.1.1, and [MediatR](https://github.com/jbogard/MediatR) 14.1.
 
 ### Latency
 
@@ -129,15 +135,15 @@ Tested against [Mediator](https://github.com/martinothamar/Mediator) 3.0.1, [Dis
 
 | Feature                   | DSoft | Mediator (SG) | DispatchR | MediatR |
 |---------------------------|:----:|:-------------:|:---------:|:-------:|
-| Source generators         | ✔️ | ✔️ | ❌ | ❌ |
-| Native AOT compatible     | ✔️ | ✔️ | ❌ | ❌ |
-| Reflection-free hot path  | ✔️ | ✔️ | ❌ | ❌ |
-| Zero-alloc pipeline       | ✔️ | ✔️ | ✔️ | ❌ |
-| Auto-Singleton handlers   | ✔️ | ❌ | ❌ | ❌ |
-| Self-handling requests    | ✔️ | ❌ | ❌ | ❌ |
-| Runtime-typed `Send(object)` | ✔️ | ❌ | ❌ | ✔️ |
-| Compile-time pipeline     | ✔️ | ✔️ | ❌ | ❌ |
-| MediatR-style API         | ✔️ | ✔️ | ❌ | ✔️ |
+| Source generators         | ✅ | ✅ | ❌ | ❌ |
+| Native AOT compatible     | ✅ | ✅ | ❌ | ❌ |
+| Reflection-free hot path  | ✅ | ✅ | ❌ | ❌ |
+| Zero-alloc pipeline       | ✅ | ✅ | ✅ | ❌ |
+| Auto-Singleton handlers   | ✅ | ❌ | ❌ | ❌ |
+| Self-handling requests    | ✅ | ❌ | ❌ | ❌ |
+| Runtime-typed `Send(object)` | ✅ | ❌ | ❌ | ✅ |
+| Compile-time pipeline     | ✅ | ✅ | ❌ | ❌ |
+| MediatR-style API         | ✅ | ✅ | ❌ | ✅ |
 
 > Full BenchmarkDotNet results are available in the [`/benchmarks`](benchmarks) folder.
 
@@ -147,15 +153,15 @@ Tested against [Mediator](https://github.com/martinothamar/Mediator) 3.0.1, [Dis
 
 | Feature | Description | Docs |
 |---|---|---|
-| Pipeline Behaviors | Zero-allocation behavior chains via interface dispatch | [→](docs/features/pipeline-behaviors.md) |
-| Pre/Post Processors | Simple before/after hooks without chain responsibility | [→](docs/features/pre-post-processors.md) |
-| CQRS | `ICommand<T>` / `IQuery<T>` with semantic handler aliases | [→](docs/concepts/cqrs.md) |
-| Self-Handling Requests | `static Execute` inside request — no separate handler class | [→](docs/features/self-handling-requests.md) |
-| Notifications | Multi-handler fan-out with pluggable strategies | [→](docs/concepts/notifications.md) |
-| Runtime Dispatch | `Send(object)` via FrozenDictionary — AOT-safe | [→](docs/features/runtime-dispatch.md) |
-| Streams | `IAsyncEnumerable<T>` streaming with pipeline support | [→](docs/concepts/streams.md) |
-| Handler Validation | `ValidateMediatorHandlers()` — fail fast at startup | [→](docs/features/handler-validation.md) |
-| Native AOT | Full AOT and trimming compatibility | [→](docs/architecture/native-aot.md) |
+| Pipeline Behaviors | Zero-allocation behavior chains via interface dispatch | [Docs](docs/features/pipeline-behaviors.md) |
+| Pre/Post Processors | Simple before/after hooks without chain responsibility | [Docs](docs/features/pre-post-processors.md) |
+| CQRS | `ICommand<T>` / `IQuery<T>` with semantic handler aliases | [Docs](docs/concepts/cqrs.md) |
+| Self-Handling Requests | `static Execute` inside request — no separate handler class | [Docs](docs/features/self-handling-requests.md) |
+| Notifications | Multi-handler fan-out with pluggable strategies | [Docs](docs/concepts/notifications.md) |
+| Runtime Dispatch | `Send(object)` via FrozenDictionary — AOT-safe | [Docs](docs/features/runtime-dispatch.md) |
+| Streams | `IAsyncEnumerable<T>` streaming with pipeline support | [Docs](docs/concepts/streams.md) |
+| Handler Validation | `ValidateMediatorHandlers()` — fail fast at startup | [Docs](docs/features/handler-validation.md) |
+| Native AOT | Full AOT and trimming compatibility | [Docs](docs/architecture/native-aot.md) |
 
 ---
 
@@ -163,9 +169,9 @@ Tested against [Mediator](https://github.com/martinothamar/Mediator) 3.0.1, [Dis
 
 | Package | Purpose | Docs |
 |---|---|---|
-| [`DSoftStudio.Mediator.OpenTelemetry`](https://www.nuget.org/packages/DSoftStudio.Mediator.OpenTelemetry) | Distributed tracing + metrics for Send/Publish/Stream | [→](docs/integrations/opentelemetry.md) |
-| [`DSoftStudio.Mediator.FluentValidation`](https://www.nuget.org/packages/DSoftStudio.Mediator.FluentValidation) | Automatic request validation via FluentValidation | [→](docs/integrations/fluentvalidation.md) |
-| [`DSoftStudio.Mediator.HybridCache`](https://www.nuget.org/packages/DSoftStudio.Mediator.HybridCache) | Multi-layer caching (L1 + L2) via Microsoft HybridCache | [→](docs/integrations/hybridcache.md) |
+| [`DSoftStudio.Mediator.OpenTelemetry`](https://www.nuget.org/packages/DSoftStudio.Mediator.OpenTelemetry) | Distributed tracing + metrics for Send/Publish/Stream | [Docs](docs/integrations/opentelemetry.md) |
+| [`DSoftStudio.Mediator.FluentValidation`](https://www.nuget.org/packages/DSoftStudio.Mediator.FluentValidation) | Automatic request validation via FluentValidation | [Docs](docs/integrations/fluentvalidation.md) |
+| [`DSoftStudio.Mediator.HybridCache`](https://www.nuget.org/packages/DSoftStudio.Mediator.HybridCache) | Multi-layer caching (L1 + L2) via Microsoft HybridCache | [Docs](docs/integrations/hybridcache.md) |
 
 ---
 
@@ -218,7 +224,7 @@ DSoftStudio.Mediator follows MediatR's programming model — migration requires 
 | Handler lifetime (default) | All Transient | Stateless → Singleton, with DI deps → Transient |
 | Namespace | `using MediatR;` | `using DSoftStudio.Mediator.Abstractions;` |
 
-> 📖 See the complete [step-by-step Migration Guide](docs/getting-started/migration-from-mediatr.md) for detailed instructions with diff examples.
+> 👉 See the complete [step-by-step Migration Guide](docs/getting-started/migration-from-mediatr.md) for detailed instructions with diff examples.
 
 ---
 

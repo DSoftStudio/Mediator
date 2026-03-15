@@ -1,3 +1,13 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudioBgWhite.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudio.svg">
+    <img alt="DSoftStudio Mediator" src="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudio.svg" height="120">
+  </picture>
+</p>
+
+[← Back to Documentation](../index.md)
+
 # HybridCache Integration
 
 The `DSoftStudio.Mediator.HybridCache` package provides automatic request caching via Microsoft's [`HybridCache`](https://learn.microsoft.com/dotnet/core/extensions/hybrid-cache) — multi-layer caching (L1 memory + L2 distributed), stampede prevention, and serialization out of the box.

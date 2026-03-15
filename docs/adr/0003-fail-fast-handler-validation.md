@@ -1,8 +1,18 @@
-# ADR: Fail-fast Handler Validation at Startup for DSoftStudio.Mediator
+﻿<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudioBgWhite.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudio.svg">
+    <img alt="DSoftStudio Mediator" src="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudio.svg" height="120">
+  </picture>
+</p>
+
+[← Back to Documentation](../index.md)
+
+# ADR-0003: Fail-fast Handler Validation at Startup
 
 ## Status
 
-**Accepted — Implemented in v1.0.7**
+**Released in v1.0.7**
 
 ## Context
 
@@ -85,5 +95,5 @@ provider.ValidateMediatorHandlers();
 
 | Date       | Version | Changes |
 |------------|---------|---------|
-| 2026-03-12 | Draft   | Initial ADR with implementation plan |
-| 2026-03-13 | 1.0.7   | Implemented via source generator, all tests passing |
+| —          | Draft   | Initial ADR with implementation plan |
+| 2026-03-15 | v1.0.7  | Released with source-generated startup validation |

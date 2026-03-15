@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 All notable changes to this project will be documented in this file.
 
@@ -62,7 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Zero impact on the existing `Send<TRequest, TResponse>()` hot path — completely
   separate dispatch table and code path.
 
-  See [ADR-0003](docs/adr/0003-runtime-typed-send.md) for design rationale.
+  See [ADR-0004](docs/adr/0004-runtime-typed-send.md) for design rationale.
 
 - **`DSoftStudio.Mediator.OpenTelemetry` package** — New companion NuGet package providing
   automatic distributed tracing and metrics for all mediator operations via standard
@@ -90,7 +90,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (suppress health checks), enrichment (custom tags), and independent tracing/metrics
   toggles.
 
-  See [ADR-0004](docs/adr/0004-opentelemetry-instrumentation.md) for design rationale.
+  See [ADR-0005](docs/adr/0005-opentelemetry-instrumentation.md) for design rationale.
 
 - **`DSoftStudio.Mediator.FluentValidation` package** — New companion NuGet package
   providing automatic request validation via FluentValidation. Registers a single
@@ -125,29 +125,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Architecture Decisions Recorded
 
-- **ADR: Handler Interface Extension (ValueTask / ValueTask\<Unit\>)** — Rejected.
-  `ValueTask<Unit>` and `ValueTask` have identical heap allocation (0 bytes on sync
-  path). Adding a `TResponse`-less handler interface would either break the sync fast
-  path (adapter pattern adds async state machine) or duplicate the entire pipeline
-  infrastructure. The `Unit` pattern is retained as the canonical void handler approach.
-
-- **ADR: Smart Handler Registration** — Rejected. Not applicable to compile-time
-  source-generated architecture. The duplicate registration problem exists in MediatR's
-  runtime scanning model but not in DSoftStudio.Mediator: dispatch tables resolve by
-  concrete type via factory delegates, concrete registrations use `TryAdd*`, and
-  handler lifetimes are auto-detected by the source generator.
-
-- **ADR-0003: Runtime-Typed Send(object) Dispatch** — Accepted. Adds `Send(object)`
+- **ADR-0004: Runtime-Typed Send(object) Dispatch** — Accepted. Adds `Send(object)`
   as an extension method (not interface method) using a compile-time generated
   `FrozenDictionary` dispatch table. Extension method design is required because
   `ISender.Send<TRequest, TResponse>` has two generic type parameters that cannot be
   inferred — an instance `Send(object)` would shadow all generated typed extensions
-  due to C# overload resolution rules. See [`docs/adr/0003-runtime-typed-send.md`](docs/adr/0003-runtime-typed-send.md).
+  due to C# overload resolution rules. See [`docs/adr/0004-runtime-typed-send.md`](docs/adr/0004-runtime-typed-send.md).
 
-- **ADR-0004: OpenTelemetry Instrumentation Package** — Accepted. Separate NuGet
+- **ADR-0005: OpenTelemetry Instrumentation Package** — Accepted. Separate NuGet
   package (`DSoftStudio.Mediator.OpenTelemetry`) providing automatic distributed
   tracing and metrics via standard pipeline behaviors, with zero impact on the core
-  mediator library. See [`docs/adr/0004-opentelemetry-instrumentation.md`](docs/adr/0004-opentelemetry-instrumentation.md).
+  mediator library. See [`docs/adr/0005-opentelemetry-instrumentation.md`](docs/adr/0005-opentelemetry-instrumentation.md).
 
 ---
 

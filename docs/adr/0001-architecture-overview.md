@@ -1,4 +1,18 @@
-# ADR: DSoftStudio.Mediator — Architecture Decision Record
+﻿<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudioBgWhite.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudio.svg">
+    <img alt="DSoftStudio Mediator" src="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudio.svg" height="120">
+  </picture>
+</p>
+
+[← Back to Documentation](../index.md)
+
+# ADR-0001: Architecture Overview
+
+## Status
+
+**Released in v1.0.0**
 
 ## Overview
 
@@ -412,8 +426,9 @@ Maintain strict code quality via SonarCloud, Roslyn analyzers, and performance r
 
 ## Document History
 
-| Date       | Version | Author      | Changes |
-|------------|---------|-------------|---------|
-| 2026-03-12 | 1.0.6   | DSoftStudio | Initial ADR covering all architectural decisions |
+| Date       | Version | Changes |
+|------------|---------|---------|
+| —          | Draft   | Initial ADR covering all architectural decisions |
+| 2026-03-11 | v1.0.0  | Released with core mediator package |
 
 ---

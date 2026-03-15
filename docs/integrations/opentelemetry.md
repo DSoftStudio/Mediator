@@ -1,3 +1,13 @@
+﻿<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudioBgWhite.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudio.svg">
+    <img alt="DSoftStudio Mediator" src="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudio.svg" height="120">
+  </picture>
+</p>
+
+A← Back to Documentation](../index.md)
+
 # OpenTelemetry Instrumentation
 
 The companion package **`DSoftStudio.Mediator.OpenTelemetry`** provides automatic distributed tracing and metrics for all mediator operations — zero changes to existing code.
@@ -57,4 +67,4 @@ services.AddMediatorInstrumentation(options =>
 });
 ```
 
-Works with any OTel-compatible backend: Jaeger, Zipkin, OTLP, Aspire Dashboard, etc. See [ADR-0004](../adr/0004-opentelemetry-instrumentation.md) for the full design rationale.
+See [ADR-0005](../adr/0005-opentelemetry-instrumentation.md) for the full design rationale.

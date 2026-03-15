@@ -1,3 +1,11 @@
+﻿<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudioBgWhite.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudio.svg">
+    <img alt="DSoftStudio Mediator" src="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudio.svg" height="120">
+  </picture>
+</p>
+
 # DSoftStudio.Mediator — Documentation
 
 DSoftStudio.Mediator is an ultra-low-latency mediator for .NET with compile-time dispatch,
@@ -83,5 +91,8 @@ Patterns and advanced scenarios.
 
 Key design decisions behind the project.
 
-- [ADR: Runtime-Typed Send(object)](adr/0003-runtime-typed-send.md)
-- [ADR: OpenTelemetry Instrumentation](adr/0004-opentelemetry-instrumentation.md)
+- [ADR-0001: Architecture Overview](adr/0001-architecture-overview.md)
+- [ADR-0002: Handler Discovery and Bug Avoidance](adr/0002-handler-discovery-and-bug-avoidance.md)
+- [ADR-0003: Fail-fast Handler Validation](adr/0003-fail-fast-handler-validation.md)
+- [ADR-0004: Runtime-Typed Send(object)](adr/0004-runtime-typed-send.md)
+- [ADR-0005: OpenTelemetry Instrumentation](adr/0005-opentelemetry-instrumentation.md)
