@@ -11,19 +11,10 @@ namespace DSoftStudio.Mediator.OpenTelemetry;
 /// Decorator that wraps an <see cref="INotificationPublisher"/> with distributed tracing
 /// and metrics. Creates a parent span for the publish operation and per-handler child spans.
 /// </summary>
-internal sealed class InstrumentedNotificationPublisher : INotificationPublisher
+internal sealed class InstrumentedNotificationPublisher(INotificationPublisher inner, MediatorInstrumentationOptions options) : INotificationPublisher
 {
     private static readonly ActivitySource Source = MediatorInstrumentation.ActivitySource;
     private static readonly ConcurrentDictionary<Type, string> HandlerSpanNames = new();
-
-    private readonly INotificationPublisher _inner;
-    private readonly MediatorInstrumentationOptions _options;
-
-    public InstrumentedNotificationPublisher(INotificationPublisher inner, MediatorInstrumentationOptions options)
-    {
-        _inner = inner;
-        _options = options;
-    }
 
     public async Task Publish<TNotification>(
         IEnumerable<INotificationHandler<TNotification>> handlers,
@@ -31,18 +22,18 @@ internal sealed class InstrumentedNotificationPublisher : INotificationPublisher
         CancellationToken cancellationToken)
         where TNotification : INotification
     {
-        bool tracingActive = _options.EnableTracing && Source.HasListeners();
-        bool metricsActive = _options.EnableMetrics && MediatorInstrumentation.RequestDuration.Enabled;
+        bool tracingActive = options.EnableTracing && Source.HasListeners();
+        bool metricsActive = options.EnableMetrics && MediatorInstrumentation.RequestDuration.Enabled;
 
         if (!tracingActive && !metricsActive)
         {
-            await _inner.Publish(handlers, notification, cancellationToken);
+            await inner.Publish(handlers, notification, cancellationToken);
             return;
         }
 
-        if (_options.Filter is not null && !_options.Filter(typeof(TNotification)))
+        if (options.Filter is not null && !options.Filter(typeof(TNotification)))
         {
-            await _inner.Publish(handlers, notification, cancellationToken);
+            await inner.Publish(handlers, notification, cancellationToken);
             return;
         }
 
@@ -59,7 +50,7 @@ internal sealed class InstrumentedNotificationPublisher : INotificationPublisher
                 parentActivity.SetTag("mediator.request.type", MediatorNotificationMetadata<TNotification>.RequestType);
                 parentActivity.SetTag("mediator.request.kind", MediatorNotificationMetadata<TNotification>.RequestKind);
 
-                _options.EnrichActivity?.Invoke(parentActivity, notification);
+                options.EnrichActivity?.Invoke(parentActivity, notification);
             }
         }
 
@@ -81,10 +72,10 @@ internal sealed class InstrumentedNotificationPublisher : INotificationPublisher
         try
         {
             var effectiveHandlers = tracingActive
-                ? handlers.Select(h => new InstrumentedHandler<TNotification>(h, _options))
+                ? handlers.Select(h => new InstrumentedHandler<TNotification>(h, options))
                 : handlers;
 
-            await _inner.Publish(effectiveHandlers, notification, cancellationToken);
+            await inner.Publish(effectiveHandlers, notification, cancellationToken);
             parentActivity?.SetStatus(ActivityStatusCode.Ok);
         }
         catch (Exception ex)
@@ -93,7 +84,7 @@ internal sealed class InstrumentedNotificationPublisher : INotificationPublisher
             {
                 parentActivity.SetStatus(ActivityStatusCode.Error, ex.Message);
                 parentActivity.SetTag("error.type", ex.GetType().FullName);
-                ActivityHelper.RecordException(parentActivity, ex, _options.RecordExceptionStackTraces);
+                ActivityHelper.RecordException(parentActivity, ex, options.RecordExceptionStackTraces);
             }
 
             if (metricsActive)
@@ -126,29 +117,21 @@ internal sealed class InstrumentedNotificationPublisher : INotificationPublisher
     /// <summary>
     /// Wrapper that creates a child span for each notification handler invocation.
     /// </summary>
-    private sealed class InstrumentedHandler<TNotification> : INotificationHandler<TNotification>
+    private sealed class InstrumentedHandler<TNotification>(INotificationHandler<TNotification> inner, MediatorInstrumentationOptions options) : INotificationHandler<TNotification>
         where TNotification : INotification
     {
-        private readonly INotificationHandler<TNotification> _inner;
-        private readonly MediatorInstrumentationOptions _options;
-
-        public InstrumentedHandler(INotificationHandler<TNotification> inner, MediatorInstrumentationOptions options)
-        {
-            _inner = inner;
-            _options = options;
-        }
 
         public async Task Handle(TNotification notification, CancellationToken cancellationToken)
         {
             var spanName = HandlerSpanNames.GetOrAdd(
-                _inner.GetType(),
+                inner.GetType(),
                 static type => $"{type.Name} handle");
 
             using var activity = Source.StartActivity(spanName, ActivityKind.Internal);
 
             try
             {
-                await _inner.Handle(notification, cancellationToken);
+                await inner.Handle(notification, cancellationToken);
                 activity?.SetStatus(ActivityStatusCode.Ok);
             }
             catch (Exception ex)
@@ -157,7 +140,7 @@ internal sealed class InstrumentedNotificationPublisher : INotificationPublisher
                 {
                     activity.SetStatus(ActivityStatusCode.Error, ex.Message);
                     activity.SetTag("error.type", ex.GetType().FullName);
-                    ActivityHelper.RecordException(activity, ex, _options.RecordExceptionStackTraces);
+                    ActivityHelper.RecordException(activity, ex, options.RecordExceptionStackTraces);
                 }
                 throw;
             }

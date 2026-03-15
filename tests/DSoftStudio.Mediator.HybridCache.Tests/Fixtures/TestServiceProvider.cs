@@ -4,7 +4,7 @@
 using DSoftStudio.Mediator.HybridCache.Tests.Fixtures;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace DSoftStudio.Mediator.HybridCache.Tests;
+namespace DSoftStudio.Mediator.HybridCache.Tests.Fixtures;
 
 internal static class TestServiceProvider
 {

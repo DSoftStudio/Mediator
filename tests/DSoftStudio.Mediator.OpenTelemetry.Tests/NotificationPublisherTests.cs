@@ -9,7 +9,7 @@ using DSoftStudio.Mediator.OpenTelemetry.Tests.Fixtures;
 namespace DSoftStudio.Mediator.OpenTelemetry.Tests;
 
 [Collection("OTel")]
-public class NotificationPublisherTests
+public class NotificationPublisherTests : IDisposable
 {
     private readonly MeterListener _meterListener;
     private readonly List<(string Name, double Value, KeyValuePair<string, object?>[] Tags)> _measurements = [];
@@ -17,11 +17,13 @@ public class NotificationPublisherTests
 
     public NotificationPublisherTests()
     {
-        _meterListener = new MeterListener();
-        _meterListener.InstrumentPublished = (instrument, listener) =>
+        _meterListener = new MeterListener
         {
-            if (instrument.Meter.Name == MediatorInstrumentation.SourceName)
-                listener.EnableMeasurementEvents(instrument);
+            InstrumentPublished = (instrument, listener) =>
+            {
+                if (instrument.Meter.Name == MediatorInstrumentation.SourceName)
+                    listener.EnableMeasurementEvents(instrument);
+            }
         };
         _meterListener.SetMeasurementEventCallback<double>((instrument, measurement, tags, _) =>
         {
@@ -34,7 +36,11 @@ public class NotificationPublisherTests
         _meterListener.Start();
     }
 
-    public void Dispose() => _meterListener.Dispose();
+    public void Dispose()
+    {
+        _meterListener.Dispose();
+        GC.SuppressFinalize(this);
+    }
 
     [Fact]
     public async Task Creates_parent_span_with_per_handler_child_spans()

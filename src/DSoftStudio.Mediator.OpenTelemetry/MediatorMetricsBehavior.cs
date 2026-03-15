@@ -9,25 +9,19 @@ namespace DSoftStudio.Mediator.OpenTelemetry;
 /// <summary>
 /// Pipeline behavior that records metrics (duration, active count, errors) for mediator requests.
 /// </summary>
-public sealed class MediatorMetricsBehavior<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
+public sealed class MediatorMetricsBehavior<TRequest, TResponse>(MediatorInstrumentationOptions options) : IPipelineBehavior<TRequest, TResponse>
     where TRequest : IRequest<TResponse>
 {
-    private readonly MediatorInstrumentationOptions _options;
-
-    public MediatorMetricsBehavior(MediatorInstrumentationOptions options)
-    {
-        _options = options;
-    }
 
     public async ValueTask<TResponse> Handle(
         TRequest request,
         IRequestHandler<TRequest, TResponse> next,
         CancellationToken cancellationToken)
     {
-        if (!_options.EnableMetrics || !MediatorInstrumentation.RequestDuration.Enabled)
+        if (!options.EnableMetrics || !MediatorInstrumentation.RequestDuration.Enabled)
             return await next.Handle(request, cancellationToken);
 
-        if (_options.Filter is not null && !_options.Filter(typeof(TRequest)))
+        if (options.Filter is not null && !options.Filter(typeof(TRequest)))
             return await next.Handle(request, cancellationToken);
 
         var tags = new TagList

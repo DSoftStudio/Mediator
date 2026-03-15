@@ -11,26 +11,20 @@ namespace DSoftStudio.Mediator.OpenTelemetry;
 /// Stream pipeline behavior that creates distributed tracing spans for streamed requests.
 /// The span covers the entire enumeration lifetime.
 /// </summary>
-public sealed class MediatorStreamTracingBehavior<TRequest, TResponse> : IStreamPipelineBehavior<TRequest, TResponse>
+public sealed class MediatorStreamTracingBehavior<TRequest, TResponse>(MediatorInstrumentationOptions options) : IStreamPipelineBehavior<TRequest, TResponse>
     where TRequest : IStreamRequest<TResponse>
 {
     private static readonly ActivitySource Source = MediatorInstrumentation.ActivitySource;
-    private readonly MediatorInstrumentationOptions _options;
-
-    public MediatorStreamTracingBehavior(MediatorInstrumentationOptions options)
-    {
-        _options = options;
-    }
 
     public IAsyncEnumerable<TResponse> Handle(
         TRequest request,
         IStreamRequestHandler<TRequest, TResponse> next,
         CancellationToken cancellationToken)
     {
-        if (!_options.EnableTracing || !Source.HasListeners())
+        if (!options.EnableTracing || !Source.HasListeners())
             return next.Handle(request, cancellationToken);
 
-        if (_options.Filter is not null && !_options.Filter(typeof(TRequest)))
+        if (options.Filter is not null && !options.Filter(typeof(TRequest)))
             return next.Handle(request, cancellationToken);
 
         return Instrumented(request, next, cancellationToken);
@@ -51,7 +45,7 @@ public sealed class MediatorStreamTracingBehavior<TRequest, TResponse> : IStream
             activity.SetTag("mediator.response.type", MediatorStreamMetadata<TRequest, TResponse>.ResponseType);
             activity.SetTag("mediator.request.kind", MediatorStreamMetadata<TRequest, TResponse>.RequestKind);
 
-            _options.EnrichActivity?.Invoke(activity, request);
+            options.EnrichActivity?.Invoke(activity, request);
         }
 
         bool success = false;
@@ -65,8 +59,7 @@ public sealed class MediatorStreamTracingBehavior<TRequest, TResponse> : IStream
         }
         finally
         {
-            if (activity is not null)
-                activity.SetStatus(success ? ActivityStatusCode.Ok : ActivityStatusCode.Error);
+            activity?.SetStatus(success ? ActivityStatusCode.Ok : ActivityStatusCode.Error);
         }
     }
 }

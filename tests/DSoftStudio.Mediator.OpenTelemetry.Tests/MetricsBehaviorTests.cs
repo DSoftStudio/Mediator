@@ -8,7 +8,7 @@ using DSoftStudio.Mediator.OpenTelemetry.Tests.Fixtures;
 namespace DSoftStudio.Mediator.OpenTelemetry.Tests;
 
 [Collection("OTel")]
-public class MetricsBehaviorTests
+public class MetricsBehaviorTests : IDisposable
 {
     private readonly MeterListener _listener;
     private readonly List<(string Name, double Value, KeyValuePair<string, object?>[] Tags)> _measurements = [];
@@ -16,11 +16,13 @@ public class MetricsBehaviorTests
 
     public MetricsBehaviorTests()
     {
-        _listener = new MeterListener();
-        _listener.InstrumentPublished = (instrument, listener) =>
+        _listener = new MeterListener
         {
-            if (instrument.Meter.Name == MediatorInstrumentation.SourceName)
-                listener.EnableMeasurementEvents(instrument);
+            InstrumentPublished = (instrument, listener) =>
+            {
+                if (instrument.Meter.Name == MediatorInstrumentation.SourceName)
+                    listener.EnableMeasurementEvents(instrument);
+            }
         };
         _listener.SetMeasurementEventCallback<double>((instrument, measurement, tags, _) =>
         {
@@ -33,7 +35,11 @@ public class MetricsBehaviorTests
         _listener.Start();
     }
 
-    public void Dispose() => _listener.Dispose();
+    public void Dispose()
+    {
+        _listener.Dispose();
+        GC.SuppressFinalize(this);
+    }
 
     [Fact]
     public async Task Records_duration_on_success()

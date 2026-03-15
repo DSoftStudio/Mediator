@@ -11,31 +11,25 @@ namespace DSoftStudio.Mediator.OpenTelemetry;
 /// Stream pipeline behavior that records metrics for streamed requests.
 /// Duration covers the entire enumeration lifetime.
 /// </summary>
-public sealed class MediatorStreamMetricsBehavior<TRequest, TResponse> : IStreamPipelineBehavior<TRequest, TResponse>
+public sealed class MediatorStreamMetricsBehavior<TRequest, TResponse>(MediatorInstrumentationOptions options) : IStreamPipelineBehavior<TRequest, TResponse>
     where TRequest : IStreamRequest<TResponse>
 {
-    private readonly MediatorInstrumentationOptions _options;
-
-    public MediatorStreamMetricsBehavior(MediatorInstrumentationOptions options)
-    {
-        _options = options;
-    }
 
     public IAsyncEnumerable<TResponse> Handle(
         TRequest request,
         IStreamRequestHandler<TRequest, TResponse> next,
         CancellationToken cancellationToken)
     {
-        if (!_options.EnableMetrics || !MediatorInstrumentation.RequestDuration.Enabled)
+        if (!options.EnableMetrics || !MediatorInstrumentation.RequestDuration.Enabled)
             return next.Handle(request, cancellationToken);
 
-        if (_options.Filter is not null && !_options.Filter(typeof(TRequest)))
+        if (options.Filter is not null && !options.Filter(typeof(TRequest)))
             return next.Handle(request, cancellationToken);
 
         return Instrumented(request, next, cancellationToken);
     }
 
-    private async IAsyncEnumerable<TResponse> Instrumented(
+    private static async IAsyncEnumerable<TResponse> Instrumented(
         TRequest request,
         IStreamRequestHandler<TRequest, TResponse> next,
         [EnumeratorCancellation] CancellationToken cancellationToken)
