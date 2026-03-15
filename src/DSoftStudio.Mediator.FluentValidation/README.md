@@ -1,6 +1,4 @@
-<p align="center">
-  <img alt="DSoftStudio Mediator" src="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudio.svg" height="200">
-</p>
+![DSoftStudio Mediator](https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudio.svg)
 
 # DSoftStudio.Mediator.FluentValidation
 
