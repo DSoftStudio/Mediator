@@ -5,6 +5,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+
+    <!-- Required when using ProjectReference instead of the NuGet package.
+         The NuGet package auto-imports this via build/DSoftStudio.Mediator.props. -->
+    <InterceptorsNamespaces>$(InterceptorsNamespaces);DSoftStudio.Mediator.Generated</InterceptorsNamespaces>
   </PropertyGroup>
 
   <ItemGroup>
