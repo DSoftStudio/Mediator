@@ -64,7 +64,7 @@ catch (MediatorValidationException ex)
 
 ## Documentation
 
-📖 [Full documentation](https://github.com/DSoftStudio/Mediator/blob/main/docs/integrations/fluentvalidation.md)
+📖 [Full documentation](https://docs.dsoftstudio.com/mediator/integrations/fluentvalidation)
 
 ## License
 

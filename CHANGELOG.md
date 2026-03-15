@@ -88,7 +88,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Zero impact on the existing `Send<TRequest, TResponse>()` hot path — completely
   separate dispatch table and code path.
 
-  See [ADR-0004](docs/adr/0004-runtime-typed-send.md) for design rationale.
+  See [ADR-0004](docs/mediator/adr/0004-runtime-typed-send.md) for design rationale.
 
 - **`DSoftStudio.Mediator.OpenTelemetry` package** — New companion NuGet package providing
   automatic distributed tracing and metrics for all mediator operations via standard
@@ -116,7 +116,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (suppress health checks), enrichment (custom tags), and independent tracing/metrics
   toggles.
 
-  See [ADR-0005](docs/adr/0005-opentelemetry-instrumentation.md) for design rationale.
+  See [ADR-0005](docs/mediator/adr/0005-opentelemetry-instrumentation.md) for design rationale.
 
 - **`DSoftStudio.Mediator.FluentValidation` package** — New companion NuGet package
   providing automatic request validation via FluentValidation. Registers a single
@@ -156,12 +156,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `FrozenDictionary` dispatch table. Extension method design is required because
   `ISender.Send<TRequest, TResponse>` has two generic type parameters that cannot be
   inferred — an instance `Send(object)` would shadow all generated typed extensions
-  due to C# overload resolution rules. See [`docs/adr/0004-runtime-typed-send.md`](docs/adr/0004-runtime-typed-send.md).
+  due to C# overload resolution rules. See [`docs/mediator/adr/0004-runtime-typed-send.md`](docs/mediator/adr/0004-runtime-typed-send.md).
 
 - **ADR-0005: OpenTelemetry Instrumentation Package** — Accepted. Separate NuGet
   package (`DSoftStudio.Mediator.OpenTelemetry`) providing automatic distributed
   tracing and metrics via standard pipeline behaviors, with zero impact on the core
-  mediator library. See [`docs/adr/0005-opentelemetry-instrumentation.md`](docs/adr/0005-opentelemetry-instrumentation.md).
+  mediator library. See [`docs/mediator/adr/0005-opentelemetry-instrumentation.md`](docs/mediator/adr/0005-opentelemetry-instrumentation.md).
 
 ---
 

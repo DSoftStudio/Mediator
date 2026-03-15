@@ -48,7 +48,7 @@ Cached responses are returned automatically on subsequent calls — the handler 
 
 ## Documentation
 
-📖 [Full documentation](https://github.com/DSoftStudio/Mediator/blob/main/docs/integrations/hybridcache.md)
+📖 [Full documentation](https://docs.dsoftstudio.com/mediator/integrations/hybridcache)
 
 ## License
 

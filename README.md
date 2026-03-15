@@ -85,7 +85,7 @@ Send a request:
 var result = await mediator.Send(new Ping());
 ```
 
-> 👉 See the full [Quick Start Guide](docs/getting-started/quick-start.md) and [Installation](docs/getting-started/installation.md) for companion packages.
+> 👉 See the full [Quick Start Guide](https://docs.dsoftstudio.com/mediator/getting-started/quick-start) and [Installation](https://docs.dsoftstudio.com/mediator/getting-started/installation) for companion packages.
 
 ---
 
@@ -147,15 +147,15 @@ Tested against [Mediator](https://github.com/martinothamar/Mediator) 3.0.1, [Dis
 
 | Feature | Description | Docs |
 |---|---|---|
-| Pipeline Behaviors | Zero-allocation behavior chains via interface dispatch | [Docs](docs/features/pipeline-behaviors.md) |
-| Pre/Post Processors | Simple before/after hooks without chain responsibility | [Docs](docs/features/pre-post-processors.md) |
-| CQRS | `ICommand<T>` / `IQuery<T>` with semantic handler aliases | [Docs](docs/concepts/cqrs.md) |
-| Self-Handling Requests | `static Execute` inside request — no separate handler class | [Docs](docs/features/self-handling-requests.md) |
-| Notifications | Multi-handler fan-out with pluggable strategies | [Docs](docs/concepts/notifications.md) |
-| Runtime Dispatch | `Send(object)` via FrozenDictionary — AOT-safe | [Docs](docs/features/runtime-dispatch.md) |
-| Streams | `IAsyncEnumerable<T>` streaming with pipeline support | [Docs](docs/concepts/streams.md) |
-| Handler Validation | `ValidateMediatorHandlers()` — fail fast at startup | [Docs](docs/features/handler-validation.md) |
-| Native AOT | Full AOT and trimming compatibility | [Docs](docs/architecture/native-aot.md) |
+| Pipeline Behaviors | Zero-allocation behavior chains via interface dispatch | [Docs](https://docs.dsoftstudio.com/mediator/features/pipeline-behaviors) |
+| Pre/Post Processors | Simple before/after hooks without chain responsibility | [Docs](https://docs.dsoftstudio.com/mediator/features/pre-post-processors) |
+| CQRS | `ICommand<T>` / `IQuery<T>` with semantic handler aliases | [Docs](https://docs.dsoftstudio.com/mediator/concepts/cqrs) |
+| Self-Handling Requests | `static Execute` inside request — no separate handler class | [Docs](https://docs.dsoftstudio.com/mediator/features/self-handling-requests) |
+| Notifications | Multi-handler fan-out with pluggable strategies | [Docs](https://docs.dsoftstudio.com/mediator/concepts/notifications) |
+| Runtime Dispatch | `Send(object)` via FrozenDictionary — AOT-safe | [Docs](https://docs.dsoftstudio.com/mediator/features/runtime-dispatch) |
+| Streams | `IAsyncEnumerable<T>` streaming with pipeline support | [Docs](https://docs.dsoftstudio.com/mediator/concepts/streams) |
+| Handler Validation | `ValidateMediatorHandlers()` — fail fast at startup | [Docs](https://docs.dsoftstudio.com/mediator/features/handler-validation) |
+| Native AOT | Full AOT and trimming compatibility | [Docs](https://docs.dsoftstudio.com/mediator/architecture/native-aot) |
 
 ---
 
@@ -163,9 +163,9 @@ Tested against [Mediator](https://github.com/martinothamar/Mediator) 3.0.1, [Dis
 
 | Package | Purpose | Docs |
 |---|---|---|
-| [`DSoftStudio.Mediator.OpenTelemetry`](https://www.nuget.org/packages/DSoftStudio.Mediator.OpenTelemetry) | Distributed tracing + metrics for Send/Publish/Stream | [Docs](docs/integrations/opentelemetry.md) |
-| [`DSoftStudio.Mediator.FluentValidation`](https://www.nuget.org/packages/DSoftStudio.Mediator.FluentValidation) | Automatic request validation via FluentValidation | [Docs](docs/integrations/fluentvalidation.md) |
-| [`DSoftStudio.Mediator.HybridCache`](https://www.nuget.org/packages/DSoftStudio.Mediator.HybridCache) | Multi-layer caching (L1 + L2) via Microsoft HybridCache | [Docs](docs/integrations/hybridcache.md) |
+| [`DSoftStudio.Mediator.OpenTelemetry`](https://www.nuget.org/packages/DSoftStudio.Mediator.OpenTelemetry) | Distributed tracing + metrics for Send/Publish/Stream | [Docs](https://docs.dsoftstudio.com/mediator/integrations/opentelemetry) |
+| [`DSoftStudio.Mediator.FluentValidation`](https://www.nuget.org/packages/DSoftStudio.Mediator.FluentValidation) | Automatic request validation via FluentValidation | [Docs](https://docs.dsoftstudio.com/mediator/integrations/fluentvalidation) |
+| [`DSoftStudio.Mediator.HybridCache`](https://www.nuget.org/packages/DSoftStudio.Mediator.HybridCache) | Multi-layer caching (L1 + L2) via Microsoft HybridCache | [Docs](https://docs.dsoftstudio.com/mediator/integrations/hybridcache) |
 
 ---
 
@@ -192,14 +192,14 @@ dotnet run --project samples/basic-api/DSoft.Sample.Api
 
 ## Documentation
 
-Full documentation is available in the [`/docs`](docs/index.md) folder:
+Full documentation is available at [docs.dsoftstudio.com/mediator](https://docs.dsoftstudio.com/mediator):
 
-- **Getting Started** — [Installation](docs/getting-started/installation.md) · [Quick Start](docs/getting-started/quick-start.md) · [Registration Order](docs/getting-started/registration-order.md) · [Migration from MediatR](docs/getting-started/migration-from-mediatr.md)
-- **Core Concepts** — [Requests & Handlers](docs/concepts/requests-and-handlers.md) · [Notifications](docs/concepts/notifications.md) · [Streams](docs/concepts/streams.md) · [CQRS](docs/concepts/cqrs.md)
-- **Features** — [Pipeline Behaviors](docs/features/pipeline-behaviors.md) · [Pre/Post Processors](docs/features/pre-post-processors.md) · [Self-Handling Requests](docs/features/self-handling-requests.md) · [Runtime Dispatch](docs/features/runtime-dispatch.md) · [Handler Validation](docs/features/handler-validation.md)
-- **Integrations** — [OpenTelemetry](docs/integrations/opentelemetry.md) · [FluentValidation](docs/integrations/fluentvalidation.md) · [HybridCache](docs/integrations/hybridcache.md)
-- **Architecture** — [Dispatch Pipeline](docs/architecture/dispatch-pipeline.md) · [Source Generators](docs/architecture/source-generators.md) · [Native AOT](docs/architecture/native-aot.md) · [Performance Design](docs/architecture/performance.md)
-- **Advanced** — [Caching Patterns](docs/advanced/caching-patterns.md) · [Pipeline Patterns](docs/advanced/pipeline-patterns.md)
+- **Getting Started** — [Installation](https://docs.dsoftstudio.com/mediator/getting-started/installation) · [Quick Start](https://docs.dsoftstudio.com/mediator/getting-started/quick-start) · [Registration Order](https://docs.dsoftstudio.com/mediator/getting-started/registration-order) · [Migration from MediatR](https://docs.dsoftstudio.com/mediator/getting-started/migration-from-mediatr)
+- **Core Concepts** — [Requests & Handlers](https://docs.dsoftstudio.com/mediator/concepts/requests-and-handlers) · [Notifications](https://docs.dsoftstudio.com/mediator/concepts/notifications) · [Streams](https://docs.dsoftstudio.com/mediator/concepts/streams) · [CQRS](https://docs.dsoftstudio.com/mediator/concepts/cqrs)
+- **Features** — [Pipeline Behaviors](https://docs.dsoftstudio.com/mediator/features/pipeline-behaviors) · [Pre/Post Processors](https://docs.dsoftstudio.com/mediator/features/pre-post-processors) · [Self-Handling Requests](https://docs.dsoftstudio.com/mediator/features/self-handling-requests) · [Runtime Dispatch](https://docs.dsoftstudio.com/mediator/features/runtime-dispatch) · [Handler Validation](https://docs.dsoftstudio.com/mediator/features/handler-validation)
+- **Integrations** — [OpenTelemetry](https://docs.dsoftstudio.com/mediator/integrations/opentelemetry) · [FluentValidation](https://docs.dsoftstudio.com/mediator/integrations/fluentvalidation) · [HybridCache](https://docs.dsoftstudio.com/mediator/integrations/hybridcache)
+- **Architecture** — [Dispatch Pipeline](https://docs.dsoftstudio.com/mediator/architecture/dispatch-pipeline) · [Source Generators](https://docs.dsoftstudio.com/mediator/architecture/source-generators) · [Native AOT](https://docs.dsoftstudio.com/mediator/architecture/native-aot) · [Performance Design](https://docs.dsoftstudio.com/mediator/architecture/performance)
+- **Advanced** — [Caching Patterns](https://docs.dsoftstudio.com/mediator/advanced/caching-patterns) · [Pipeline Patterns](https://docs.dsoftstudio.com/mediator/advanced/pipeline-patterns)
 
 ---
 
@@ -218,7 +218,7 @@ DSoftStudio.Mediator follows MediatR's programming model — migration requires 
 | Handler lifetime (default) | All Transient | Stateless → Singleton, with DI deps → Transient |
 | Namespace | `using MediatR;` | `using DSoftStudio.Mediator.Abstractions;` |
 
-> 👉 See the complete [step-by-step Migration Guide](docs/getting-started/migration-from-mediatr.md) for detailed instructions with diff examples.
+> 👉 See the complete [step-by-step Migration Guide](https://docs.dsoftstudio.com/mediator/getting-started/migration-from-mediatr) for detailed instructions with diff examples.
 
 ---
 

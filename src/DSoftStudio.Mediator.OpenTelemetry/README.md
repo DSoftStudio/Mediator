@@ -47,7 +47,7 @@ services.AddMediatorInstrumentation(options =>
 
 ## Documentation
 
-📖 [Full documentation](https://github.com/DSoftStudio/Mediator/blob/main/docs/integrations/opentelemetry.md)
+📖 [Full documentation](https://docs.dsoftstudio.com/mediator/integrations/opentelemetry)
 
 ## License
 
