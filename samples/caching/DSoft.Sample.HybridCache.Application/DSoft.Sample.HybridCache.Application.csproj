@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="9.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\DSoftStudio.Mediator.Abstractions\DSoftStudio.Mediator.Abstractions.csproj" />
+    <ProjectReference Include="..\..\..\src\DSoftStudio.Mediator\DSoftStudio.Mediator.csproj" />
+    <ProjectReference Include="..\..\..\src\DSoftStudio.Mediator.HybridCache\DSoftStudio.Mediator.HybridCache.csproj" />
+    <ProjectReference Include="..\..\..\src\DSoftStudio.Mediator.Generators\DSoftStudio.Mediator.Generators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+</Project>
