@@ -46,6 +46,19 @@ services
 var result = await mediator.Send(new Ping());
 ```
 
+> **Required namespaces.** Two `using` directives are needed to use the mediator:
+>
+> ```csharp
+> using DSoftStudio.Mediator.Abstractions; // ISender, IMediator, ICommand<T>, IRequest<T>, etc.
+> using DSoftStudio.Mediator;              // Typed Send() / CreateStream() extensions + AddMediator() DI extensions
+> ```
+>
+> The source generator emits typed extension methods (e.g. `Send(Ping)`) in the
+> `DSoftStudio.Mediator` namespace. Without this `using`, the compiler falls back to
+> the generic `ISender.Send<TRequest, TResponse>()` and reports **CS0411** because it
+> cannot infer both type arguments.
+> **Tip:** add both to a `GlobalUsings.cs` file so every file in the project picks them up automatically.
+
 ## Features at a Glance
 
 - Request/response dispatch with `IRequest<TResponse>` and `IRequestHandler<TRequest, TResponse>`

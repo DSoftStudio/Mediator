@@ -34,6 +34,28 @@ dotnet add package DSoftStudio.Mediator.HybridCache         # Query caching
 - .NET 8.0 or later
 - Source generators require the Roslyn compiler (included with .NET SDK)
 
+## Required Namespaces
+
+Two `using` directives are needed to use the mediator:
+
+```csharp
+using DSoftStudio.Mediator.Abstractions; // ISender, IMediator, ICommand<T>, IRequest<T>, etc.
+using DSoftStudio.Mediator;              // Typed Send() / CreateStream() extensions + AddMediator() DI extensions
+```
+
+The source generator emits typed extension methods (e.g. `Send(MyCommand)`) in the
+`DSoftStudio.Mediator` namespace. Without this `using`, the compiler falls back to
+the generic `ISender.Send<TRequest, TResponse>()` and reports **CS0411** because it
+cannot infer both type arguments.
+
+**Tip:** add both to a `GlobalUsings.cs` file so every file in the project picks them up automatically:
+
+```csharp
+// GlobalUsings.cs
+global using DSoftStudio.Mediator;
+global using DSoftStudio.Mediator.Abstractions;
+```
+
 ## Native AOT and Trimming
 
 Both packages ship with `IsAotCompatible` and `IsTrimmable` enabled. The hot execution path uses no reflection, no `MakeGenericType`, no `Expression.Compile`, and no dynamic method generation — all handler discovery and dispatch wiring are performed at compile time by Roslyn source generators.
