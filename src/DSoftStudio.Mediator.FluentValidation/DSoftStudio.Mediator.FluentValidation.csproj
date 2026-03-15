@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+
+		<TargetFramework>net8.0</TargetFramework>
+
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+
+		<!-- NuGet -->
+		<PackageId>DSoftStudio.Mediator.FluentValidation</PackageId>
+		<Version>1.0.0</Version>
+
+		<Authors>DSoftStudio</Authors>
+		<Company>DSoftStudio</Company>
+
+		<Description>
+			FluentValidation integration for DSoftStudio.Mediator. Provides automatic request validation via a pipeline behavior that resolves IValidator&lt;T&gt; instances from DI and short-circuits on failure.
+		</Description>
+
+		<PackageTags>
+			mediator;fluentvalidation;validation;pipeline;cqrs;behavior
+		</PackageTags>
+
+		<PackageProjectUrl>https://github.com/DSoftStudio/Mediator</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/DSoftStudio/Mediator</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+
+		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="FluentValidation" Version="11.11.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\DSoftStudio.Mediator.Abstractions\DSoftStudio.Mediator.Abstractions.csproj" />
+		<ProjectReference Include="..\DSoftStudio.Mediator\DSoftStudio.Mediator.csproj" />
+	</ItemGroup>
+
+	<!-- Test visibility -->
+	<ItemGroup>
+		<InternalsVisibleTo Include="DSoftStudio.Mediator.FluentValidation.Tests" />
+	</ItemGroup>
+
+</Project>
