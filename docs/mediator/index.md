@@ -88,7 +88,8 @@ Patterns and advanced scenarios.
 ## Reference
 
 - [Benchmarks](benchmarks.md)
-- [Changelog](https://github.com/DSoftStudio/Mediator/blob/main/CHANGELOG.md)
+- [Changelog](changelog.md)
+- [GitHub Repository](https://github.com/DSoftStudio/Mediator)
 
 ---
 

@@ -11,7 +11,7 @@ description: "Distributed tracing and metrics with OpenTelemetry."
   </picture>
 </p>
 
-A← Back to Documentation](../index.md)
+[← Back to Documentation](../index.md)
 
 # OpenTelemetry Instrumentation
 
