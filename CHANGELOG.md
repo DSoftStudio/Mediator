@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.3] — 2026-03-15
+
+### Changed
+
+- **Documentation site** — all doc links now point to [docs.dsoftstudio.com/mediator](https://docs.dsoftstudio.com/mediator) instead of relative GitHub paths.
+- **Project website** — NuGet "Project website" updated to `https://docs.dsoftstudio.com/mediator`.
+
+### Fixed
+
+- **SonarCloud quality gate** — excluded `docs/`, `samples/`, and `benchmarks/` from analysis to prevent false-positive bugs on non-production code.
+
+---
+
 ## [1.1.2] — 2026-03-15
 
 ### Fixed

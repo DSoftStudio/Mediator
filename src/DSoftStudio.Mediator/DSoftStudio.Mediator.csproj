@@ -14,7 +14,7 @@
 
 		<!-- NuGet -->
 		<PackageId>DSoftStudio.Mediator</PackageId>
-		<Version>1.1.3-rc.1</Version>
+		<Version>1.1.3</Version>
 
 		<Authors>DSoftStudio</Authors>
 		<Company>DSoftStudio</Company>
