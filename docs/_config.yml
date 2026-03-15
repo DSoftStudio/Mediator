@@ -10,3 +10,10 @@ plugins:
 
 # Hide the default header/title — each page has its own
 show_downloads: false
+
+# Force custom layout on every page
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default
