@@ -40,6 +40,14 @@ services
 
 > **Registration order matters.** The `Precompile*` methods inspect the service collection to determine dispatch strategies and lifetimes. Register all behaviors, processors, exception handlers, notification strategies, and handler lifetime overrides **before** calling `PrecompilePipelines()` / `PrecompileNotifications()` / `PrecompileStreams()`. See [Registration Order](registration-order.md) for details.
 
+> **Cross-project handler discovery.** `RegisterMediatorHandlers()` automatically discovers
+> all `IRequestHandler<,>`, `INotificationHandler<>`, and `IStreamRequestHandler<,>` implementations
+> across **all referenced projects** — no manual registration required. Each project that references
+> `DSoftStudio.Mediator` emits `[assembly: MediatorHandlerRegistration]` attributes at compile time,
+> and downstream projects read them to build the complete handler registry.
+> This works for Clean Architecture setups where handlers live in Application or Infrastructure
+> layers and the host/API project only calls `RegisterMediatorHandlers()`.
+
 ## 3. Send a Request
 
 ```csharp

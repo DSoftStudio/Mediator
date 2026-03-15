@@ -34,6 +34,29 @@ dotnet add package DSoftStudio.Mediator.HybridCache         # Query caching
 - .NET 8.0 or later
 - Source generators require the Roslyn compiler (included with .NET SDK)
 
+## Cross-Project Handler Discovery
+
+`RegisterMediatorHandlers()` automatically discovers all handler implementations
+(`IRequestHandler<,>`, `INotificationHandler<>`, `IStreamRequestHandler<,>`, and their
+CQRS aliases `ICommandHandler<,>`, `IQueryHandler<,>`) across **all referenced projects** —
+no manual registration required.
+
+Each project that references `DSoftStudio.Mediator` emits
+`[assembly: MediatorHandlerRegistration]` attributes at compile time. Downstream projects
+read these attributes to build the complete handler registry, without runtime reflection
+or assembly scanning.
+
+This works seamlessly with **Clean Architecture** setups:
+
+```
+Host/API  →  references Application & Infrastructure
+              └─ RegisterMediatorHandlers() discovers handlers from both
+```
+
+> **Important:** every project that defines handlers must reference the
+> `DSoftStudio.Mediator` NuGet package so the source generator can run and emit
+> the assembly attributes.
+
 ## Required Namespaces
 
 Two `using` directives are needed to use the mediator:
