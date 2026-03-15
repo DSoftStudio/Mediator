@@ -35,6 +35,10 @@ jobs:
       - name: Install SonarScanner
         run: dotnet tool install --global dotnet-sonarscanner
 
+      - name: Extract project version
+        id: version
+        run: echo "VERSION=$(grep -oPm1 '(?<=<Version>)[^<]+' src/DSoftStudio.Mediator/DSoftStudio.Mediator.csproj)" >> "$GITHUB_OUTPUT"
+
       - name: Begin SonarCloud analysis
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -42,6 +46,7 @@ jobs:
           dotnet sonarscanner begin
           /k:"${{ vars.SONAR_PROJECT_KEY }}"
           /o:"${{ vars.SONAR_ORG }}"
+          /v:"${{ steps.version.outputs.VERSION }}"
           /d:sonar.host.url="https://sonarcloud.io"
           /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
           /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml"
