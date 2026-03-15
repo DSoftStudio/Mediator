@@ -53,15 +53,30 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
                 return new EquatableArray<HandlerInfo>(array);
             });
 
+        // Discover self-handling request classes (IRequest<T> + static Execute)
+        var selfHandlers = context.SyntaxProvider
+            .CreateSyntaxProvider(
+                predicate: static (node, _) =>
+                    node is ClassDeclarationSyntax { BaseList: not null }
+                    || node is RecordDeclarationSyntax { BaseList: not null },
+                transform: static (ctx, ct) => GetSelfHandlerPair(ctx, ct))
+            .Where(static info => info is not null)
+            .Select(static (info, _) => info!.Value);
+
+        var selfCollected = selfHandlers.Collect();
+
         var combined = localCollected
             .Combine(hasHandlerInterface)
-            .Combine(externalHandlers);
+            .Combine(externalHandlers)
+            .Combine(selfCollected);
 
         context.RegisterSourceOutput(combined, static (spc, pair) =>
         {
-            var ((localHandlers, interfaceExists), external) = pair;
+            var (((localHandlers, interfaceExists), external), selfHandlers) = pair;
 
-            if (!interfaceExists && external.Length == 0)
+            var hasSelfHandlers = !selfHandlers.IsDefaultOrEmpty && selfHandlers.Length > 0;
+
+            if (!interfaceExists && external.Length == 0 && !hasSelfHandlers)
             {
                 spc.AddSource(
                     "MediatorRegistry.g.cs",
@@ -71,13 +86,18 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
                 return;
             }
 
-            // Merge local + external, deduplicate
+            // Merge local + external + self-handlers, deduplicate
             var localList = localHandlers.IsDefaultOrEmpty
                 ? []
                 : localHandlers.Distinct();
 
+            IEnumerable<HandlerInfo> selfPairs = hasSelfHandlers
+                ? selfHandlers.Select(static s => new HandlerInfo(s.RequestType, s.ResponseType))
+                : [];
+
             var uniqueRegistrations = localList
                 .Concat(external)
+                .Concat(selfPairs)
                 .Distinct()
                 .OrderBy(static h => h.RequestType)
                 .ThenBy(static h => h.ResponseType)
@@ -89,6 +109,31 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
                 "MediatorRegistry.g.cs",
                 SourceText.From(code, Encoding.UTF8));
         });
+    }
+
+    /// <summary>
+    /// Extracts (requestType, responseType) from self-handling request classes
+    /// for pipeline chain registration.
+    /// </summary>
+    private static SelfHandlerDetail? GetSelfHandlerPair(
+        GeneratorSyntaxContext ctx,
+        CancellationToken ct)
+    {
+        var typeDecl = (TypeDeclarationSyntax)ctx.Node;
+
+        if (ctx.SemanticModel.GetDeclaredSymbol(typeDecl, ct) is not INamedTypeSymbol symbol)
+            return null;
+
+        if (symbol.IsAbstract || symbol.TypeKind != TypeKind.Class || symbol.TypeParameters.Length > 0)
+            return null;
+
+        if (HandlerDiscovery.IsFileLocal(typeDecl))
+            return null;
+
+        if (!HandlerDiscovery.TryGetSelfHandlingRequest(symbol, ct, out var detail))
+            return null;
+
+        return detail;
     }
 
     private static HandlerInfo? GetHandlerInfo(GeneratorSyntaxContext ctx, CancellationToken ct)
@@ -214,6 +259,19 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
         sb.AppendLine("                            .GetRequiredService<global::DSoftStudio.Mediator.Abstractions.IRequestHandler<TRequest, TResponse>>(sp)");
         sb.AppendLine("                            .Handle(request, ct));");
         sb.AppendLine("            }");
+        sb.AppendLine();
+        sb.AppendLine("            // AOT-safe Send(object) dispatch — register a runtime-typed delegate for this request type.");
+        sb.AppendLine("            global::DSoftStudio.Mediator.RequestObjectDispatch.Register<TRequest, TResponse>(");
+        sb.AppendLine("                static async (request, sp, ct) =>");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    var typed = (TRequest)request;");
+        sb.AppendLine("                    var pipeline = global::DSoftStudio.Mediator.RequestDispatch<TRequest, TResponse>.Pipeline;");
+        sb.AppendLine("                    if (pipeline is not null)");
+        sb.AppendLine("                        return await pipeline(typed, sp, ct);");
+        sb.AppendLine("                    return await global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions");
+        sb.AppendLine("                        .GetRequiredService<global::DSoftStudio.Mediator.Abstractions.IRequestHandler<TRequest, TResponse>>(sp)");
+        sb.AppendLine("                        .Handle(typed, ct);");
+        sb.AppendLine("                });");
         sb.AppendLine("        }");
 
         sb.AppendLine("    }");
@@ -231,6 +289,7 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
         sb.AppendLine("        {");
 
         sb.AppendLine("            MediatorRegistry.RegisterPipelineChains(services);");
+        sb.AppendLine("            global::DSoftStudio.Mediator.RequestObjectDispatch.Freeze();");
         sb.AppendLine("            return services;");
 
         sb.AppendLine("        }");

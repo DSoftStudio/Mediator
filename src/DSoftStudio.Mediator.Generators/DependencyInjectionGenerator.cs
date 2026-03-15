@@ -39,11 +39,23 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
                 return new EquatableArray<HandlerInfo>(array);
             });
 
-        var combined = localCollected.Combine(externalHandlers);
+        // Discover self-handling request classes (IRequest<T> + static Execute)
+        var selfHandlers = context.SyntaxProvider
+            .CreateSyntaxProvider(
+                predicate: static (node, _) =>
+                    node is ClassDeclarationSyntax { BaseList: not null }
+                    || node is RecordDeclarationSyntax { BaseList: not null },
+                transform: static (ctx, ct) => GetSelfHandlerInfo(ctx, ct))
+            .Where(static info => info is not null)
+            .Select(static (info, _) => info!.Value);
+
+        var selfCollected = selfHandlers.Collect();
+
+        var combined = localCollected.Combine(externalHandlers).Combine(selfCollected);
 
         context.RegisterSourceOutput(combined, static (spc, pair) =>
         {
-            var (localHandlers, external) = pair;
+            var ((localHandlers, external), selfHandlers) = pair;
 
             var localRegistrations = localHandlers
                 .Distinct()
@@ -59,12 +71,63 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
                 .ThenBy(static h => h.HandlerType)
                 .ToArray();
 
-            var code = GenerateCode(localRegistrations, allRegistrations);
+            var selfHandlerList = selfHandlers.IsDefaultOrEmpty
+                ? System.Array.Empty<SelfHandlerDetail>()
+                : selfHandlers.Distinct()
+                    .OrderBy(static h => h.RequestType)
+                    .ToArray();
+
+            // Detect duplicate request/stream handlers (silent "last wins" bug)
+            ReportDuplicateHandlers(spc, allRegistrations);
+
+            var code = GenerateCode(localRegistrations, allRegistrations, selfHandlerList);
 
             spc.AddSource(
                 "MediatorServiceRegistry.g.cs",
                 SourceText.From(code, Encoding.UTF8));
         });
+    }
+
+    /// <summary>
+    /// Reports compile-time diagnostics for request/stream handler types that have
+    /// multiple implementations. With Microsoft.Extensions.DI, <c>GetRequiredService&lt;T&gt;</c>
+    /// returns the last registration — earlier handlers are silently ignored.
+    /// Notification handlers are excluded (multiple handlers per notification is by design).
+    /// </summary>
+    private static void ReportDuplicateHandlers(SourceProductionContext spc, HandlerInfo[] allHandlers)
+    {
+        const string RequestPrefix =
+            "global::DSoftStudio.Mediator.Abstractions.IRequestHandler<";
+        const string StreamPrefix =
+            "global::DSoftStudio.Mediator.Abstractions.IStreamRequestHandler<";
+
+        var groups = allHandlers
+            .GroupBy(static h => h.InterfaceType)
+            .Where(static g => g.Count() > 1);
+
+        foreach (var group in groups)
+        {
+            var interfaceType = group.Key;
+            var handlerNames = string.Join(", ", group.Select(static h => h.HandlerType));
+
+            if (interfaceType.StartsWith(RequestPrefix))
+            {
+                spc.ReportDiagnostic(Diagnostic.Create(
+                    DiagnosticDescriptors.DuplicateRequestHandler,
+                    Location.None,
+                    interfaceType,
+                    handlerNames));
+            }
+            else if (interfaceType.StartsWith(StreamPrefix))
+            {
+                spc.ReportDiagnostic(Diagnostic.Create(
+                    DiagnosticDescriptors.DuplicateStreamHandler,
+                    Location.None,
+                    interfaceType,
+                    handlerNames));
+            }
+            // Notification handlers: multiple implementations per type is expected — no diagnostic
+        }
     }
 
     private static HandlerInfo? GetHandlerInfo(
@@ -140,9 +203,31 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
         return null;
     }
 
+    private static SelfHandlerDetail? GetSelfHandlerInfo(
+        GeneratorSyntaxContext ctx,
+        CancellationToken ct)
+    {
+        var typeDecl = (TypeDeclarationSyntax)ctx.Node;
+
+        if (ctx.SemanticModel.GetDeclaredSymbol(typeDecl, ct) is not INamedTypeSymbol symbol)
+            return null;
+
+        if (symbol.IsAbstract || symbol.TypeKind != TypeKind.Class)
+            return null;
+
+        if (HandlerDiscovery.IsFileLocal(typeDecl))
+            return null;
+
+        if (!HandlerDiscovery.TryGetSelfHandlingRequest(symbol, ct, out var detail))
+            return null;
+
+        return detail;
+    }
+
     /// <param name="localHandlers">Handlers discovered in the current project (emit assembly attributes for these).</param>
     /// <param name="allHandlers">Local + external handlers (register all in DI).</param>
-    private static string GenerateCode(HandlerInfo[] localHandlers, HandlerInfo[] allHandlers)
+    /// <param name="selfHandlers">Self-handling request classes (IRequest&lt;T&gt; + static Execute).</param>
+    private static string GenerateCode(HandlerInfo[] localHandlers, HandlerInfo[] allHandlers, SelfHandlerDetail[] selfHandlers)
     {
         var sb = new StringBuilder(2048);
 
@@ -166,6 +251,9 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
 
         sb.AppendLine("namespace DSoftStudio.Mediator;");
         sb.AppendLine();
+
+        // Generate adapter classes for self-handling request types
+        GenerateSelfHandlerAdapters(sb, selfHandlers);
 
         sb.AppendLine("internal static class MediatorServiceRegistry");
         sb.AppendLine("{");
@@ -200,6 +288,30 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
             }
         }
 
+        // Register self-handler adapters in DI
+        foreach (var handler in selfHandlers)
+        {
+            var adapterFqn = "global::DSoftStudio.Mediator.__SelfHandler_"
+                + HandlerDiscovery.SanitizeIdentifier(handler.RequestType);
+
+            bool isStateless = true;
+            foreach (var param in handler.Parameters)
+            {
+                if (param.Kind == SelfHandlerParam.KindService)
+                {
+                    isStateless = false;
+                    break;
+                }
+            }
+
+            sb.Append(isStateless
+                ? "        global::Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<"
+                : "        global::Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddTransient<");
+            sb.Append($"global::DSoftStudio.Mediator.Abstractions.IRequestHandler<{handler.RequestType}, {handler.ResponseType}>, ");
+            sb.Append(adapterFqn);
+            sb.AppendLine(">(services);");
+        }
+
         sb.AppendLine("    }");
         sb.AppendLine("}");
         sb.AppendLine();
@@ -217,22 +329,237 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
         sb.AppendLine("    }");
 
         sb.AppendLine("}");
+        sb.AppendLine();
+
+        GenerateHandlerValidator(sb, allHandlers, selfHandlers);
 
         return sb.ToString();
     }
 
-    internal readonly struct HandlerInfo : IEquatable<HandlerInfo>
+    /// <summary>
+    /// Generates adapter classes that bridge self-handling request classes
+    /// (IRequest&lt;T&gt; + static Execute) to the IRequestHandler&lt;,&gt; contract.
+    /// </summary>
+    private static void GenerateSelfHandlerAdapters(
+        StringBuilder sb,
+        SelfHandlerDetail[] selfHandlers)
     {
-        public string InterfaceType { get; }
-        public string HandlerType { get; }
-        public bool IsStateless { get; }
-
-        public HandlerInfo(string iface, string handler, bool isStateless = false)
+        foreach (var handler in selfHandlers)
         {
-            InterfaceType = iface;
-            HandlerType = handler;
-            IsStateless = isStateless;
+            var adapterName = "__SelfHandler_"
+                + HandlerDiscovery.SanitizeIdentifier(handler.RequestType);
+
+            // Collect service parameters
+            var services = new System.Collections.Generic.List<(string TypeName, int Index)>();
+            int serviceIndex = 0;
+            foreach (var param in handler.Parameters)
+            {
+                if (param.Kind == SelfHandlerParam.KindService)
+                {
+                    services.Add((param.TypeName, serviceIndex));
+                    serviceIndex++;
+                }
+            }
+
+            sb.AppendLine("[global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]");
+            sb.Append($"internal sealed class {adapterName} : ");
+            sb.AppendLine($"global::DSoftStudio.Mediator.Abstractions.IRequestHandler<{handler.RequestType}, {handler.ResponseType}>");
+            sb.AppendLine("{");
+
+            // Fields
+            for (int i = 0; i < services.Count; i++)
+                sb.AppendLine($"    private readonly {services[i].TypeName} _s{services[i].Index};");
+            if (services.Count > 0)
+                sb.AppendLine();
+
+            // Constructor (only if there are DI services)
+            if (services.Count > 0)
+            {
+                sb.Append($"    public {adapterName}(");
+                for (int i = 0; i < services.Count; i++)
+                {
+                    if (i > 0) sb.Append(", ");
+                    sb.Append($"{services[i].TypeName} s{services[i].Index}");
+                }
+                sb.AppendLine(")");
+                sb.AppendLine("    {");
+                for (int i = 0; i < services.Count; i++)
+                    sb.AppendLine($"        _s{services[i].Index} = s{services[i].Index};");
+                sb.AppendLine("    }");
+                sb.AppendLine();
+            }
+
+            // Handle method
+            bool needsAsync = handler.ReturnKind == SelfHandlerDetail.ReturnTask;
+            sb.Append("    public ");
+            if (needsAsync) sb.Append("async ");
+            sb.Append($"global::System.Threading.Tasks.ValueTask<{handler.ResponseType}> Handle(");
+            sb.Append($"{handler.RequestType} request, ");
+            sb.AppendLine("global::System.Threading.CancellationToken cancellationToken)");
+            sb.AppendLine("    {");
+
+            // Build Execute call arguments (in declaration order)
+            var args = new StringBuilder();
+            int svcIdx = 0;
+            bool first = true;
+            foreach (var param in handler.Parameters)
+            {
+                if (!first) args.Append(", ");
+                first = false;
+
+                switch (param.Kind)
+                {
+                    case SelfHandlerParam.KindRequest:
+                        args.Append("request");
+                        break;
+                    case SelfHandlerParam.KindCancellationToken:
+                        args.Append("cancellationToken");
+                        break;
+                    case SelfHandlerParam.KindService:
+                        args.Append($"_s{svcIdx}");
+                        svcIdx++;
+                        break;
+                }
+            }
+
+            var callExpr = $"{handler.RequestType}.Execute({args})";
+
+            switch (handler.ReturnKind)
+            {
+                case SelfHandlerDetail.ReturnSync:
+                    sb.AppendLine($"        return new global::System.Threading.Tasks.ValueTask<{handler.ResponseType}>({callExpr});");
+                    break;
+                case SelfHandlerDetail.ReturnTaskOfT:
+                    sb.AppendLine($"        return new global::System.Threading.Tasks.ValueTask<{handler.ResponseType}>({callExpr});");
+                    break;
+                case SelfHandlerDetail.ReturnValueTaskOfT:
+                    sb.AppendLine($"        return {callExpr};");
+                    break;
+                case SelfHandlerDetail.ReturnVoid:
+                    sb.AppendLine($"        {callExpr};");
+                    sb.AppendLine($"        return new global::System.Threading.Tasks.ValueTask<{handler.ResponseType}>(global::DSoftStudio.Mediator.Abstractions.Unit.Value);");
+                    break;
+                case SelfHandlerDetail.ReturnTask:
+                    sb.AppendLine($"        await {callExpr};");
+                    sb.AppendLine($"        return global::DSoftStudio.Mediator.Abstractions.Unit.Value;");
+                    break;
+            }
+
+            sb.AppendLine("    }");
+            sb.AppendLine("}");
+            sb.AppendLine();
         }
+    }
+
+    private static void GenerateHandlerValidator(StringBuilder sb, HandlerInfo[] allHandlers, SelfHandlerDetail[] selfHandlers)
+    {
+        const string RequestPrefix =
+            "global::DSoftStudio.Mediator.Abstractions.IRequestHandler<";
+        const string NotificationPrefix =
+            "global::DSoftStudio.Mediator.Abstractions.INotificationHandler<";
+        const string StreamPrefix =
+            "global::DSoftStudio.Mediator.Abstractions.IStreamRequestHandler<";
+
+        sb.AppendLine("/// <summary>");
+        sb.AppendLine("/// Auto-generated fail-fast handler validator.");
+        sb.AppendLine("/// Resolves every mediator handler from DI at startup to detect");
+        sb.AppendLine("/// misconfiguration before the first request is processed.");
+        sb.AppendLine("/// </summary>");
+        sb.AppendLine("internal static class MediatorHandlerValidator");
+        sb.AppendLine("{");
+        sb.AppendLine("    public static void Validate(global::System.IServiceProvider serviceProvider)");
+        sb.AppendLine("    {");
+
+        if (allHandlers.Length > 0 || selfHandlers.Length > 0)
+        {
+            sb.AppendLine("        using var scope = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.CreateScope(serviceProvider);");
+            sb.AppendLine("        var sp = scope.ServiceProvider;");
+            sb.AppendLine("        var errors = new global::System.Collections.Generic.List<global::System.Exception>();");
+            sb.AppendLine();
+
+            var emittedInterfaces = new System.Collections.Generic.HashSet<string>();
+
+            foreach (var handler in allHandlers)
+            {
+                // Skip duplicate interface types (e.g. multiple notification handlers
+                // for the same notification type — GetServices validates all at once).
+                if (!emittedInterfaces.Add(handler.InterfaceType))
+                    continue;
+
+                if (handler.InterfaceType.StartsWith(RequestPrefix))
+                {
+                    // Validate request handler
+                    sb.AppendLine($"        try {{ global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{handler.InterfaceType}>(sp); }}");
+                    sb.AppendLine("        catch (global::System.Exception ex) { errors.Add(ex); }");
+
+                    // Validate pipeline chain if registered (behaviors, processors, exception handlers)
+                    var chainType = handler.InterfaceType.Replace(RequestPrefix,
+                        "global::DSoftStudio.Mediator.PipelineChainHandler<");
+                    sb.AppendLine($"        try {{ global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetService<{chainType}>(sp); }}");
+                    sb.AppendLine("        catch (global::System.Exception ex) { errors.Add(ex); }");
+                }
+                else if (handler.InterfaceType.StartsWith(NotificationPrefix))
+                {
+                    // Validate all notification handlers (GetServices materializes every implementation)
+                    sb.AppendLine($"        try {{ foreach (var _ in global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetServices<{handler.InterfaceType}>(sp)) {{ }} }}");
+                    sb.AppendLine("        catch (global::System.Exception ex) { errors.Add(ex); }");
+                }
+                else if (handler.InterfaceType.StartsWith(StreamPrefix))
+                {
+                    // Validate stream handler
+                    sb.AppendLine($"        try {{ global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{handler.InterfaceType}>(sp); }}");
+                    sb.AppendLine("        catch (global::System.Exception ex) { errors.Add(ex); }");
+
+                    // Validate stream pipeline chain if registered
+                    var chainType = handler.InterfaceType.Replace(StreamPrefix,
+                        "global::DSoftStudio.Mediator.StreamPipelineChainHandler<");
+                    sb.AppendLine($"        try {{ global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetService<{chainType}>(sp); }}");
+                    sb.AppendLine("        catch (global::System.Exception ex) { errors.Add(ex); }");
+                }
+            }
+
+            // Validate self-handler adapters
+            foreach (var handler in selfHandlers)
+            {
+                var ifaceType = $"global::DSoftStudio.Mediator.Abstractions.IRequestHandler<{handler.RequestType},{handler.ResponseType}>";
+                if (!emittedInterfaces.Add(ifaceType))
+                    continue;
+
+                sb.AppendLine($"        try {{ global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{ifaceType}>(sp); }}");
+                sb.AppendLine("        catch (global::System.Exception ex) { errors.Add(ex); }");
+            }
+
+            sb.AppendLine();
+            sb.AppendLine("        if (errors.Count > 0)");
+            sb.AppendLine("            throw new global::System.AggregateException(");
+            sb.AppendLine("                \"One or more mediator handlers failed validation. See inner exceptions for details.\",");
+            sb.AppendLine("                errors);");
+        }
+
+        sb.AppendLine("    }");
+        sb.AppendLine("}");
+        sb.AppendLine();
+
+        sb.AppendLine("/// <summary>");
+        sb.AppendLine("/// Extension method for fail-fast mediator handler validation.");
+        sb.AppendLine("/// Call after <c>BuildServiceProvider()</c> / <c>builder.Build()</c> to");
+        sb.AppendLine("/// detect misconfigured handlers before the first request.");
+        sb.AppendLine("/// </summary>");
+        sb.AppendLine("internal static class MediatorHandlerValidatorExtensions");
+        sb.AppendLine("{");
+        sb.AppendLine("    public static void ValidateMediatorHandlers(");
+        sb.AppendLine("        this global::System.IServiceProvider serviceProvider)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        MediatorHandlerValidator.Validate(serviceProvider);");
+        sb.AppendLine("    }");
+        sb.AppendLine("}");
+    }
+
+    internal readonly struct HandlerInfo(string iface, string handler, bool isStateless = false) : IEquatable<HandlerInfo>
+    {
+        public string InterfaceType { get; } = iface;
+        public string HandlerType { get; } = handler;
+        public bool IsStateless { get; } = isStateless;
 
         public bool Equals(HandlerInfo other) =>
             InterfaceType == other.InterfaceType &&

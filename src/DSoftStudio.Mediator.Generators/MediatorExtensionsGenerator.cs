@@ -47,6 +47,18 @@ public sealed class MediatorExtensionsGenerator : IIncrementalGenerator
                 return new EquatableArray<RequestResponsePair>(array);
             });
 
+        // ── Self-handling request classes (IRequest<T> + static Execute) ──
+        var selfHandlers = context.SyntaxProvider
+            .CreateSyntaxProvider(
+                predicate: static (node, _) =>
+                    node is ClassDeclarationSyntax { BaseList: not null }
+                    || node is RecordDeclarationSyntax { BaseList: not null },
+                transform: static (ctx, ct) => GetSelfHandlerRequestInfo(ctx, ct))
+            .Where(static info => info is not null)
+            .Select(static (info, _) => info!.Value);
+
+        var selfCollected = selfHandlers.Collect();
+
         // ── Stream handlers (CreateStream) ───────────────────────
         var streamHandlers = context.SyntaxProvider
             .CreateSyntaxProvider(
@@ -71,19 +83,25 @@ public sealed class MediatorExtensionsGenerator : IIncrementalGenerator
         // ── Combine and emit ─────────────────────────────────────
         var combined = localRequests
             .Combine(externalRequests)
+            .Combine(selfCollected)
             .Combine(localStreams)
             .Combine(externalStreams);
 
         context.RegisterSourceOutput(combined, static (spc, data) =>
         {
-            var (((localReqs, extReqs), localStrs), extStrs) = data;
+            var ((((localReqs, extReqs), selfReqs), localStrs), extStrs) = data;
 
             var localReqList = localReqs.IsDefaultOrEmpty
                 ? Enumerable.Empty<RequestResponsePair>()
                 : localReqs.Distinct();
 
+            IEnumerable<RequestResponsePair> selfReqPairs = selfReqs.IsDefaultOrEmpty
+                ? Enumerable.Empty<RequestResponsePair>()
+                : selfReqs.Select(static s => new RequestResponsePair(s.RequestType, s.ResponseType));
+
             var requests = localReqList
                 .Concat(extReqs)
+                .Concat(selfReqPairs)
                 .Distinct()
                 .OrderBy(static p => p.RequestType)
                 .ToList();
@@ -104,6 +122,31 @@ public sealed class MediatorExtensionsGenerator : IIncrementalGenerator
                 "MediatorExtensions.g.cs",
                 SourceText.From(code, Encoding.UTF8));
         });
+    }
+
+    /// <summary>
+    /// Extracts (requestType, responseType) from self-handling request classes
+    /// for typed extension method generation.
+    /// </summary>
+    private static SelfHandlerDetail? GetSelfHandlerRequestInfo(
+        GeneratorSyntaxContext ctx,
+        CancellationToken ct)
+    {
+        var typeDecl = (TypeDeclarationSyntax)ctx.Node;
+
+        if (ctx.SemanticModel.GetDeclaredSymbol(typeDecl, ct) is not INamedTypeSymbol symbol)
+            return null;
+
+        if (symbol.IsAbstract || symbol.TypeKind != TypeKind.Class)
+            return null;
+
+        if (HandlerDiscovery.IsFileLocal(typeDecl))
+            return null;
+
+        if (!HandlerDiscovery.TryGetSelfHandlingRequest(symbol, ct, out var detail))
+            return null;
+
+        return detail;
     }
 
     // ── Discovery ────────────────────────────────────────────────
