@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+
+		<TargetFramework>net8.0</TargetFramework>
+
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+
+		<!-- NuGet -->
+		<PackageId>DSoftStudio.Mediator.OpenTelemetry</PackageId>
+		<Version>1.0.0</Version>
+
+		<Authors>DSoftStudio</Authors>
+		<Company>DSoftStudio</Company>
+
+		<Description>
+			OpenTelemetry instrumentation for DSoftStudio.Mediator. Provides automatic distributed tracing and metrics for all mediator operations via standard pipeline behaviors.
+		</Description>
+
+		<PackageTags>
+			mediator;opentelemetry;tracing;metrics;observability;instrumentation;cqrs
+		</PackageTags>
+
+		<PackageProjectUrl>https://github.com/DSoftStudio/Mediator</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/DSoftStudio/Mediator</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+
+		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="OpenTelemetry" Version="1.9.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\DSoftStudio.Mediator.Abstractions\DSoftStudio.Mediator.Abstractions.csproj" />
+		<ProjectReference Include="..\DSoftStudio.Mediator\DSoftStudio.Mediator.csproj" />
+	</ItemGroup>
+
+	<!-- Test visibility -->
+	<ItemGroup>
+		<InternalsVisibleTo Include="DSoftStudio.Mediator.OpenTelemetry.Tests" />
+	</ItemGroup>
+
+</Project>
