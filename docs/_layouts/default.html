@@ -16,5 +16,16 @@
         {{ content }}
       </section>
     </div>
+    <script type="module">
+      import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+      // Jekyll renders ```mermaid as <pre><code class="language-mermaid">
+      // Mermaid.js needs <pre class="mermaid"> — convert them
+      document.querySelectorAll('code.language-mermaid').forEach(code => {
+        const pre = code.parentElement;
+        pre.className = 'mermaid';
+        pre.textContent = code.textContent;
+      });
+      mermaid.initialize({ startOnLoad: true });
+    </script>
   </body>
 </html>
