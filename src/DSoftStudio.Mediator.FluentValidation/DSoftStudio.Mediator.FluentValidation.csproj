@@ -30,14 +30,46 @@
 
 		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 
+		<!-- AOT / trimming -->
+		<IsTrimmable>true</IsTrimmable>
+		<IsAotCompatible>true</IsAotCompatible>
+		<EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+
+		<!-- Deterministic CI builds -->
+		<ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+
+		<!-- SourceLink -->
+		<PublishRepositoryUrl>true</PublishRepositoryUrl>
+		<EmbedUntrackedSources>true</EmbedUntrackedSources>
+
+		<!-- Debug symbols -->
+		<IncludeSymbols>true</IncludeSymbols>
+		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
+
+		<!-- README rendered on NuGet -->
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+
+		<!-- NuGet icon -->
+		<PackageIcon>icon.png</PackageIcon>
+
 	</PropertyGroup>
+
+	<!-- README included in NuGet package -->
+	<ItemGroup>
+		<None Include="README.md" Pack="true" PackagePath="" />
+	</ItemGroup>
+
+	<!-- Icon included in NuGet package -->
+	<ItemGroup>
+		<None Include="..\..\icon.png" Pack="true" PackagePath="" />
+	</ItemGroup>
 
 	<ItemGroup>
 		<PackageReference Include="FluentValidation" Version="11.11.0" />
 	</ItemGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\DSoftStudio.Mediator.Abstractions\DSoftStudio.Mediator.Abstractions.csproj" />
+		<ProjectReference Include="..\DSoftStudio.Mediator.Abstractions\DSoftStudio.Mediator.Abstractions.csproj" PrivateAssets="all" />
 		<ProjectReference Include="..\DSoftStudio.Mediator\DSoftStudio.Mediator.csproj" />
 	</ItemGroup>
 

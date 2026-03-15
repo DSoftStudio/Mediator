@@ -51,6 +51,12 @@ CodeCoverage/
 # NUnit
 *.VisualState.xml
 TestResult.xml
+
+# Local NuGet packages folder
+nupkgs/
+
+# Integration smoke-test sample (uses local .nupkg, not tracked)
+samples/integration/
 nunit-*.xml
 *.csv
 *.html
