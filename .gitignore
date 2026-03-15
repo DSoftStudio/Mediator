@@ -61,6 +61,7 @@ nunit-*.xml
 *.csv
 *.html
 !docs/_layouts/*.html
+!docs/index.html
 **/.vs/
 *.log
 
