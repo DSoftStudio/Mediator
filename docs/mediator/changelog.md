@@ -13,6 +13,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.5] — Unreleased
+
+### Added
+
+- **`DSoftStudio.Mediator.Abstractions` NuGet package** — Contracts (interfaces and base types) are now published as a separate package. Domain, application-core, and test projects can reference only `DSoftStudio.Mediator.Abstractions` to get `ISender`, `IPublisher`, `IMediator`, `IRequest<T>`, `INotification`, and related abstractions **without** pulling in the runtime or source generators. This is the recommended pattern for unit-testing with mocking frameworks (Moq, NSubstitute, etc.) since no interceptors are active.
+
+### Fixed
+
+- **Interceptors rewriting call sites inside expression tree lambdas** — The source generators (`SendInterceptorGenerator`, `PublishInterceptorGenerator`, `StreamInterceptorGenerator`) no longer rewrite `Send`, `Publish`, or `CreateStream` calls that appear inside expression tree lambdas (e.g. Moq `Setup()` / `Verify()`). A new `IsInsideExpressionTreeLambda` helper walks the syntax tree and checks the lambda's `ConvertedType` against `System.Linq.Expressions.Expression<T>`, skipping those call sites. Direct invocations outside expression trees continue to be intercepted as before. ([#2](https://github.com/DSoftStudio/Mediator/issues/2))
+
+### Changed
+
+- **NuGet package split** — `DSoftStudio.Mediator` now declares a public NuGet dependency on `DSoftStudio.Mediator.Abstractions` (previously the Abstractions DLL was embedded with `PrivateAssets="all"`). Companion packages (`FluentValidation`, `HybridCache`, `OpenTelemetry`) receive `Abstractions` transitively through `DSoftStudio.Mediator`.
+- **CI workflow** — Build & Test and Publish are now separate jobs. The `publish` job uses `needs: build-and-test`, guaranteeing that **no package is published if any test fails**. GitHub Packages receives packages on every push to `main`; NuGet.org only on version tags (`v*`).
+- **Companion packages bumped to 1.0.3** — `DSoftStudio.Mediator.FluentValidation`, `DSoftStudio.Mediator.HybridCache`, and `DSoftStudio.Mediator.OpenTelemetry` updated to reflect the transitive dependency change.
+
+---
+
 ## [1.1.4] — 2026-03-19
 
 ### Fixed

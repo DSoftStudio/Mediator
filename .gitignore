@@ -68,3 +68,4 @@ nunit-*.xml
 /.sonarqube
 /analize.ps1
 /analyze-src.ps1
+/__examples
