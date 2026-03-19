@@ -108,6 +108,12 @@ public sealed class SendInterceptorGenerator : IIncrementalGenerator
         if (!InterceptorHelpers.ImplementsInterface(method.ContainingType, ctx.SemanticModel.Compilation, SenderInterfaceMetadataName))
             return null;
 
+        // Skip call sites inside expression tree lambdas (e.g. Moq Setup/Verify,
+        // NSubstitute Received). Interceptors rewrite calls to static extension
+        // methods, which are incompatible with expression tree compilation.
+        if (InterceptorHelpers.IsInsideExpressionTreeLambda(ctx.SemanticModel, invocation, ct))
+            return null;
+
         // Use the new GetInterceptableLocation API (Roslyn 4.12+)
         var interceptableLocation = ctx.SemanticModel.GetInterceptableLocation(invocation, ct);
         if (interceptableLocation is null)

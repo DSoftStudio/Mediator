@@ -106,6 +106,10 @@ public sealed class PublishInterceptorGenerator : IIncrementalGenerator
         if (!InterceptorHelpers.ImplementsInterface(method.ContainingType, ctx.SemanticModel.Compilation, PublisherInterfaceMetadataName))
             return null;
 
+        // Skip call sites inside expression tree lambdas (e.g. Moq Setup/Verify).
+        if (InterceptorHelpers.IsInsideExpressionTreeLambda(ctx.SemanticModel, invocation, ct))
+            return null;
+
         var interceptableLocation = ctx.SemanticModel.GetInterceptableLocation(invocation, ct);
         if (interceptableLocation is null)
             return null;
