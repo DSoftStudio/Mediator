@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <!-- Treat CS0436 as error so the build FAILS if the fix is broken -->
+    <WarningsAsErrors>CS0436</WarningsAsErrors>
+    <InterceptorsPreviewNamespaces>$(InterceptorsPreviewNamespaces);DSoftStudio.Mediator.Generated</InterceptorsPreviewNamespaces>
+    <InterceptorsNamespaces>$(InterceptorsNamespaces);DSoftStudio.Mediator.Generated</InterceptorsNamespaces>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DSoftStudio.Mediator.Abstractions\DSoftStudio.Mediator.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\DSoftStudio.Mediator\DSoftStudio.Mediator.csproj" />
+    <ProjectReference Include="..\..\src\DSoftStudio.Mediator.Generators\DSoftStudio.Mediator.Generators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <!-- Expose internals to the test project — this is the trigger for CS0436 -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="DSoftStudio.Mediator.InternalsVisibleTo.Tests" />
+  </ItemGroup>
+
+</Project>

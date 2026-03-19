@@ -204,17 +204,11 @@ namespace DSoftStudio.Mediator.Generators
 
             return results;
         }
-    }
 
-    internal readonly struct ExternalHandlerInfo
-    {
-        public INamedTypeSymbol ServiceType { get; }
-        public INamedTypeSymbol ImplementationType { get; }
-
-        public ExternalHandlerInfo(INamedTypeSymbol serviceType, INamedTypeSymbol implementationType)
+        internal readonly struct ExternalHandlerInfo(INamedTypeSymbol serviceType, INamedTypeSymbol implementationType)
         {
-            ServiceType = serviceType;
-            ImplementationType = implementationType;
+            public INamedTypeSymbol ServiceType { get; } = serviceType;
+            public INamedTypeSymbol ImplementationType { get; } = implementationType;
         }
     }
 }

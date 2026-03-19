@@ -54,6 +54,8 @@
   <Folder Name="/tests/">
     <Project Path="tests/DSoftStudio.Mediator.FluentValidation.Tests/DSoftStudio.Mediator.FluentValidation.Tests.csproj" />
     <Project Path="tests/DSoftStudio.Mediator.HybridCache.Tests/DSoftStudio.Mediator.HybridCache.Tests.csproj" />
+    <Project Path="tests/DSoftStudio.Mediator.InternalsVisibleTo.Host/DSoftStudio.Mediator.InternalsVisibleTo.Host.csproj" />
+    <Project Path="tests/DSoftStudio.Mediator.InternalsVisibleTo.Tests/DSoftStudio.Mediator.InternalsVisibleTo.Tests.csproj" />
     <Project Path="tests/DSoftStudio.Mediator.OpenTelemetry.Tests/DSoftStudio.Mediator.OpenTelemetry.Tests.csproj" />
     <Project Path="tests/DSoftStudio.Mediator.Tests/DSoftStudio.Mediator.Tests.csproj" />
   </Folder>

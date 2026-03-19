@@ -1,10 +1,11 @@
-ï»¿// Copyright (c) DSoftStudio. All rights reserved.
+// Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License.
 
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -51,11 +52,14 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
 
         var selfCollected = selfHandlers.Collect();
 
-        var combined = localCollected.Combine(externalHandlers).Combine(selfCollected);
+        var assemblyName = context.CompilationProvider
+            .Select(static (c, _) => c.AssemblyName ?? "Assembly");
+
+        var combined = localCollected.Combine(externalHandlers).Combine(selfCollected).Combine(assemblyName);
 
         context.RegisterSourceOutput(combined, static (spc, pair) =>
         {
-            var ((localHandlers, external), selfHandlers) = pair;
+            var (((localHandlers, external), selfHandlers), asmName) = pair;
 
             var localRegistrations = localHandlers
                 .Distinct()
@@ -71,8 +75,10 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
                 .ThenBy(static h => h.HandlerType)
                 .ToArray();
 
-            var selfHandlerList = selfHandlers.IsDefaultOrEmpty
-                ? System.Array.Empty<SelfHandlerDetail>()
+            // Local self-handlers only — external self-handlers are now discovered
+            // as regular handlers via [assembly: MediatorHandlerRegistration] attributes.
+            var localSelfHandlers = selfHandlers.IsDefaultOrEmpty
+                ? []
                 : selfHandlers.Distinct()
                     .OrderBy(static h => h.RequestType)
                     .ToArray();
@@ -80,7 +86,7 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
             // Detect duplicate request/stream handlers (silent "last wins" bug)
             ReportDuplicateHandlers(spc, allRegistrations);
 
-            var code = GenerateCode(localRegistrations, allRegistrations, selfHandlerList);
+            var code = GenerateCode(localRegistrations, allRegistrations, localSelfHandlers, asmName);
 
             spc.AddSource(
                 "MediatorServiceRegistry.g.cs",
@@ -91,7 +97,7 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
     /// <summary>
     /// Reports compile-time diagnostics for request/stream handler types that have
     /// multiple implementations. With Microsoft.Extensions.DI, <c>GetRequiredService&lt;T&gt;</c>
-    /// returns the last registration â€” earlier handlers are silently ignored.
+    /// returns the last registration — earlier handlers are silently ignored.
     /// Notification handlers are excluded (multiple handlers per notification is by design).
     /// </summary>
     private static void ReportDuplicateHandlers(SourceProductionContext spc, HandlerInfo[] allHandlers)
@@ -126,7 +132,7 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
                     interfaceType,
                     handlerNames));
             }
-            // Notification handlers: multiple implementations per type is expected â€” no diagnostic
+            // Notification handlers: multiple implementations per type is expected — no diagnostic
         }
     }
 
@@ -146,7 +152,7 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
         if (HandlerDiscovery.IsFileLocal(classDecl))
             return null;
 
-        // Handlers with no constructor parameters are stateless â€” safe to register as Singleton.
+        // Handlers with no constructor parameters are stateless — safe to register as Singleton.
         bool isStateless = symbol.InstanceConstructors.Length > 0
             && symbol.InstanceConstructors.All(static c => c.Parameters.IsEmpty);
 
@@ -227,12 +233,16 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
     /// <param name="localHandlers">Handlers discovered in the current project (emit assembly attributes for these).</param>
     /// <param name="allHandlers">Local + external handlers (register all in DI).</param>
     /// <param name="selfHandlers">Self-handling request classes (IRequest&lt;T&gt; + static Execute).</param>
-    private static string GenerateCode(HandlerInfo[] localHandlers, HandlerInfo[] allHandlers, SelfHandlerDetail[] selfHandlers)
+    /// <param name="assemblyName">The consuming assembly name — used to generate a unique namespace for extension classes.</param>
+    private static string GenerateCode(HandlerInfo[] localHandlers, HandlerInfo[] allHandlers, SelfHandlerDetail[] selfHandlers, string assemblyName)
     {
+        var sanitizedAsm = HandlerDiscovery.SanitizeIdentifier(assemblyName);
         var sb = new StringBuilder(2048);
 
         sb.AppendLine("// <auto-generated/>");
         sb.AppendLine("#nullable enable");
+        sb.AppendLine();
+        sb.AppendLine($"global using DSoftStudio.Mediator.Generated.{sanitizedAsm};");
         sb.AppendLine();
 
         // Emit assembly-level attributes for LOCAL handlers only.
@@ -246,16 +256,29 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
             sb.AppendLine("))]");
         }
 
-        if (localHandlers.Length > 0)
+        // Emit assembly-level attributes for LOCAL self-handler adapters.
+        // Downstream projects discover these as regular IRequestHandler registrations.
+        foreach (var handler in selfHandlers)
+        {
+            var adapterFqn = $"global::DSoftStudio.Mediator.Generated.{sanitizedAsm}.__SelfHandler_"
+                + HandlerDiscovery.SanitizeIdentifier(handler.RequestType);
+            var ifaceType = $"global::DSoftStudio.Mediator.Abstractions.IRequestHandler<{handler.RequestType},{handler.ResponseType}>";
+
+            sb.Append("[assembly: global::DSoftStudio.Mediator.Abstractions.MediatorHandlerRegistration(typeof(");
+            sb.Append(ifaceType);
+            sb.Append("), typeof(");
+            sb.Append(adapterFqn);
+            sb.AppendLine("))]");
+        }
+
+        if (localHandlers.Length > 0 || selfHandlers.Length > 0)
             sb.AppendLine();
 
-        sb.AppendLine("namespace DSoftStudio.Mediator;");
+        sb.AppendLine("namespace DSoftStudio.Mediator");
+        sb.AppendLine("{");
         sb.AppendLine();
 
-        // Generate adapter classes for self-handling request types
-        GenerateSelfHandlerAdapters(sb, selfHandlers);
-
-        sb.AppendLine("internal static class MediatorServiceRegistry");
+        sb.AppendLine("file static class MediatorServiceRegistry");
         sb.AppendLine("{");
 
         sb.AppendLine("    public static void Register(global::Microsoft.Extensions.DependencyInjection.IServiceCollection services)");
@@ -266,8 +289,8 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
 
         foreach (var handler in allHandlers)
         {
-            // Stateless handlers (no constructor parameters) â†’ Singleton (zero allocation per call).
-            // Handlers with DI dependencies â†’ Transient (safe default).
+            // Stateless handlers (no constructor parameters) ? Singleton (zero allocation per call).
+            // Handlers with DI dependencies ? Transient (safe default).
             sb.Append(handler.IsStateless
                 ? "        global::Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<"
                 : "        global::Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddTransient<");
@@ -288,10 +311,10 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
             }
         }
 
-        // Register self-handler adapters in DI
+        // Register local self-handler adapters in DI
         foreach (var handler in selfHandlers)
         {
-            var adapterFqn = "global::DSoftStudio.Mediator.__SelfHandler_"
+            var adapterFqn = $"global::DSoftStudio.Mediator.Generated.{sanitizedAsm}.__SelfHandler_"
                 + HandlerDiscovery.SanitizeIdentifier(handler.RequestType);
 
             bool isStateless = true;
@@ -316,6 +339,23 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
         sb.AppendLine("}");
         sb.AppendLine();
 
+        // Emit validator worker class (file-scoped) inside DSoftStudio.Mediator namespace
+        GenerateHandlerValidatorWorker(sb, allHandlers, selfHandlers);
+
+        // Close DSoftStudio.Mediator namespace
+        sb.AppendLine("} // namespace DSoftStudio.Mediator");
+        sb.AppendLine();
+
+        // Open per-assembly unique namespace for extension classes (avoids CS0121 with InternalsVisibleTo)
+        sb.AppendLine($"namespace DSoftStudio.Mediator.Generated.{sanitizedAsm}");
+        sb.AppendLine("{");
+        sb.AppendLine();
+
+        // Generate public adapter classes for self-handling request types.
+        // These must be public so downstream projects can reference them via
+        // [assembly: MediatorHandlerRegistration] attributes.
+        GenerateSelfHandlerAdapters(sb, selfHandlers);
+
         sb.AppendLine("internal static class MediatorServiceRegistryExtensions");
         sb.AppendLine("{");
 
@@ -331,7 +371,11 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
         sb.AppendLine("}");
         sb.AppendLine();
 
-        GenerateHandlerValidator(sb, allHandlers, selfHandlers);
+        GenerateHandlerValidatorExtension(sb);
+
+        // Close per-assembly namespace
+        sb.AppendLine();
+        sb.AppendLine("} // namespace");
 
         return sb.ToString();
     }
@@ -362,7 +406,7 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
             }
 
             sb.AppendLine("[global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]");
-            sb.Append($"internal sealed class {adapterName} : ");
+            sb.Append($"public sealed class {adapterName} : ");
             sb.AppendLine($"global::DSoftStudio.Mediator.Abstractions.IRequestHandler<{handler.RequestType}, {handler.ResponseType}>");
             sb.AppendLine("{");
 
@@ -451,7 +495,7 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
         }
     }
 
-    private static void GenerateHandlerValidator(StringBuilder sb, HandlerInfo[] allHandlers, SelfHandlerDetail[] selfHandlers)
+    private static void GenerateHandlerValidatorWorker(StringBuilder sb, HandlerInfo[] allHandlers, SelfHandlerDetail[] selfHandlers)
     {
         const string RequestPrefix =
             "global::DSoftStudio.Mediator.Abstractions.IRequestHandler<";
@@ -465,7 +509,7 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
         sb.AppendLine("/// Resolves every mediator handler from DI at startup to detect");
         sb.AppendLine("/// misconfiguration before the first request is processed.");
         sb.AppendLine("/// </summary>");
-        sb.AppendLine("internal static class MediatorHandlerValidator");
+        sb.AppendLine("file static class MediatorHandlerValidator");
         sb.AppendLine("{");
         sb.AppendLine("    public static void Validate(global::System.IServiceProvider serviceProvider)");
         sb.AppendLine("    {");
@@ -482,7 +526,7 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
             foreach (var handler in allHandlers)
             {
                 // Skip duplicate interface types (e.g. multiple notification handlers
-                // for the same notification type â€” GetServices validates all at once).
+                // for the same notification type — GetServices validates all at once).
                 if (!emittedInterfaces.Add(handler.InterfaceType))
                     continue;
 
@@ -539,7 +583,10 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
         sb.AppendLine("    }");
         sb.AppendLine("}");
         sb.AppendLine();
+    }
 
+    private static void GenerateHandlerValidatorExtension(StringBuilder sb)
+    {
         sb.AppendLine("/// <summary>");
         sb.AppendLine("/// Extension method for fail-fast mediator handler validation.");
         sb.AppendLine("/// Call after <c>BuildServiceProvider()</c> / <c>builder.Build()</c> to");

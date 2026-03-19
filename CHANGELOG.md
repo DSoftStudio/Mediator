@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.4-rc] — 2025-06-29
+
+### Fixed
+
+- **CS0436 / CS0121 with `InternalsVisibleTo`** — Source-generated types no longer conflict when a test project (or any referencing project) has `InternalsVisibleTo` access to the host project. ([#1](https://github.com/DSoftStudio/Mediator/issues/1))
+  - Generated worker/implementation classes now use the C# 11 `file` modifier, making them invisible across assemblies.
+  - Generated extension methods are emitted into per-assembly unique namespaces (`DSoftStudio.Mediator.Generated.{AssemblyName}`) with a `global using` for transparent usage.
+- **Cross-project handler discovery** — Handlers defined in referenced projects are now discovered automatically via `[assembly: MediatorHandlerRegistration]` attributes, replacing the previous PE metadata scanning approach that could miss `internal` members.
+- **`Send(object)` namespace shadowing** — The runtime `Send(object)` extension is now generated alongside typed extensions in the per-assembly namespace, preventing C# resolution from shadowing typed overloads.
+
+### Changed
+
+- `Send(object)` is now fully source-generated — removed `SenderObjectExtensions.cs` from the runtime DLL.
+
+---
+
 ## [1.1.3] — 2026-03-15
 
 ### Changed

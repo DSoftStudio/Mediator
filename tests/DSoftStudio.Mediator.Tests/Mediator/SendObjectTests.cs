@@ -30,7 +30,11 @@ public class SendObjectTests : IDisposable
         _mediator = _provider.GetRequiredService<IMediator>();
     }
 
-    public void Dispose() => _provider.Dispose();
+    public void Dispose()
+    {
+        _provider.Dispose();
+        GC.SuppressFinalize(this);
+    }
 
     [Fact]
     public async Task SendObject_ReturnsCorrectValue()
@@ -67,9 +71,9 @@ public class SendObjectTests : IDisposable
     [Fact]
     public async Task SendObject_NullRequest_ThrowsArgumentNullException()
     {
-        Func<Task> act = () => ((ISender)_mediator).Send((object)null!).AsTask();
+        async Task Act() => await ((ISender)_mediator).Send((object)null!);
 
-        await Should.ThrowAsync<ArgumentNullException>(act);
+        await Should.ThrowAsync<ArgumentNullException>(Act);
     }
 
     [Fact]
@@ -77,9 +81,9 @@ public class SendObjectTests : IDisposable
     {
         object request = new UnregisteredRequest();
 
-        Func<Task> act = () => ((ISender)_mediator).Send(request).AsTask();
+        async Task Act() => await ((ISender)_mediator).Send(request);
 
-        await Should.ThrowAsync<InvalidOperationException>(act);
+        await Should.ThrowAsync<InvalidOperationException>(Act);
     }
 
     [Fact]

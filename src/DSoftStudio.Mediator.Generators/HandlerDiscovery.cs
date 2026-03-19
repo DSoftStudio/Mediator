@@ -145,7 +145,7 @@ namespace DSoftStudio.Mediator.Generators
             detail = default;
 
             // 1. Find IRequest<TResponse> in the interface list
-            string responseType = null;
+            string? responseType = null;
             foreach (var iface in symbol.AllInterfaces)
             {
                 ct.ThrowIfCancellationRequested();
@@ -168,7 +168,7 @@ namespace DSoftStudio.Mediator.Generators
             }
 
             // 3. Find a static Execute method
-            IMethodSymbol executeMethod = null;
+            IMethodSymbol? executeMethod = null;
             foreach (var member in symbol.GetMembers("Execute"))
             {
                 if (member is IMethodSymbol m && m.IsStatic && !m.IsAbstract)
@@ -217,7 +217,7 @@ namespace DSoftStudio.Mediator.Generators
                 requestType,
                 responseType,
                 returnKind,
-                new EquatableArray<SelfHandlerParam>(parameters.ToArray()));
+                new EquatableArray<SelfHandlerParam>([.. parameters]));
 
             return true;
         }
@@ -316,20 +316,14 @@ namespace DSoftStudio.Mediator.Generators
     /// <summary>
     /// Identifies a parameter in a self-handling Execute method.
     /// </summary>
-    internal readonly struct SelfHandlerParam : System.IEquatable<SelfHandlerParam>
+    internal readonly struct SelfHandlerParam(int kind, string typeName) : System.IEquatable<SelfHandlerParam>
     {
         public const int KindRequest = 0;
         public const int KindCancellationToken = 1;
         public const int KindService = 2;
 
-        public int Kind { get; }
-        public string TypeName { get; }
-
-        public SelfHandlerParam(int kind, string typeName)
-        {
-            Kind = kind;
-            TypeName = typeName;
-        }
+        public int Kind { get; } = kind;
+        public string TypeName { get; } = typeName;
 
         public bool Equals(SelfHandlerParam other) =>
             Kind == other.Kind && TypeName == other.TypeName;
@@ -348,7 +342,11 @@ namespace DSoftStudio.Mediator.Generators
     /// <see cref="HandlerDiscovery.TryGetSelfHandlingRequest"/>.
     /// Contains everything the DI generator needs to emit an adapter class.
     /// </summary>
-    internal readonly struct SelfHandlerDetail : System.IEquatable<SelfHandlerDetail>
+    internal readonly struct SelfHandlerDetail(
+        string requestType,
+        string responseType,
+        int returnKind,
+        EquatableArray<SelfHandlerParam> parameters) : System.IEquatable<SelfHandlerDetail>
     {
         /// <summary>Execute returns T (sync).</summary>
         public const int ReturnSync = 0;
@@ -361,22 +359,10 @@ namespace DSoftStudio.Mediator.Generators
         /// <summary>Execute returns Task (Unit response, async).</summary>
         public const int ReturnTask = 4;
 
-        public string RequestType { get; }
-        public string ResponseType { get; }
-        public int ReturnKind { get; }
-        public EquatableArray<SelfHandlerParam> Parameters { get; }
-
-        public SelfHandlerDetail(
-            string requestType,
-            string responseType,
-            int returnKind,
-            EquatableArray<SelfHandlerParam> parameters)
-        {
-            RequestType = requestType;
-            ResponseType = responseType;
-            ReturnKind = returnKind;
-            Parameters = parameters;
-        }
+        public string RequestType { get; } = requestType;
+        public string ResponseType { get; } = responseType;
+        public int ReturnKind { get; } = returnKind;
+        public EquatableArray<SelfHandlerParam> Parameters { get; } = parameters;
 
         public bool Equals(SelfHandlerDetail other) =>
             RequestType == other.RequestType &&
