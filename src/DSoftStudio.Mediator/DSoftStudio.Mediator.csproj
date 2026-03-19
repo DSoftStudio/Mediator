@@ -14,7 +14,7 @@
 
 		<!-- NuGet -->
 		<PackageId>DSoftStudio.Mediator</PackageId>
-		<Version>1.1.4</Version>
+		<Version>1.1.5-rc.1</Version>
 
 		<Authors>DSoftStudio</Authors>
 		<Company>DSoftStudio</Company>
@@ -77,9 +77,10 @@
 	<!-- Project references -->
 	<ItemGroup>
 
-		<!-- Abstractions: PrivateAssets="all" prevents NuGet from listing it as
-			 a separate dependency — we embed the DLL directly via TargetsForTfmSpecificBuildOutput. -->
-		<ProjectReference Include="..\DSoftStudio.Mediator.Abstractions\DSoftStudio.Mediator.Abstractions.csproj" PrivateAssets="all" />
+		<!-- Abstractions: public dependency — consumers get it transitively.
+			 Domain/test projects can reference DSoftStudio.Mediator.Abstractions alone
+			 for lightweight contracts without pulling in the runtime or generators. -->
+		<ProjectReference Include="..\DSoftStudio.Mediator.Abstractions\DSoftStudio.Mediator.Abstractions.csproj" />
 
 		<!-- Source generator: build-order dependency only.
 			 Do NOT add OutputItemType="Analyzer" here — the generator must NOT run
@@ -89,20 +90,6 @@
 		<ProjectReference Include="..\DSoftStudio.Mediator.Generators\DSoftStudio.Mediator.Generators.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
 
 	</ItemGroup>
-
-	<!-- ── Pack: Abstractions DLL into lib/{tfm} ──────────────────────── -->
-	<!-- MSBuild copies the Abstractions DLL into $(OutputPath) because it is
-		 a ProjectReference. TargetsForTfmSpecificBuildOutput lets us include
-		 it in the package automatically — no hardcoded TFM paths needed. -->
-	<PropertyGroup>
-		<TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);_PackAbstractionsDll</TargetsForTfmSpecificBuildOutput>
-	</PropertyGroup>
-
-	<Target Name="_PackAbstractionsDll">
-		<ItemGroup>
-			<BuildOutputInPackage Include="$(OutputPath)DSoftStudio.Mediator.Abstractions.dll" />
-		</ItemGroup>
-	</Target>
 
 	<!-- ── Pack: .props file into build/ for auto-import ──────────────── -->
 	<ItemGroup>

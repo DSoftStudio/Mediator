@@ -9,7 +9,7 @@
 
 		<!-- NuGet -->
 		<PackageId>DSoftStudio.Mediator.OpenTelemetry</PackageId>
-		<Version>1.0.2</Version>
+		<Version>1.0.3-rc.1</Version>
 
 		<Authors>DSoftStudio</Authors>
 		<Company>DSoftStudio</Company>
@@ -69,7 +69,6 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\DSoftStudio.Mediator.Abstractions\DSoftStudio.Mediator.Abstractions.csproj" PrivateAssets="all" />
 		<ProjectReference Include="..\DSoftStudio.Mediator\DSoftStudio.Mediator.csproj" />
 	</ItemGroup>
 

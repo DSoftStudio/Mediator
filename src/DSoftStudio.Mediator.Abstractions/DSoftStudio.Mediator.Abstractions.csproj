@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
 	  <TargetFrameworks>netstandard2.0;net8.0</TargetFrameworks>
@@ -6,13 +6,52 @@
 	  <Nullable>enable</Nullable>
 	  <ImplicitUsings>false</ImplicitUsings>
 
-	  <!-- This project is embedded inside DSoftStudio.Mediator.nupkg — not published separately -->
-	  <IsPackable>false</IsPackable>
+	  <!-- NuGet -->
+	  <PackageId>DSoftStudio.Mediator.Abstractions</PackageId>
+	  <Version>1.1.5-rc.1</Version>
+
+	  <Authors>DSoftStudio</Authors>
+	  <Company>DSoftStudio</Company>
+
+	  <Description>
+		  Contracts (interfaces and base types) for DSoftStudio.Mediator. Reference this package in domain, application-core, and test projects that need ISender, IPublisher, IMediator, IRequest, INotification, and related abstractions without pulling in the runtime or source generators.
+	  </Description>
+
+	  <PackageTags>
+		  mediator;abstractions;contracts;cqrs;interfaces;dotnet
+	  </PackageTags>
+
+	  <PackageProjectUrl>https://docs.dsoftstudio.com/mediator</PackageProjectUrl>
+	  <RepositoryUrl>https://github.com/DSoftStudio/Mediator</RepositoryUrl>
+	  <RepositoryType>git</RepositoryType>
+
+	  <PackageLicenseExpression>MIT</PackageLicenseExpression>
+
+	  <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+
+	  <!-- Deterministic CI builds -->
+	  <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+
+	  <!-- SourceLink -->
+	  <PublishRepositoryUrl>true</PublishRepositoryUrl>
+	  <EmbedUntrackedSources>true</EmbedUntrackedSources>
+
+	  <!-- Debug symbols -->
+	  <IncludeSymbols>true</IncludeSymbols>
+	  <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+
+	  <!-- NuGet icon -->
+	  <PackageIcon>icon.png</PackageIcon>
 
 	  <!-- AOT / trimming -->
 	  <IsTrimmable>true</IsTrimmable>
 	  <IsAotCompatible Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net7.0'))">true</IsAotCompatible>
   </PropertyGroup>
+
+  <!-- Icon included in NuGet package -->
+  <ItemGroup>
+	  <None Include="..\..\icon.png" Pack="true" PackagePath="" />
+  </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
 	  <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="10.0.3" />
