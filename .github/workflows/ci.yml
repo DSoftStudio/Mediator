@@ -157,17 +157,21 @@ jobs:
       # Push to GitHub Packages (every push to main)
       - name: Push to GitHub Packages
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        env:
+          GH_PKG_TOKEN: ${{ secrets.GH_PKG_TOKEN }}
         run: >
           dotnet nuget push "nupkgs/*.nupkg"
           --source "https://nuget.pkg.github.com/DSoftStudio/index.json"
-          --api-key "${{ secrets.GH_PKG_TOKEN }}"
+          --api-key "$GH_PKG_TOKEN"
           --skip-duplicate
 
       # Push to NuGet.org (only on version tags: v*)
       - name: Push to NuGet.org
         if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
         run: >
           dotnet nuget push "nupkgs/*.nupkg"
           --source "https://api.nuget.org/v3/index.json"
-          --api-key "${{ secrets.NUGET_API_KEY }}"
+          --api-key "$NUGET_API_KEY"
           --skip-duplicate
