@@ -1,0 +1,42 @@
+name: Sync Changelog to Docs
+
+on:
+  push:
+    branches: [main]
+    paths: [CHANGELOG.md]
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync CHANGELOG.md → docs/mediator/changelog.md
+        shell: bash
+        run: |
+          FRONT_MATTER='---
+          layout: default
+          title: "Changelog"
+          description: "All notable changes to DSoftStudio.Mediator."
+          ---'
+
+          # Trim leading spaces from heredoc indentation
+          FRONT_MATTER=$(echo "$FRONT_MATTER" | sed 's/^          //')
+
+          {
+            echo "$FRONT_MATTER"
+            echo ""
+            cat CHANGELOG.md
+          } > docs/mediator/changelog.md
+
+      - name: Commit and push if changed
+        run: |
+          git diff --quiet docs/mediator/changelog.md && exit 0
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/mediator/changelog.md
+          git commit -m "docs: auto-sync changelog from CHANGELOG.md"
+          git push
