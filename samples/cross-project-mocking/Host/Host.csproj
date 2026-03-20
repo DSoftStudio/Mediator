@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <InterceptorsPreviewNamespaces>$(InterceptorsPreviewNamespaces);DSoftStudio.Mediator.Generated</InterceptorsPreviewNamespaces>
+  </PropertyGroup>
+
+  <!-- Full Mediator runtime + source generators. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.5" />
+    <ProjectReference Include="..\..\..\src\DSoftStudio.Mediator\DSoftStudio.Mediator.csproj" />
+    <ProjectReference Include="..\..\..\src\DSoftStudio.Mediator.Generators\DSoftStudio.Mediator.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <!-- Application layer (Abstractions-only) — generators discover its handlers via Phase 2. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Host.Application\Host.Application.csproj" />
+  </ItemGroup>
+
+</Project>

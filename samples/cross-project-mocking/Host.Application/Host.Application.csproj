@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- Only references Abstractions — no generators, no runtime. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\DSoftStudio.Mediator.Abstractions\DSoftStudio.Mediator.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

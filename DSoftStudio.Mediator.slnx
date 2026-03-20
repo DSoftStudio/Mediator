@@ -43,6 +43,11 @@
     <Project Path="samples/di-lifetimes/DSoft.Sample.Lifetimes.Api/DSoft.Sample.Lifetimes.Api.csproj" />
     <Project Path="samples/di-lifetimes/DSoft.Sample.Lifetimes.Application/DSoft.Sample.Lifetimes.Application.csproj" />
   </Folder>
+  <Folder Name="/samples/cross-project-mocking/">
+    <Project Path="samples/cross-project-mocking/Host/Host.csproj" />
+    <Project Path="samples/cross-project-mocking/Host.Application/Host.Application.csproj" />
+    <Project Path="samples/cross-project-mocking/Host.Tests/Host.Tests.csproj" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/DSoftStudio.Mediator.Abstractions/DSoftStudio.Mediator.Abstractions.csproj" />
     <Project Path="src/DSoftStudio.Mediator.FluentValidation/DSoftStudio.Mediator.FluentValidation.csproj" />
