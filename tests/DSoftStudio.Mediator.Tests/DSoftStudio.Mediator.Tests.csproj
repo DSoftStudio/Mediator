@@ -33,9 +33,12 @@
 	<ItemGroup>
 	  <ProjectReference Include="..\..\src\DSoftStudio.Mediator.Abstractions\DSoftStudio.Mediator.Abstractions.csproj" />
 	  <ProjectReference Include="..\..\src\DSoftStudio.Mediator\DSoftStudio.Mediator.csproj" />
-	  <ProjectReference Include="..\..\src\DSoftStudio.Mediator.Generators\DSoftStudio.Mediator.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-	  <!-- Normal reference so generator types (MockDetectionAnalyzer, etc.) are available in tests -->
-	  <ProjectReference Include="..\..\src\DSoftStudio.Mediator.Generators\DSoftStudio.Mediator.Generators.csproj" ReferenceOutputAssembly="true" />
+	  <!-- Analyzer: runs generators during compilation.
+		   ReferenceOutputAssembly: also exposes generator types (MockDetectionAnalyzer, etc.) for Roslyn unit tests.
+		   Single reference avoids the dual-ProjectReference bug where some SDK versions silently skip the generator. -->
+	  <ProjectReference Include="..\..\src\DSoftStudio.Mediator.Generators\DSoftStudio.Mediator.Generators.csproj"
+						OutputItemType="Analyzer"
+						ReferenceOutputAssembly="true" />
 	</ItemGroup>
 
 	<ItemGroup>
