@@ -83,6 +83,51 @@ Notifications are dispatched by **exact compile-time type**, not by walking the 
 
 `PrecompilePipelines()` resolves and chains all pipeline behaviors at startup, so the first `Send()` call is as fast as subsequent calls — no lazy initialization, no lock contention, no JIT surprise on the first request.
 
+## Interceptor Code Generation (Release vs Debug)
+
+The source generators emit C# [interceptors](https://learn.microsoft.com/dotnet/csharp/whats-new/csharp-12#interceptors) that replace `ISender.Send`, `IPublisher.Publish`, and `IMediator.CreateStream` call sites at compile time with direct pipeline invocations — eliminating virtual dispatch entirely.
+
+The generated code adapts to the build's **`OptimizationLevel`**:
+
+| Build | Generated pattern | Overhead vs direct call | Mock-safe |
+|---|---|---|---|
+| **Release** | Branchless `castclass IServiceProviderAccessor` | ~0.6 ns | ❌ throws `InvalidCastException` on mocks |
+| **Debug** | `is not IServiceProviderAccessor` + virtual fallback | ~3 ns | ✅ graceful fallback to virtual dispatch |
+
+A single `isinst` + branch instruction prevents the JIT's Guarded Devirtualization (GDV) from fully devirtualizing the interface call, adding ~3 ns on every invocation. The branchless `castclass` pattern in Release lets GDV optimize the dispatch to a method-table pointer comparison + direct field load — effectively zero overhead.
+
+In **Debug** builds (where tests typically run), the generated interceptors detect test doubles (Moq, NSubstitute, etc.) that don't implement `IServiceProviderAccessor` and fall back to virtual dispatch.
+
+> **Tip:** If you mock `ISender` in a project that references the generator and build in Release mode, the interceptor will throw `InvalidCastException`. Set `<DSoftMediatorSuppressInterceptors>true</DSoftMediatorSuppressInterceptors>` or reference only `DSoftStudio.Mediator.Abstractions` in your test project. See [Source Generators](source-generators.md) for DSOFT004.
+
+## Publish Interceptor — `NotificationPublisherFlag` Bypass
+
+Most applications never register a custom `INotificationPublisher`. Without optimization, every generated `Publish` interceptor would call `GetService<INotificationPublisher>()` on every invocation — even when the result is always `null`. That DI probe alone costs ~3–4 ns per call.
+
+`NotificationPublisherFlag` is a write-once global `Volatile` boolean that eliminates this probe:
+
+1. **Default path (no custom publisher):** The flag is `false`. The generated interceptor reads `HasCustomPublisher` (~0.1 ns) and short-circuits directly to `NotificationCachedDispatcher.DispatchSequential` — zero DI lookup.
+2. **Custom publisher path:** When `INotificationPublisher` is registered (e.g. `ParallelNotificationPublisher`, OpenTelemetry's `InstrumentedNotificationPublisher`), the `Mediator` constructor calls `MarkRegistered()` once. All subsequent interceptors see the flag and take the `GetService` path as before.
+
+```
+Publish(notification)
+  │
+  ▼
+NotificationPublisherFlag.HasCustomPublisher?  (~0.1 ns Volatile.Read)
+  │
+  ├─ false ──▶ NotificationCachedDispatcher.DispatchSequential()   ← fast path
+  │
+  └─ true  ──▶ GetService<INotificationPublisher>()                ← custom path
+               └─▶ customPublisher.Publish(handlers, notification)
+```
+
+| Scenario | Before optimization | After optimization |
+|---|---|---|
+| No custom publisher (default) | `GetService` returns `null` (~3–4 ns) | `Volatile.Read` (~0.1 ns) |
+| Custom publisher registered | `GetService` returns instance (~3–4 ns) | `Volatile.Read` + `GetService` (~3–4 ns) |
+
+Net effect: **~4 ns saved per `Publish` call** in the default (no custom publisher) path — bringing the Publish interceptor from ~2.2× to ~1.1× overhead vs direct dispatch.
+
 ## Summary
 
 | Technique | Impact |
@@ -94,3 +139,5 @@ Notifications are dispatched by **exact compile-time type**, not by walking the 
 | ValueTask returns | Avoids Task allocation for sync paths |
 | Exact-type notification dispatch | O(1) dispatch, no duplicate handlers |
 | Pipeline precompilation | Eliminates cold-start penalty |
+| Interceptor code generation | Release: ~0.6 ns overhead (GDV-optimized) |
+| `NotificationPublisherFlag` bypass | Skips DI probe when no custom publisher (~4 ns saved) |
