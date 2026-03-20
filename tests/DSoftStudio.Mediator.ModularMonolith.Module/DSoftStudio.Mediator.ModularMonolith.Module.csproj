@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- Module only references Abstractions — no generators, no runtime. -->
+  <!-- This simulates a real modular monolith module. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DSoftStudio.Mediator.Abstractions\DSoftStudio.Mediator.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

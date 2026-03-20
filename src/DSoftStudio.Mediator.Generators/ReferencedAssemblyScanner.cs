@@ -41,8 +41,14 @@ namespace DSoftStudio.Mediator.Generators
         /// <summary>
         /// Returns all (ServiceType, ImplementationType) pairs discovered from referenced
         /// assemblies using both attribute-based and type-based scanning.
+        /// Handlers whose implementation type is not accessible from the consuming project
+        /// (e.g. internal without <c>[InternalsVisibleTo]</c>) are excluded from the
+        /// returned list. When <paramref name="skippedInternalHandlers"/> is provided,
+        /// skipped handler details are collected for diagnostic reporting.
         /// </summary>
-        public static List<ExternalHandlerInfo> GetAllExternalHandlers(Compilation compilation)
+        public static List<ExternalHandlerInfo> GetAllExternalHandlers(
+            Compilation compilation,
+            List<SkippedHandlerInfo> skippedInternalHandlers = null)
         {
             var results = new List<ExternalHandlerInfo>();
 
@@ -83,6 +89,23 @@ namespace DSoftStudio.Mediator.Generators
                     continue;
 
                 CollectHandlersFromTypes(assembly, results);
+            }
+
+            // ── Post-filter: remove handlers inaccessible from this compilation ──
+            // Both Phase 1 and Phase 2 may discover internal handlers from external
+            // assemblies. If the handler's assembly does not grant [InternalsVisibleTo]
+            // to the current compilation, the generated DI code would fail with CS0122.
+            for (int i = results.Count - 1; i >= 0; i--)
+            {
+                if (IsAccessibleFromCompilation(results[i].ImplementationType, compilation))
+                    continue;
+
+                skippedInternalHandlers?.Add(new SkippedHandlerInfo(
+                    results[i].ImplementationType
+                        .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                    results[i].ImplementationType.ContainingAssembly?.Name ?? "unknown"));
+
+                results.RemoveAt(i);
             }
 
             return results;
@@ -200,7 +223,9 @@ namespace DSoftStudio.Mediator.Generators
 
         /// <summary>
         /// A type is a candidate handler if it's a non-abstract, non-generic class
-        /// with public or internal accessibility.
+        /// with public or internal accessibility. Internal types are included here
+        /// so they can be discovered; actual accessibility from the consuming
+        /// compilation is verified later in <see cref="GetAllExternalHandlers"/>.
         /// </summary>
         private static bool IsConcreteHandler(INamedTypeSymbol type)
         {
@@ -210,12 +235,60 @@ namespace DSoftStudio.Mediator.Generators
             if (type.IsAbstract || type.IsGenericType)
                 return false;
 
-            // Only accessible types (public or internal) can be registered
+            // Include public and internal types. Internal types may be accessible
+            // via [InternalsVisibleTo]; the post-filter in GetAllExternalHandlers
+            // will remove those that are truly inaccessible.
             if (type.DeclaredAccessibility != Accessibility.Public
                 && type.DeclaredAccessibility != Accessibility.Internal)
                 return false;
 
             return true;
+        }
+
+        /// <summary>
+        /// Returns <c>true</c> when <paramref name="type"/> is accessible from the
+        /// assembly being compiled. Public types are always accessible. Internal types
+        /// are accessible only when their containing assembly has
+        /// <c>[InternalsVisibleTo]</c> pointing to the current compilation's assembly.
+        /// </summary>
+        private static bool IsAccessibleFromCompilation(
+            INamedTypeSymbol type,
+            Compilation compilation)
+        {
+            if (type.DeclaredAccessibility == Accessibility.Public)
+                return true;
+
+            if (type.DeclaredAccessibility != Accessibility.Internal
+                && type.DeclaredAccessibility != Accessibility.ProtectedOrInternal)
+                return false;
+
+            // Check if the type's assembly grants [InternalsVisibleTo] to our assembly.
+            var ourAssemblyName = compilation.AssemblyName;
+            if (ourAssemblyName is null)
+                return false;
+
+            foreach (var attr in type.ContainingAssembly.GetAttributes())
+            {
+                if (attr.AttributeClass?.Name != "InternalsVisibleToAttribute"
+                    && attr.AttributeClass?.Name != "InternalsVisibleTo")
+                    continue;
+
+                if (attr.ConstructorArguments.Length < 1
+                    || attr.ConstructorArguments[0].Value is not string friendName)
+                    continue;
+
+                // The attribute value may contain a public key suffix:
+                // "AssemblyName, PublicKey=00240000..."
+                var comma = friendName.IndexOf(',');
+                var name = comma >= 0
+                    ? friendName.Substring(0, comma).Trim()
+                    : friendName.Trim();
+
+                if (string.Equals(name, ourAssemblyName, System.StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            return false;
         }
 
         // ── Filtered helpers for each generator ──────────────────────────
@@ -330,14 +403,17 @@ namespace DSoftStudio.Mediator.Generators
 
         /// <summary>
         /// Returns (serviceType, implementationType) string pairs for DI registration
-        /// from referenced assemblies.
+        /// from referenced assemblies, along with information about internal handlers
+        /// that were skipped because they are inaccessible from the consuming project.
         /// </summary>
-        public static List<(string ServiceType, string ImplementationType, bool IsStateless)> GetExternalDIHandlers(
+        public static (List<(string ServiceType, string ImplementationType, bool IsStateless)> Handlers,
+                        List<SkippedHandlerInfo> SkippedInternalHandlers) GetExternalDIHandlers(
             Compilation compilation)
         {
             var results = new List<(string, string, bool)>();
+            var skippedInternals = new List<SkippedHandlerInfo>();
 
-            foreach (var handler in GetAllExternalHandlers(compilation))
+            foreach (var handler in GetAllExternalHandlers(compilation, skippedInternals))
             {
                 var serviceType = handler.ServiceType
                     .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
@@ -351,13 +427,40 @@ namespace DSoftStudio.Mediator.Generators
                 results.Add((serviceType, implType, isStateless));
             }
 
-            return results;
+            return (results, skippedInternals);
         }
 
         internal readonly struct ExternalHandlerInfo(INamedTypeSymbol serviceType, INamedTypeSymbol implementationType)
         {
             public INamedTypeSymbol ServiceType { get; } = serviceType;
             public INamedTypeSymbol ImplementationType { get; } = implementationType;
+        }
+
+        /// <summary>
+        /// Information about an internal handler that was discovered in an external
+        /// assembly but skipped because it is not accessible from the consuming project.
+        /// </summary>
+        internal readonly struct SkippedHandlerInfo(
+            string handlerType,
+            string assemblyName) : System.IEquatable<SkippedHandlerInfo>
+        {
+            public string HandlerType { get; } = handlerType;
+            public string AssemblyName { get; } = assemblyName;
+
+            public bool Equals(SkippedHandlerInfo other) =>
+                HandlerType == other.HandlerType && AssemblyName == other.AssemblyName;
+
+            public override bool Equals(object obj) =>
+                obj is SkippedHandlerInfo other && Equals(other);
+
+            public override int GetHashCode()
+            {
+                unchecked
+                {
+                    return ((HandlerType?.GetHashCode() ?? 0) * 397)
+                         ^ (AssemblyName?.GetHashCode() ?? 0);
+                }
+            }
         }
     }
 }

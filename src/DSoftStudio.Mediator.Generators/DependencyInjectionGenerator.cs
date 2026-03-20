@@ -31,13 +31,16 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
         var externalHandlers = context.CompilationProvider
             .Select(static (compilation, _) =>
             {
-                var external = ReferencedAssemblyScanner.GetExternalDIHandlers(compilation);
+                var (external, skippedInternals) = ReferencedAssemblyScanner.GetExternalDIHandlers(compilation);
                 var array = external
                     .Select(e => new HandlerInfo(e.ServiceType, e.ImplementationType, e.IsStateless))
                     .OrderBy(static h => h.InterfaceType)
                     .ThenBy(static h => h.HandlerType)
                     .ToArray();
-                return new EquatableArray<HandlerInfo>(array);
+                var skippedArray = skippedInternals.ToArray();
+                return (
+                    Handlers: new EquatableArray<HandlerInfo>(array),
+                    Skipped: new EquatableArray<ReferencedAssemblyScanner.SkippedHandlerInfo>(skippedArray));
             });
 
         // Discover self-handling request classes (IRequest<T> + static Execute)
@@ -59,7 +62,17 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
 
         context.RegisterSourceOutput(combined, static (spc, pair) =>
         {
-            var (((localHandlers, external), selfHandlers), asmName) = pair;
+            var (((localHandlers, (external, skippedInternals)), selfHandlers), asmName) = pair;
+
+            // Report diagnostics for internal handlers that were skipped
+            foreach (var skipped in skippedInternals)
+            {
+                spc.ReportDiagnostic(Diagnostic.Create(
+                    DiagnosticDescriptors.InternalHandlerSkipped,
+                    Location.None,
+                    skipped.HandlerType,
+                    skipped.AssemblyName));
+            }
 
             var localRegistrations = localHandlers
                 .Distinct()

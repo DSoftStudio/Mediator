@@ -49,5 +49,21 @@ namespace DSoftStudio.Mediator.Generators
                        + "causing InvalidCastException when the sender is a mock object. "
                        + "Reference DSoftStudio.Mediator.Abstractions instead of DSoftStudio.Mediator in test projects, "
                        + "or suppress interceptors with the DSoftMediatorSuppressInterceptors MSBuild property.");
+
+        public static readonly DiagnosticDescriptor InternalHandlerSkipped = new(
+            id: "DSOFT005",
+            title: "Internal handler in external assembly skipped",
+            messageFormat: "Handler '{0}' in assembly '{1}' is internal and cannot be registered from this project. "
+                         + "To fix: make the handler public, add [InternalsVisibleTo] to the handler's project, "
+                         + "or add the source generator to the handler's project so it self-registers.",
+            category: "DSoftStudio.Mediator",
+            defaultSeverity: DiagnosticSeverity.Warning,
+            isEnabledByDefault: true,
+            description: "The source generator discovered a handler in a referenced assembly, but the handler class "
+                       + "is internal and not visible to this project. The generated DI registration code cannot "
+                       + "reference internal types across assembly boundaries (CS0122). The handler will be silently "
+                       + "skipped. To register it, either make the handler public, add [InternalsVisibleTo] from the "
+                       + "handler's project to this project, or ensure the handler's project also references the "
+                       + "source generator so it emits its own registration code.");
     }
 }

@@ -69,3 +69,4 @@ nunit-*.xml
 /analize.ps1
 /analyze-src.ps1
 /__examples
+/tests/IssueRepro

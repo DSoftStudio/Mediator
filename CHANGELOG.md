@@ -14,11 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`DSoftMediatorSuppressInterceptors` MSBuild kill switch** — Set `<DSoftMediatorSuppressInterceptors>true</DSoftMediatorSuppressInterceptors>` in a project to completely disable interceptor generation. Useful for test projects or environments where interceptors are undesirable.
 - **`NotificationPublisherFlag`** — Write-once volatile flag that allows the runtime `Publish` path to skip unnecessary overhead when no notification publishers are registered.
 - **Cross-project mocking sample** — New `samples/cross-project-mocking/` demonstrates the recommended architecture: `Host` (runtime + generators), `Host.Application` (abstractions only), `Host.Tests` (mocks against abstractions).
+- **DSOFT005: Internal handler skipped analyzer** — New compile-time diagnostic (Warning) reported for every handler discovered in a referenced assembly but skipped because it is not accessible. The message includes the handler type name and the assembly it belongs to, so library authors can decide whether to make the handler `public` or add an `InternalsVisibleTo` attribute.
+- **CS0122 regression tests** — New test project (`DSoftStudio.Mediator.ModularMonolith.Tests`) with compile-time guard (`WarningsAsErrors=CS0122`) ensuring the internal-handler accessibility fix cannot regress.
 
 ### Fixed
 
 - **Interceptors rewriting call sites inside expression tree lambdas** — The source generators (`SendInterceptorGenerator`, `PublishInterceptorGenerator`, `StreamInterceptorGenerator`) no longer rewrite `Send`, `Publish`, or `CreateStream` calls that appear inside expression tree lambdas (e.g. Moq `Setup()` / `Verify()`). A new `IsInsideExpressionTreeLambda` helper walks the syntax tree and checks the lambda's `ConvertedType` against `System.Linq.Expressions.Expression<T>`, skipping those call sites. Direct invocations outside expression trees continue to be intercepted as before. ([#2](https://github.com/DSoftStudio/Mediator/issues/2))
 - **Flaky parallel notification tests** — `ParallelNotificationPublisherTests` and `PipelineGcLeakTests` stabilized with deterministic synchronization to eliminate intermittent CI failures.
+- **Modular monolith CS0122** — The source generator no longer emits DI registrations for `internal` handlers discovered in referenced assemblies, which previously caused `CS0122` at compile time. Accessibility is now validated during generation, and `InternalsVisibleTo` is respected. A new **DSOFT005** warning identifies every skipped handler.
 
 ### Changed
 
