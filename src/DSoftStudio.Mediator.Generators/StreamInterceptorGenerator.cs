@@ -37,13 +37,28 @@ public sealed class StreamInterceptorGenerator : IIncrementalGenerator
 
         var collected = callSites.Collect();
 
-        context.RegisterSourceOutput(collected, static (spc, calls) =>
+        // Combine with compilation + analyzer options (for SuppressInterceptors property).
+        var collectedWithCompilation = collected
+            .Combine(context.CompilationProvider)
+            .Combine(context.AnalyzerConfigOptionsProvider);
+
+        context.RegisterSourceOutput(collectedWithCompilation, static (spc, pair) =>
         {
+            var ((calls, compilation), optionsProvider) = pair;
             if (calls.IsDefaultOrEmpty)
                 return;
 
+            // Honour DSoftMediatorSuppressInterceptors MSBuild property.
+            if (optionsProvider.GlobalOptions.TryGetValue(
+                    "build_property.DSoftMediatorSuppressInterceptors", out var suppress)
+                && string.Equals(suppress, "true", System.StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            bool isRelease = compilation.Options.OptimizationLevel == OptimizationLevel.Release;
             var unique = calls.Distinct().ToList();
-            var code = GenerateInterceptors(unique);
+            var code = GenerateInterceptors(unique, isRelease);
 
             spc.AddSource(
                 "StreamInterceptors.g.cs",
@@ -147,7 +162,7 @@ public sealed class StreamInterceptorGenerator : IIncrementalGenerator
         return true;
     }
 
-    private static string GenerateInterceptors(List<InterceptCallInfo> calls)
+    private static string GenerateInterceptors(List<InterceptCallInfo> calls, bool isRelease)
     {
         var sb = new StringBuilder(2048);
 
@@ -198,7 +213,23 @@ public sealed class StreamInterceptorGenerator : IIncrementalGenerator
             sb.AppendLine(" request, global::System.Threading.CancellationToken cancellationToken = default)");
             sb.AppendLine("        {");
             sb.AppendLine("            global::System.ArgumentNullException.ThrowIfNull(request);");
-            sb.AppendLine("            var sp = ((global::DSoftStudio.Mediator.IServiceProviderAccessor)mediator).ServiceProvider;");
+
+            if (isRelease)
+            {
+                // Release: branchless castclass — GDV devirtualizes to ~0 ns overhead.
+                sb.AppendLine("            var sp = ((global::DSoftStudio.Mediator.IServiceProviderAccessor)mediator).ServiceProvider;");
+            }
+            else
+            {
+                // Debug: mock-safe type check with graceful fallback for test doubles.
+                sb.AppendLine("            if (mediator is not global::DSoftStudio.Mediator.IServiceProviderAccessor __spa)");
+                sb.Append("                return mediator.CreateStream<");
+                sb.Append(reqType);
+                sb.Append(", ");
+                sb.Append(resType);
+                sb.AppendLine(">(request, cancellationToken);");
+                sb.AppendLine("            var sp = __spa.ServiceProvider;");
+            }
 
             // Behaviors path: check for stream pipeline chain (cached or direct DI)
             sb.Append("            var chain = global::DSoftStudio.Mediator.StreamDispatch<");

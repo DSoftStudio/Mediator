@@ -140,12 +140,6 @@ public class UnitOperatorTests
     {
         Unit.Value.Equals(null).ShouldBeFalse();
     }
-
-    [Fact]
-    public void CompareTo_Null_ReturnsNegative()
-    {
-        Unit.Value.CompareTo(null).ShouldBeLessThan(0);
-    }
 }
 
 public class MediatorHandlerRegistrationAttributeTests

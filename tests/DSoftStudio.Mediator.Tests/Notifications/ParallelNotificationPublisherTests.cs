@@ -40,7 +40,9 @@ public sealed class SlowParallelHandlerA : INotificationHandler<ParallelSlowPing
     public int CallCount;
     public async Task Handle(ParallelSlowPing notification, CancellationToken ct)
     {
+        ConcurrencyTracker.Enter();
         await Task.Delay(50, ct);
+        ConcurrencyTracker.Exit();
         Interlocked.Increment(ref CallCount);
     }
 }
@@ -50,7 +52,9 @@ public sealed class SlowParallelHandlerB : INotificationHandler<ParallelSlowPing
     public int CallCount;
     public async Task Handle(ParallelSlowPing notification, CancellationToken ct)
     {
+        ConcurrencyTracker.Enter();
         await Task.Delay(50, ct);
+        ConcurrencyTracker.Exit();
         Interlocked.Increment(ref CallCount);
     }
 }
@@ -69,6 +73,33 @@ public sealed class SafeParallelHandler : INotificationHandler<ParallelThrowPing
         Interlocked.Increment(ref CallCount);
         return Task.CompletedTask;
     }
+}
+
+// ── Concurrency tracker (timing-free parallel proof) ───────────────
+
+internal static class ConcurrencyTracker
+{
+    private static int _active;
+    private static int _peak;
+
+    public static int Peak => Volatile.Read(ref _peak);
+
+    public static void Reset()
+    {
+        Volatile.Write(ref _active, 0);
+        Volatile.Write(ref _peak, 0);
+    }
+
+    public static void Enter()
+    {
+        var current = Interlocked.Increment(ref _active);
+        // Update peak via CAS loop
+        int oldPeak;
+        do { oldPeak = Volatile.Read(ref _peak); }
+        while (current > oldPeak && Interlocked.CompareExchange(ref _peak, current, oldPeak) != oldPeak);
+    }
+
+    public static void Exit() => Interlocked.Decrement(ref _active);
 }
 
 // ── Tests ───────────────────────────────────────────────────────────
@@ -110,13 +141,12 @@ public class ParallelNotificationPublisherTests
         using var provider = BuildProvider(a, b);
         var mediator = provider.GetRequiredService<IMediator>();
 
-        var sw = System.Diagnostics.Stopwatch.StartNew();
+        ConcurrencyTracker.Reset();
         await mediator.Publish(new ParallelSlowPing());
-        sw.Stop();
 
-        // If sequential: ~100ms. If parallel: ~50ms.
-        // Use generous threshold to avoid flaky failures on CI runners with shared resources.
-        sw.ElapsedMilliseconds.ShouldBeLessThan(200);
+        // Both handlers call Enter() synchronously before the first await,
+        // so peak >= 2 proves they overlapped — no wall-clock timing needed.
+        ConcurrencyTracker.Peak.ShouldBeGreaterThanOrEqualTo(2);
         a.CallCount.ShouldBe(1);
         b.CallCount.ShouldBe(1);
     }

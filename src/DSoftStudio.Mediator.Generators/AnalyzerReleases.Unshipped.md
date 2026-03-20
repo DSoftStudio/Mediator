@@ -7,3 +7,4 @@ Rule ID | Category | Severity | Notes
 --------|----------|----------|-------
 DSOFT002 | DSoftStudio.Mediator | Warning | Duplicate request handler registration
 DSOFT003 | DSoftStudio.Mediator | Warning | Duplicate stream handler registration
+DSOFT004 | DSoftStudio.Mediator | Warning | Mocking library detected with interceptors enabled

@@ -15,10 +15,21 @@ namespace DSoftStudio.Mediator
     /// </para>
     /// Thread-safe and stateless — safe to register as scoped.
     /// </summary>
-    internal sealed class Mediator(IServiceProvider serviceProvider) : IMediator, IServiceProviderAccessor
+    internal sealed class Mediator : IMediator, IServiceProviderAccessor
     {
-        private readonly IServiceProvider _serviceProvider = serviceProvider;
-        private readonly INotificationPublisher? _notificationPublisher = serviceProvider.GetService<INotificationPublisher>();
+        internal readonly IServiceProvider _serviceProvider;
+        private readonly INotificationPublisher? _notificationPublisher;
+
+        public Mediator(IServiceProvider serviceProvider)
+        {
+            _serviceProvider = serviceProvider;
+            _notificationPublisher = serviceProvider.GetService<INotificationPublisher>();
+
+            // Set the global static flag once so interceptors can skip the per-call
+            // GetService<INotificationPublisher> probe (~2-3 ns saved per Publish call).
+            if (_notificationPublisher is not null)
+                NotificationPublisherFlag.MarkRegistered();
+        }
 
         /// <inheritdoc />
         IServiceProvider IServiceProviderAccessor.ServiceProvider => _serviceProvider;

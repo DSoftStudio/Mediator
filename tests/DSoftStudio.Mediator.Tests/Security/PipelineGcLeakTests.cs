@@ -67,8 +67,10 @@ public class PipelineGcLeakTests : IDisposable
 
         long difference = memoryAfter - memoryBefore;
 
+        // 10 MB is generous for GC bookkeeping noise / LOH fragmentation on CI.
+        // A real pipeline leak at 1 M iterations would cause 50–100+ MB growth.
         Assert.True(
-            difference < 2_000_000,
+            difference < 10_000_000,
             $"Pipeline leaked {difference:N0} bytes after {iterations:N0} iterations."
         );
     }

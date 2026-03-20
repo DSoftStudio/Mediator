@@ -36,13 +36,28 @@ public sealed class PublishInterceptorGenerator : IIncrementalGenerator
 
         var collected = callSites.Collect();
 
-        context.RegisterSourceOutput(collected, static (spc, calls) =>
+        // Combine with compilation + analyzer options (for SuppressInterceptors property).
+        var collectedWithCompilation = collected
+            .Combine(context.CompilationProvider)
+            .Combine(context.AnalyzerConfigOptionsProvider);
+
+        context.RegisterSourceOutput(collectedWithCompilation, static (spc, pair) =>
         {
+            var ((calls, compilation), optionsProvider) = pair;
             if (calls.IsDefaultOrEmpty)
                 return;
 
+            // Honour DSoftMediatorSuppressInterceptors MSBuild property.
+            if (optionsProvider.GlobalOptions.TryGetValue(
+                    "build_property.DSoftMediatorSuppressInterceptors", out var suppress)
+                && string.Equals(suppress, "true", System.StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            bool isRelease = compilation.Options.OptimizationLevel == OptimizationLevel.Release;
             var unique = calls.Distinct().ToList();
-            var code = GenerateInterceptors(unique);
+            var code = GenerateInterceptors(unique, isRelease);
 
             spc.AddSource(
                 "PublishInterceptors.g.cs",
@@ -145,7 +160,7 @@ public sealed class PublishInterceptorGenerator : IIncrementalGenerator
         return true;
     }
 
-    private static string GenerateInterceptors(List<InterceptCallInfo> calls)
+    private static string GenerateInterceptors(List<InterceptCallInfo> calls, bool isRelease)
     {
         var sb = new StringBuilder(2048);
 
@@ -190,18 +205,35 @@ public sealed class PublishInterceptorGenerator : IIncrementalGenerator
             sb.AppendLine(" notification, global::System.Threading.CancellationToken cancellationToken = default)");
             sb.AppendLine("        {");
             sb.AppendLine("            global::System.ArgumentNullException.ThrowIfNull(notification);");
-            sb.AppendLine("            var sp = ((global::DSoftStudio.Mediator.IServiceProviderAccessor)publisher).ServiceProvider;");
 
-            // Custom publisher path (rare — only when INotificationPublisher is registered)
-            sb.AppendLine("            var customPublisher = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions");
-            sb.AppendLine("                .GetService<global::DSoftStudio.Mediator.Abstractions.INotificationPublisher>(sp);");
-            sb.AppendLine("            if (customPublisher is not null)");
+            if (isRelease)
+            {
+                // Release: branchless castclass — GDV devirtualizes to ~0 ns overhead.
+                sb.AppendLine("            var sp = ((global::DSoftStudio.Mediator.IServiceProviderAccessor)publisher).ServiceProvider;");
+            }
+            else
+            {
+                // Debug: mock-safe type check with graceful fallback for test doubles.
+                sb.AppendLine("            if (publisher is not global::DSoftStudio.Mediator.IServiceProviderAccessor __spa)");
+                sb.Append("                return publisher.Publish<");
+                sb.Append(notifType);
+                sb.AppendLine(">(notification, cancellationToken);");
+                sb.AppendLine("            var sp = __spa.ServiceProvider;");
+            }
+
+            // Custom publisher fast-path: skip GetService when no publisher is registered.
+            sb.AppendLine("            if (global::DSoftStudio.Mediator.NotificationPublisherFlag.HasCustomPublisher)");
             sb.AppendLine("            {");
-            sb.Append("                var handlers = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions");
+            sb.AppendLine("                var customPublisher = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions");
+            sb.AppendLine("                    .GetService<global::DSoftStudio.Mediator.Abstractions.INotificationPublisher>(sp);");
+            sb.AppendLine("                if (customPublisher is not null)");
+            sb.AppendLine("                {");
+            sb.Append("                    var handlers = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions");
             sb.Append(".GetServices<global::DSoftStudio.Mediator.Abstractions.INotificationHandler<");
             sb.Append(notifType);
             sb.AppendLine(">>(sp);");
-            sb.AppendLine("                return customPublisher.Publish(handlers, notification, cancellationToken);");
+            sb.AppendLine("                    return customPublisher.Publish(handlers, notification, cancellationToken);");
+            sb.AppendLine("                }");
             sb.AppendLine("            }");
 
             // Default sequential dispatch with ThreadStatic cached handlers
@@ -209,6 +241,7 @@ public sealed class PublishInterceptorGenerator : IIncrementalGenerator
             sb.AppendLine();
 
             sb.AppendLine("        }");
+            sb.AppendLine();
             sb.AppendLine();
 
             methodIndex++;

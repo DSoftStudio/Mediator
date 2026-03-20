@@ -261,7 +261,13 @@ public sealed class MediatorExtensionsGenerator : IIncrementalGenerator
         sb.AppendLine("        {");
         sb.AppendLine("            if (sender == null) throw new global::System.ArgumentNullException(nameof(sender));");
         sb.AppendLine("            if (request == null) throw new global::System.ArgumentNullException(nameof(request));");
-        sb.AppendLine("            var serviceProvider = ((global::DSoftStudio.Mediator.IServiceProviderAccessor)sender).ServiceProvider;");
+        sb.AppendLine("            // Mock-safe guard: when ISender is a test double (Moq, NSubstitute, etc.)");
+        sb.AppendLine("            // it won't implement IServiceProviderAccessor — throw a clear error.");
+        sb.AppendLine("            if (sender is not global::DSoftStudio.Mediator.IServiceProviderAccessor __accessor)");
+        sb.AppendLine("                throw new global::System.InvalidOperationException(");
+        sb.AppendLine("                    \"Runtime object dispatch (Send(object)) requires the real Mediator instance. \" +");
+        sb.AppendLine("                    \"When mocking, use the explicit generic overload: sender.Send<TRequest, TResponse>(request).\");");
+        sb.AppendLine("            var serviceProvider = __accessor.ServiceProvider;");
         sb.AppendLine("            return global::DSoftStudio.Mediator.RequestObjectDispatch.Dispatch(request, serviceProvider, cancellationToken);");
         sb.AppendLine("        }");
         sb.AppendLine();

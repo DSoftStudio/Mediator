@@ -1,14 +1,14 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-	  <TargetFrameworks>netstandard2.0;net8.0</TargetFrameworks>
+	  <TargetFramework>netstandard2.0</TargetFramework>
 	  <LangVersion>latest</LangVersion>
 	  <Nullable>enable</Nullable>
 	  <ImplicitUsings>false</ImplicitUsings>
 
 	  <!-- NuGet -->
 	  <PackageId>DSoftStudio.Mediator.Abstractions</PackageId>
-	  <Version>1.1.5-rc.1</Version>
+	  <Version>1.1.5-rc.2</Version>
 
 	  <Authors>DSoftStudio</Authors>
 	  <Company>DSoftStudio</Company>
@@ -40,21 +40,20 @@
 	  <IncludeSymbols>true</IncludeSymbols>
 	  <SymbolPackageFormat>snupkg</SymbolPackageFormat>
 
-	  <!-- NuGet icon -->
+	  <!-- NuGet icon & readme -->
 	  <PackageIcon>icon.png</PackageIcon>
+	  <PackageReadmeFile>README.md</PackageReadmeFile>
 
-	  <!-- AOT / trimming -->
-	  <IsTrimmable>true</IsTrimmable>
-	  <IsAotCompatible Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net7.0'))">true</IsAotCompatible>
-  </PropertyGroup>
+	  </PropertyGroup>
 
-  <!-- Icon included in NuGet package -->
+  <!-- Icon & README included in NuGet package -->
   <ItemGroup>
 	  <None Include="..\..\icon.png" Pack="true" PackagePath="" />
+	  <None Include="README.md" Pack="true" PackagePath="" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
-	  <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="10.0.3" />
+  <ItemGroup>
+	  <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="10.0.5" />
   </ItemGroup>
 
 </Project>
