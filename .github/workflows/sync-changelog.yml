@@ -17,19 +17,40 @@ jobs:
       - name: Sync CHANGELOG.md → docs/mediator/changelog.md
         shell: bash
         run: |
-          FRONT_MATTER='---
+          HEADER='---
           layout: default
-          title: "Changelog"
+          title: "Changelog - DSoftStudio.Mediator"
           description: "All notable changes to DSoftStudio.Mediator."
-          ---'
+          ---
+          <p align="center">
+            <picture>
+              <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudioBgWhite.svg">
+              <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudio.svg">
+              <img alt="DSoftStudio Mediator" src="https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudio.svg" height="120">
+            </picture>
+          </p>
+
+          [← Back to Documentation](index.md)
+
+          # Changelog'
 
           # Trim leading spaces from heredoc indentation
-          FRONT_MATTER=$(echo "$FRONT_MATTER" | sed 's/^          //')
+          HEADER=$(echo "$HEADER" | sed 's/^          //')
+
+          # Strip BOM and the original "# Changelog" + subtitle lines from CHANGELOG.md
+          BODY=$(sed '1s/^\xEF\xBB\xBF//' CHANGELOG.md \
+            | sed '1{/^# Changelog$/d}' \
+            | sed '1{/^$/d}' \
+            | sed '1{/^All notable changes/d}' \
+            | sed '1{/^$/d}' \
+            | sed '1{/^The format is based/d}' \
+            | sed '1{/^and this project adheres/d}' \
+            | sed '1{/^$/d}')
 
           {
-            echo "$FRONT_MATTER"
+            echo "$HEADER"
             echo ""
-            cat CHANGELOG.md
+            echo "$BODY"
           } > docs/mediator/changelog.md
 
       - name: Commit and push if changed
