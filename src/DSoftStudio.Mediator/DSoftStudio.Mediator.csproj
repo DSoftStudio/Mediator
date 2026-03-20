@@ -14,7 +14,7 @@
 
 		<!-- NuGet -->
 		<PackageId>DSoftStudio.Mediator</PackageId>
-		<Version>1.1.5-rc.3</Version>
+		<Version>1.1.5-rc.4</Version>
 
 		<Authors>DSoftStudio</Authors>
 		<Company>DSoftStudio</Company>
@@ -94,6 +94,7 @@
 	<!-- ── Pack: .props file into build/ for auto-import ──────────────── -->
 	<ItemGroup>
 		<None Include="build\DSoftStudio.Mediator.props" Pack="true" PackagePath="build" Visible="false" />
+		<None Include="buildTransitive\DSoftStudio.Mediator.props" Pack="true" PackagePath="buildTransitive" Visible="false" />
 	</ItemGroup>
 
 	<!-- ── Pack: Generator DLL into analyzers/dotnet/cs ───────────────── -->

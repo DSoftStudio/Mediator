@@ -1,0 +1,13 @@
+<Project>
+  <!-- Transitive props: only expose the suppress-flag to the source generator
+       so that transitive consumers (e.g. test projects referencing a Host project
+       via ProjectReference) can set DSoftMediatorSuppressInterceptors=true and
+       have the generator read it.
+
+       NOTE: We intentionally do NOT add InterceptorsPreviewNamespaces /
+       InterceptorsNamespaces here — interceptor codegen should only be enabled
+       for direct consumers of the DSoftStudio.Mediator NuGet package. -->
+  <ItemGroup>
+    <CompilerVisibleProperty Include="DSoftMediatorSuppressInterceptors" />
+  </ItemGroup>
+</Project>

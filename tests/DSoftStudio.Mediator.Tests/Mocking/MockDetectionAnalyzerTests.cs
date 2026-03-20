@@ -126,6 +126,20 @@ public class MockDetectionAnalyzerTests
         diagnostics.ShouldContain(d => d.Id == "DSOFT004");
     }
 
+    [Fact]
+    public void Emits_DSOFT004_When_Suppress_Property_Not_Visible_To_Generator()
+    {
+        // Simulates the transitive-project scenario: the user sets
+        // DSoftMediatorSuppressInterceptors=true in their csproj, but the
+        // CompilerVisibleProperty is missing (no buildTransitive props imported).
+        // Without CompilerVisibleProperty, the generator cannot read the property
+        // and DSOFT004 fires — this is the bug that buildTransitive/ fixes.
+        var result = CreateDriverAndRun(new[] { "Moq" }, globalOptions: null);
+        var diagnostics = result.GetRunResult().Diagnostics;
+
+        diagnostics.ShouldContain(d => d.Id == "DSOFT004");
+    }
+
     /// <summary>
     /// Minimal <see cref="AnalyzerConfigOptionsProvider"/> implementation for tests
     /// that need to set global (MSBuild) properties visible to the generator.
