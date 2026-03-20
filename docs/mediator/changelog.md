@@ -16,16 +16,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **`DSoftStudio.Mediator.Abstractions` NuGet package** — Contracts (interfaces and base types) are now published as a separate package. Domain, application-core, and test projects can reference only `DSoftStudio.Mediator.Abstractions` to get `ISender`, `IPublisher`, `IMediator`, `IRequest<T>`, `INotification`, and related abstractions **without** pulling in the runtime or source generators. This is the recommended pattern for unit-testing with mocking frameworks (Moq, NSubstitute, etc.) since no interceptors are active.
+- **DSOFT004: Mock detection analyzer** — New compile-time diagnostic (Info) that detects when a project references both the source generators and a mocking framework (Moq, NSubstitute, FakeItEasy). Recommends referencing only `DSoftStudio.Mediator.Abstractions` in test projects for clean mock isolation.
+- **`DSoftMediatorSuppressInterceptors` MSBuild kill switch** — Set `<DSoftMediatorSuppressInterceptors>true</DSoftMediatorSuppressInterceptors>` in a project to completely disable interceptor generation. Useful for test projects or environments where interceptors are undesirable.
+- **`NotificationPublisherFlag`** — Write-once volatile flag that allows the runtime `Publish` path to skip unnecessary overhead when no notification publishers are registered.
+- **Cross-project mocking sample** — New `samples/cross-project-mocking/` demonstrates the recommended architecture: `Host` (runtime + generators), `Host.Application` (abstractions only), `Host.Tests` (mocks against abstractions).
 
 ### Fixed
 
 - **Interceptors rewriting call sites inside expression tree lambdas** — The source generators (`SendInterceptorGenerator`, `PublishInterceptorGenerator`, `StreamInterceptorGenerator`) no longer rewrite `Send`, `Publish`, or `CreateStream` calls that appear inside expression tree lambdas (e.g. Moq `Setup()` / `Verify()`). A new `IsInsideExpressionTreeLambda` helper walks the syntax tree and checks the lambda's `ConvertedType` against `System.Linq.Expressions.Expression<T>`, skipping those call sites. Direct invocations outside expression trees continue to be intercepted as before. ([#2](https://github.com/DSoftStudio/Mediator/issues/2))
+- **Flaky parallel notification tests** — `ParallelNotificationPublisherTests` and `PipelineGcLeakTests` stabilized with deterministic synchronization to eliminate intermittent CI failures.
 
 ### Changed
 
+- **Branchless interceptor dispatch (Release builds)** — Interceptor generators now emit `OptimizationLevel`-conditional code: Release builds use `castclass` (branchless, ~0.36 ns saving via GDV), Debug builds use `isinst` + null-check for mock-framework compatibility. Hot-path `Send` is now **1.05×** vs raw handler.
+- **Publish optimization** — `Publish` dispatch leverages `NotificationPublisherFlag` to skip publisher resolution when none are registered. Overhead dropped from **2.19×** to **1.07–1.11×** vs raw handler.
 - **NuGet package split** — `DSoftStudio.Mediator` now declares a public NuGet dependency on `DSoftStudio.Mediator.Abstractions` (previously the Abstractions DLL was embedded with `PrivateAssets="all"`). Companion packages (`FluentValidation`, `HybridCache`, `OpenTelemetry`) receive `Abstractions` transitively through `DSoftStudio.Mediator`.
 - **CI workflow** — Build & Test and Publish are now separate jobs. The `publish` job uses `needs: build-and-test`, guaranteeing that **no package is published if any test fails**. GitHub Packages receives packages on every push to `main`; NuGet.org only on version tags (`v*`).
-- **Companion packages bumped to 1.0.3** — `DSoftStudio.Mediator.FluentValidation`, `DSoftStudio.Mediator.HybridCache`, and `DSoftStudio.Mediator.OpenTelemetry` updated to reflect the transitive dependency change.
+- **Companion packages bumped to 1.0.3-rc.2** — `DSoftStudio.Mediator.FluentValidation` (FluentValidation 12.1.1), `DSoftStudio.Mediator.HybridCache` (HybridCache 10.4.0), `DSoftStudio.Mediator.OpenTelemetry` (OpenTelemetry 1.15.0) updated with latest dependency versions.
+- **Abstractions simplified to `netstandard2.0` only** — Removed `net8.0` multi-target; `netstandard2.0` provides maximum compatibility across all .NET versions.
+- **Test infrastructure migrated to xunit v3** — All 7 test projects updated from xunit v2 to xunit v3 (3.2.2) with `xunit.runner.visualstudio` 3.1.5 and `Microsoft.NET.Test.Sdk` 18.3.0.
 
 ---
 
