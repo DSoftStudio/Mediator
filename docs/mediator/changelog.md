@@ -15,6 +15,28 @@ description: "All notable changes to DSoftStudio.Mediator."
 
 # Changelog
 
+## [1.1.6-rc.1] — 2026-03-21
+
+### Added
+
+- **Native AOT safety integration tests** — New `NativeAotSafetyTests` suite (7 tests) validating that `PrecompilePipelines()` correctly replaces open-generic `IPipelineBehavior<,>` descriptors with closed-generic versions. Covers end-to-end dispatch (Unit/int/bool), multiple behaviors ordering, zero open-generic assertion, lifetime preservation (Transient/Scoped/Singleton), and idempotency.
+
+### Fixed
+
+- **CS8600 nullable conversion in `MockDetectionAnalyzer`** — The `DetectMockingLibrary` call site now declares `string?` and uses `is null` pattern matching, eliminating the CS8600 warning without sentinel values.
+- **CS8603 possible null return in `MockDetectionAnalyzer`** — `DetectMockingLibrary` return type corrected to `string?` to match its nullable contract.
+- **CS8625 null-to-non-nullable in `ReferencedAssemblyScanner`** — `GetAllExternalHandlers` parameter changed to `List<SkippedHandlerInfo>?` to accurately reflect its optional nature.
+- **CS8765 nullable parameter mismatch in `MockDetectionAnalyzerTests`** — `TryGetValue` overrides now match the base `AnalyzerConfigOptions` signature (`out string value`) using `null!` for the false-return pattern.
+- **xUnit1051 across all test projects** — All `CancellationToken.None` / omitted `CancellationToken` arguments in test methods replaced with `TestContext.Current.CancellationToken` for responsive test cancellation under xUnit v3.
+
+### Changed
+
+- **README rewrite** — Complete restructure with new sections: Execution Model (ASCII pipeline diagram), When to Use This (explicit DSoft vs MediatR positioning), Ecosystem (category-labeled companion packages). Feature Comparison table empirically verified against martinothamar/Mediator 3.0.1, DispatchR 2.1.1, and MediatR 12.4.1 with live test projects. DispatchR corrected to ✅ for exact-type notification dispatch. Mediator (SG) Native AOT compatibility confirmed via `dotnet publish` AOT + native binary execution.
+- **Design-time build cache cleanup** — Stale `.dtbcache.v2` causing IntelliSense false positives (CS0246/CS0518) documented and resolved via cache invalidation.
+- **Companion packages bumped to 1.0.4-rc.1** — `DSoftStudio.Mediator.FluentValidation`, `DSoftStudio.Mediator.HybridCache`, `DSoftStudio.Mediator.OpenTelemetry` updated to depend on `DSoftStudio.Mediator >= 1.1.6-rc.1`.
+
+---
+
 ## [1.1.5] — 2026-03-20
 
 ### Added
