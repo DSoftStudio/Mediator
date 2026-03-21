@@ -278,4 +278,4 @@ Mechanical code changes. No architectural rewrite.
 
 ## License
 
-[MIT](LICENSE.md)
+[MIT](https://github.com/DSoftStudio/Mediator/blob/main/LICENSE.md)
