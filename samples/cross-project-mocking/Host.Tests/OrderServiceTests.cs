@@ -45,7 +45,7 @@ public class OrderServiceTests
         var service = new OrderService(senderMock.Object);
 
         // Act
-        var orderId = await service.PlaceOrderAsync("Widget", 5);
+        var orderId = await service.PlaceOrderAsync("Widget", 5, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(1001, orderId);
@@ -73,7 +73,7 @@ public class OrderServiceTests
         var service = new OrderService(senderMock.Object);
 
         // Act
-        var summary = await service.GetOrderSummaryAsync(42);
+        var summary = await service.GetOrderSummaryAsync(42, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal("Order #42: Widget × 5", summary);
@@ -96,7 +96,7 @@ public class OrderServiceTests
         var service = new OrderService(senderMock.Object);
 
         // Act
-        await service.PlaceOrderAsync("Gadget", 1);
+        await service.PlaceOrderAsync("Gadget", 1, TestContext.Current.CancellationToken);
 
         // Assert — only CreateOrderCommand was sent, nothing else
         senderMock.Verify(
@@ -126,7 +126,7 @@ public class OrderServiceTests
         var service = new OrderService(senderMock.Object);
 
         // Act
-        await service.PlaceOrderAsync("Premium Widget", 10);
+        await service.PlaceOrderAsync("Premium Widget", 10, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(captured);
@@ -151,7 +151,7 @@ public class OrderServiceTests
 
         var service = new OrderService(mediatorMock.Object);
 
-        var orderId = await service.PlaceOrderAsync("Deluxe Widget", 3);
+        var orderId = await service.PlaceOrderAsync("Deluxe Widget", 3, TestContext.Current.CancellationToken);
 
         Assert.Equal(2002, orderId);
     }
@@ -175,7 +175,7 @@ public class OrderServiceTests
         var result = await behavior.Handle(
             new CreateOrderCommand("Widget", 1),
             handlerMock.Object,
-            CancellationToken.None);
+            TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(42, result);

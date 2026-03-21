@@ -65,6 +65,23 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
 
         var selfCollected = selfHandlers.Collect();
 
+        // Discover open-generic pipeline behavior types (local + external)
+        // for AOT-safe closed-generic DI registration.
+        var allBehaviors = context.CompilationProvider
+            .Select(static (compilation, _) =>
+            {
+                var results = ReferencedAssemblyScanner.GetExternalOpenGenericBehaviors(compilation);
+
+                // Also scan the current compilation for local behavior types
+                CollectLocalBehaviors(compilation.Assembly.GlobalNamespace, results);
+
+                var array = results
+                    .Distinct()
+                    .OrderBy(static b => b.BaseTypeName)
+                    .ToArray();
+                return new EquatableArray<BehaviorTypeInfo>(array);
+            });
+
         var assemblyName = context.CompilationProvider
             .Select(static (c, _) => c.AssemblyName ?? "Assembly");
 
@@ -72,11 +89,12 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
             .Combine(hasHandlerInterface)
             .Combine(externalHandlers)
             .Combine(selfCollected)
+            .Combine(allBehaviors)
             .Combine(assemblyName);
 
         context.RegisterSourceOutput(combined, static (spc, pair) =>
         {
-            var ((((localHandlers, interfaceExists), external), selfHandlers), asmName) = pair;
+            var (((((localHandlers, interfaceExists), external), selfHandlers), behaviors), asmName) = pair;
 
             var hasSelfHandlers = !selfHandlers.IsDefaultOrEmpty && selfHandlers.Length > 0;
 
@@ -85,7 +103,7 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
                 spc.AddSource(
                     "MediatorRegistry.g.cs",
                     SourceText.From(
-                        GenerateRegistryCode([], asmName),
+                        GenerateRegistryCode([], asmName, behaviors),
                         Encoding.UTF8));
                 return;
             }
@@ -107,7 +125,7 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
                 .ThenBy(static h => h.ResponseType)
                 .ToList();
 
-            var code = GenerateRegistryCode(uniqueRegistrations, asmName);
+            var code = GenerateRegistryCode(uniqueRegistrations, asmName, behaviors);
 
             spc.AddSource(
                 "MediatorRegistry.g.cs",
@@ -165,7 +183,36 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
         return new HandlerInfo(requestType, responseType);
     }
 
-    private static string GenerateRegistryCode(List<HandlerInfo> registrations, string assemblyName)
+    /// <summary>
+    /// Walks the current compilation's namespace tree to discover local open-generic
+    /// pipeline behavior types (classes that implement <c>IPipelineBehavior&lt;,&gt;</c>,
+    /// <c>IRequestPostProcessor&lt;,&gt;</c>, <c>IRequestExceptionHandler&lt;,&gt;</c>,
+    /// or <c>IStreamPipelineBehavior&lt;,&gt;</c>).
+    /// </summary>
+    private static void CollectLocalBehaviors(
+        INamespaceSymbol ns,
+        List<BehaviorTypeInfo> results)
+    {
+        foreach (var type in ns.GetTypeMembers())
+        {
+            if (type.TypeKind == TypeKind.Class
+                && !type.IsAbstract
+                && type.IsGenericType
+                && (type.DeclaredAccessibility == Accessibility.Public
+                    || type.DeclaredAccessibility == Accessibility.Internal))
+            {
+                ReferencedAssemblyScanner.TryAddBehaviorInfoFrom(type, results);
+            }
+        }
+
+        foreach (var child in ns.GetNamespaceMembers())
+            CollectLocalBehaviors(child, results);
+    }
+
+    private static string GenerateRegistryCode(
+        List<HandlerInfo> registrations,
+        string assemblyName,
+        EquatableArray<BehaviorTypeInfo> behaviors)
     {
         var sanitizedAsm = HandlerDiscovery.SanitizeIdentifier(assemblyName);
         var sb = new StringBuilder();
@@ -190,6 +237,27 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
         sb.AppendLine("        public static void RegisterPipelineChains(global::Microsoft.Extensions.DependencyInjection.IServiceCollection services)");
         sb.AppendLine("        {");
 
+        // Filter behaviors relevant to the request pipeline (not stream)
+        var requestBehaviors = new List<BehaviorTypeInfo>();
+        foreach (var b in behaviors)
+        {
+            if (b.Kind != PipelineInterfaceKind.StreamBehavior)
+                requestBehaviors.Add(b);
+        }
+
+        // AOT-safe: emit open-generic closure calls before RegisterPipeline
+        if (requestBehaviors.Count > 0 && registrations.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("            // AOT-safe: close open-generic pipeline behavior registrations in a single O(S) pass.");
+            sb.AppendLine("            // Replaces open-generic ServiceDescriptors with per-handler-pair closed-generic");
+            sb.AppendLine("            // descriptors so DI never calls MakeGenericType (which fails for value-type");
+            sb.AppendLine("            // TResponse under Native AOT when RuntimeFeature.IsDynamicCodeSupported is false).");
+            sb.AppendLine("            CloseAllOpenGenericBehaviors(services);");
+            sb.AppendLine("            RemoveOpenGenericBehaviorDescriptors(services);");
+            sb.AppendLine();
+        }
+
         foreach (var handler in registrations)
         {
             sb.AppendLine(
@@ -198,6 +266,15 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
 
         sb.AppendLine("        }");
         sb.AppendLine();
+
+        // Emit AOT-safe open-generic closure methods when behaviors are discovered
+        if (requestBehaviors.Count > 0 && registrations.Count > 0)
+        {
+            EmitCloseAllOpenGenericBehaviorsMethod(sb, requestBehaviors, registrations);
+            sb.AppendLine();
+            EmitRemoveOpenGenericBehaviorDescriptorsMethod(sb, requestBehaviors);
+            sb.AppendLine();
+        }
 
         // Generic helper that inspects service collection and sets optimal dispatch
         sb.AppendLine("        private static void RegisterPipeline<TRequest, TResponse>(global::Microsoft.Extensions.DependencyInjection.IServiceCollection services)");
@@ -318,6 +395,102 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
 
         return sb.ToString();
     }
+
+    /// <summary>
+    /// Emits the <c>CloseAllOpenGenericBehaviors</c> method into the generated source.
+    /// Does a single O(S) forward pass over the service collection. For each matched
+    /// open-generic behavior descriptor, emits closed-generic versions for ALL known
+    /// handler pairs inline — no generic method instantiation, no per-handler scanning.
+    /// </summary>
+    private static void EmitCloseAllOpenGenericBehaviorsMethod(
+        StringBuilder sb,
+        List<BehaviorTypeInfo> behaviors,
+        List<HandlerInfo> registrations)
+    {
+        sb.AppendLine("        private static void CloseAllOpenGenericBehaviors(global::Microsoft.Extensions.DependencyInjection.IServiceCollection services)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            var count = services.Count;");
+        sb.AppendLine("            for (int i = 0; i < count; i++)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                var d = services[i];");
+        sb.AppendLine("                if (d.ImplementationType is null || !d.ServiceType.IsGenericTypeDefinition)");
+        sb.AppendLine("                    continue;");
+
+        foreach (var b in behaviors)
+        {
+            var serviceOpen = GetOpenServiceTypeName(b.Kind);
+
+            sb.AppendLine();
+            sb.AppendLine($"                if (d.ServiceType == typeof({serviceOpen}) && d.ImplementationType == typeof({b.OpenTypeName}))");
+            sb.AppendLine("                {");
+
+            foreach (var handler in registrations)
+            {
+                var serviceClosed = GetClosedServiceType(b.Kind, handler.RequestType, handler.ResponseType);
+
+                sb.AppendLine("                    services.Add(new global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor(");
+                sb.AppendLine($"                        typeof({serviceClosed}),");
+                sb.AppendLine($"                        typeof({b.BaseTypeName}<{handler.RequestType}, {handler.ResponseType}>),");
+                sb.AppendLine("                        d.Lifetime));");
+            }
+
+            sb.AppendLine("                    continue;");
+            sb.AppendLine("                }");
+        }
+
+        sb.AppendLine("            }");
+        sb.AppendLine("        }");
+    }
+
+    /// <summary>
+    /// Emits the <c>RemoveOpenGenericBehaviorDescriptors</c> method into the generated source.
+    /// After all handler pairs have had their closed-generic descriptors added, this method
+    /// removes the original open-generic descriptors so the DI container never attempts
+    /// <c>MakeGenericType</c>.
+    /// </summary>
+    private static void EmitRemoveOpenGenericBehaviorDescriptorsMethod(
+        StringBuilder sb,
+        List<BehaviorTypeInfo> behaviors)
+    {
+        sb.AppendLine("        private static void RemoveOpenGenericBehaviorDescriptors(global::Microsoft.Extensions.DependencyInjection.IServiceCollection services)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            for (int i = services.Count - 1; i >= 0; i--)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                var d = services[i];");
+        sb.AppendLine("                if (d.ImplementationType is null || !d.ServiceType.IsGenericTypeDefinition)");
+        sb.AppendLine("                    continue;");
+
+        foreach (var b in behaviors)
+        {
+            var serviceOpen = GetOpenServiceTypeName(b.Kind);
+
+            sb.AppendLine();
+            sb.AppendLine($"                if (d.ServiceType == typeof({serviceOpen}) && d.ImplementationType == typeof({b.OpenTypeName}))");
+            sb.AppendLine("                {");
+            sb.AppendLine("                    services.RemoveAt(i);");
+            sb.AppendLine("                    continue;");
+            sb.AppendLine("                }");
+        }
+
+        sb.AppendLine("            }");
+        sb.AppendLine("        }");
+    }
+
+    private static string GetOpenServiceTypeName(PipelineInterfaceKind kind) => kind switch
+    {
+        PipelineInterfaceKind.Behavior => "global::DSoftStudio.Mediator.Abstractions.IPipelineBehavior<,>",
+        PipelineInterfaceKind.PostProcessor => "global::DSoftStudio.Mediator.Abstractions.IRequestPostProcessor<,>",
+        PipelineInterfaceKind.ExceptionHandler => "global::DSoftStudio.Mediator.Abstractions.IRequestExceptionHandler<,>",
+        _ => ""
+    };
+
+    private static string GetClosedServiceType(PipelineInterfaceKind kind, string requestType, string responseType) => kind switch
+    {
+        PipelineInterfaceKind.Behavior => $"global::DSoftStudio.Mediator.Abstractions.IPipelineBehavior<{requestType}, {responseType}>",
+        PipelineInterfaceKind.PostProcessor => $"global::DSoftStudio.Mediator.Abstractions.IRequestPostProcessor<{requestType}, {responseType}>",
+        PipelineInterfaceKind.ExceptionHandler => $"global::DSoftStudio.Mediator.Abstractions.IRequestExceptionHandler<{requestType}, {responseType}>",
+        _ => ""
+    };
 
     /// <summary>
     /// Represents a handler registration pair.
