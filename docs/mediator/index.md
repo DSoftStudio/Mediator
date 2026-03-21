@@ -73,6 +73,7 @@ Deep dive into the internal design.
 - [Source Generators](architecture/source-generators.md)
 - [Native AOT & Trimming](architecture/native-aot.md)
 - [Performance Design](architecture/performance.md)
+- [Design Notes](architecture/design-notes.md)
 
 ---
 
