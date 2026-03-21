@@ -16,6 +16,8 @@ jobs:
 
       - name: Sync CHANGELOG.md → docs/mediator/changelog.md
         shell: bash
+        env:
+          LC_ALL: C.UTF-8
         run: |
           HEADER='---
           layout: default

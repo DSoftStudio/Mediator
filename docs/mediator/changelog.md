@@ -11,83 +11,83 @@ description: "All notable changes to DSoftStudio.Mediator."
   </picture>
 </p>
 
-[‚Üê Back to Documentation](index.md)
+[√¢‚Ä†¬ê Back to Documentation](index.md)
 
 # Changelog
 
-## [1.1.5] ó 2026-03-20
+## [1.1.5] ‚Äî 2026-03-20
 
 ### Added
 
-- **`DSoftStudio.Mediator.Abstractions` NuGet package** ó Contracts (interfaces and base types) are now published as a separate package. Domain, application-core, and test projects can reference only `DSoftStudio.Mediator.Abstractions` to get `ISender`, `IPublisher`, `IMediator`, `IRequest<T>`, `INotification`, and related abstractions **without** pulling in the runtime or source generators. This is the recommended pattern for unit-testing with mocking frameworks (Moq, NSubstitute, etc.) since no interceptors are active.
-- **DSOFT004: Mock detection analyzer** ó New compile-time diagnostic (Warning) that detects when a project references both the source generators and a mocking framework (Moq, NSubstitute, FakeItEasy). Recommends referencing only `DSoftStudio.Mediator.Abstractions` in test projects for clean mock isolation.
-- **`DSoftMediatorSuppressInterceptors` MSBuild kill switch** ó Set `<DSoftMediatorSuppressInterceptors>true</DSoftMediatorSuppressInterceptors>` in a project to completely disable interceptor generation. Useful for test projects or environments where interceptors are undesirable.
-- **`NotificationPublisherFlag`** ó Write-once volatile flag that allows the runtime `Publish` path to skip unnecessary overhead when no notification publishers are registered.
-- **Cross-project mocking sample** ó New `samples/cross-project-mocking/` demonstrates the recommended architecture: `Host` (runtime + generators), `Host.Application` (abstractions only), `Host.Tests` (mocks against abstractions).
-- **DSOFT005: Internal handler skipped analyzer** ó New compile-time diagnostic (Warning) reported for every handler discovered in a referenced assembly but skipped because it is not accessible. The message includes the handler type name and the assembly it belongs to, so library authors can decide whether to make the handler `public` or add an `InternalsVisibleTo` attribute.
-- **CS0122 regression tests** ó New test project (`DSoftStudio.Mediator.ModularMonolith.Tests`) with compile-time guard (`WarningsAsErrors=CS0122`) ensuring the internal-handler accessibility fix cannot regress.
+- **`DSoftStudio.Mediator.Abstractions` NuGet package** ‚Äî Contracts (interfaces and base types) are now published as a separate package. Domain, application-core, and test projects can reference only `DSoftStudio.Mediator.Abstractions` to get `ISender`, `IPublisher`, `IMediator`, `IRequest<T>`, `INotification`, and related abstractions **without** pulling in the runtime or source generators. This is the recommended pattern for unit-testing with mocking frameworks (Moq, NSubstitute, etc.) since no interceptors are active.
+- **DSOFT004: Mock detection analyzer** ‚Äî New compile-time diagnostic (Warning) that detects when a project references both the source generators and a mocking framework (Moq, NSubstitute, FakeItEasy). Recommends referencing only `DSoftStudio.Mediator.Abstractions` in test projects for clean mock isolation.
+- **`DSoftMediatorSuppressInterceptors` MSBuild kill switch** ‚Äî Set `<DSoftMediatorSuppressInterceptors>true</DSoftMediatorSuppressInterceptors>` in a project to completely disable interceptor generation. Useful for test projects or environments where interceptors are undesirable.
+- **`NotificationPublisherFlag`** ‚Äî Write-once volatile flag that allows the runtime `Publish` path to skip unnecessary overhead when no notification publishers are registered.
+- **Cross-project mocking sample** ‚Äî New `samples/cross-project-mocking/` demonstrates the recommended architecture: `Host` (runtime + generators), `Host.Application` (abstractions only), `Host.Tests` (mocks against abstractions).
+- **DSOFT005: Internal handler skipped analyzer** ‚Äî New compile-time diagnostic (Warning) reported for every handler discovered in a referenced assembly but skipped because it is not accessible. The message includes the handler type name and the assembly it belongs to, so library authors can decide whether to make the handler `public` or add an `InternalsVisibleTo` attribute.
+- **CS0122 regression tests** ‚Äî New test project (`DSoftStudio.Mediator.ModularMonolith.Tests`) with compile-time guard (`WarningsAsErrors=CS0122`) ensuring the internal-handler accessibility fix cannot regress.
 
 ### Fixed
 
-- **DSOFT004 not respected in transitive projects** ó `DSoftMediatorSuppressInterceptors=true` was silently ignored when the project consumed DSoftStudio.Mediator transitively (e.g. `Host.Tests` ? `Host` via `ProjectReference`). Root cause: the `CompilerVisibleProperty` declaration lived only in the `build/` NuGet folder, which is **not** transitive. Added a `buildTransitive/DSoftStudio.Mediator.props` file containing just the `CompilerVisibleProperty` declaration so the source generator can read the suppress flag in any downstream project. Interceptor namespaces are intentionally **not** included in the transitive props.
-- **Interceptors rewriting call sites inside expression tree lambdas** ó The source generators (`SendInterceptorGenerator`, `PublishInterceptorGenerator`, `StreamInterceptorGenerator`) no longer rewrite `Send`, `Publish`, or `CreateStream` calls that appear inside expression tree lambdas (e.g. Moq `Setup()` / `Verify()`). A new `IsInsideExpressionTreeLambda` helper walks the syntax tree and checks the lambda's `ConvertedType` against `System.Linq.Expressions.Expression<T>`, skipping those call sites. Direct invocations outside expression trees continue to be intercepted as before. ([#2](https://github.com/DSoftStudio/Mediator/issues/2))
-- **Flaky parallel notification tests** ó `ParallelNotificationPublisherTests` and `PipelineGcLeakTests` stabilized with deterministic synchronization to eliminate intermittent CI failures.
-- **Modular monolith CS0122** ó The source generator no longer emits DI registrations for `internal` handlers discovered in referenced assemblies, which previously caused `CS0122` at compile time. Accessibility is now validated during generation, and `InternalsVisibleTo` is respected. A new **DSOFT005** warning identifies every skipped handler.
+- **DSOFT004 not respected in transitive projects** ‚Äî `DSoftMediatorSuppressInterceptors=true` was silently ignored when the project consumed DSoftStudio.Mediator transitively (e.g. `Host.Tests` ? `Host` via `ProjectReference`). Root cause: the `CompilerVisibleProperty` declaration lived only in the `build/` NuGet folder, which is **not** transitive. Added a `buildTransitive/DSoftStudio.Mediator.props` file containing just the `CompilerVisibleProperty` declaration so the source generator can read the suppress flag in any downstream project. Interceptor namespaces are intentionally **not** included in the transitive props.
+- **Interceptors rewriting call sites inside expression tree lambdas** ‚Äî The source generators (`SendInterceptorGenerator`, `PublishInterceptorGenerator`, `StreamInterceptorGenerator`) no longer rewrite `Send`, `Publish`, or `CreateStream` calls that appear inside expression tree lambdas (e.g. Moq `Setup()` / `Verify()`). A new `IsInsideExpressionTreeLambda` helper walks the syntax tree and checks the lambda's `ConvertedType` against `System.Linq.Expressions.Expression<T>`, skipping those call sites. Direct invocations outside expression trees continue to be intercepted as before. ([#2](https://github.com/DSoftStudio/Mediator/issues/2))
+- **Flaky parallel notification tests** ‚Äî `ParallelNotificationPublisherTests` and `PipelineGcLeakTests` stabilized with deterministic synchronization to eliminate intermittent CI failures.
+- **Modular monolith CS0122** ‚Äî The source generator no longer emits DI registrations for `internal` handlers discovered in referenced assemblies, which previously caused `CS0122` at compile time. Accessibility is now validated during generation, and `InternalsVisibleTo` is respected. A new **DSOFT005** warning identifies every skipped handler.
 
 ### Changed
 
-- **Branchless interceptor dispatch (Release builds)** ó Interceptor generators now emit `OptimizationLevel`-conditional code: Release builds use `castclass` (branchless, ~0.36 ns saving via GDV), Debug builds use `isinst` + null-check for mock-framework compatibility. Hot-path `Send` is now **1.05◊** vs raw handler.
-- **Publish optimization** ó `Publish` dispatch leverages `NotificationPublisherFlag` to skip publisher resolution when none are registered. Overhead dropped from **2.19◊** to **1.07ñ1.11◊** vs raw handler.
-- **NuGet package split** ó `DSoftStudio.Mediator` now declares a public NuGet dependency on `DSoftStudio.Mediator.Abstractions` (previously the Abstractions DLL was embedded with `PrivateAssets="all"`). Companion packages (`FluentValidation`, `HybridCache`, `OpenTelemetry`) receive `Abstractions` transitively through `DSoftStudio.Mediator`.
-- **CI workflow** ó Build & Test and Publish are now separate jobs. The `publish` job uses `needs: build-and-test`, guaranteeing that **no package is published if any test fails**. GitHub Packages receives packages on every push to `main`; NuGet.org only on version tags (`v*`).
-- **Companion packages bumped to 1.0.3-rc.2** ó `DSoftStudio.Mediator.FluentValidation` (FluentValidation 12.1.1), `DSoftStudio.Mediator.HybridCache` (HybridCache 10.4.0), `DSoftStudio.Mediator.OpenTelemetry` (OpenTelemetry 1.15.0) updated with latest dependency versions.
-- **Abstractions simplified to `netstandard2.0` only** ó Removed `net8.0` multi-target; `netstandard2.0` provides maximum compatibility across all .NET versions.
-- **Test infrastructure migrated to xunit v3** ó All 7 test projects updated from xunit v2 to xunit v3 (3.2.2) with `xunit.runner.visualstudio` 3.1.5 and `Microsoft.NET.Test.Sdk` 18.3.0.
+- **Branchless interceptor dispatch (Release builds)** ‚Äî Interceptor generators now emit `OptimizationLevel`-conditional code: Release builds use `castclass` (branchless, ~0.36 ns saving via GDV), Debug builds use `isinst` + null-check for mock-framework compatibility. Hot-path `Send` is now **1.05√ó** vs raw handler.
+- **Publish optimization** ‚Äî `Publish` dispatch leverages `NotificationPublisherFlag` to skip publisher resolution when none are registered. Overhead dropped from **2.19√ó** to **1.07‚Äì1.11√ó** vs raw handler.
+- **NuGet package split** ‚Äî `DSoftStudio.Mediator` now declares a public NuGet dependency on `DSoftStudio.Mediator.Abstractions` (previously the Abstractions DLL was embedded with `PrivateAssets="all"`). Companion packages (`FluentValidation`, `HybridCache`, `OpenTelemetry`) receive `Abstractions` transitively through `DSoftStudio.Mediator`.
+- **CI workflow** ‚Äî Build & Test and Publish are now separate jobs. The `publish` job uses `needs: build-and-test`, guaranteeing that **no package is published if any test fails**. GitHub Packages receives packages on every push to `main`; NuGet.org only on version tags (`v*`).
+- **Companion packages bumped to 1.0.3-rc.2** ‚Äî `DSoftStudio.Mediator.FluentValidation` (FluentValidation 12.1.1), `DSoftStudio.Mediator.HybridCache` (HybridCache 10.4.0), `DSoftStudio.Mediator.OpenTelemetry` (OpenTelemetry 1.15.0) updated with latest dependency versions.
+- **Abstractions simplified to `netstandard2.0` only** ‚Äî Removed `net8.0` multi-target; `netstandard2.0` provides maximum compatibility across all .NET versions.
+- **Test infrastructure migrated to xunit v3** ‚Äî All 7 test projects updated from xunit v2 to xunit v3 (3.2.2) with `xunit.runner.visualstudio` 3.1.5 and `Microsoft.NET.Test.Sdk` 18.3.0.
 
 ---
 
-## [1.1.4] ó 2026-03-19
+## [1.1.4] ‚Äî 2026-03-19
 
 ### Fixed
 
-- **CS0436 / CS0121 with `InternalsVisibleTo`** ó Source-generated types no longer conflict when a test project (or any referencing project) has `InternalsVisibleTo` access to the host project. ([#1](https://github.com/DSoftStudio/Mediator/issues/1))
+- **CS0436 / CS0121 with `InternalsVisibleTo`** ‚Äî Source-generated types no longer conflict when a test project (or any referencing project) has `InternalsVisibleTo` access to the host project. ([#1](https://github.com/DSoftStudio/Mediator/issues/1))
   - Generated worker/implementation classes now use the C# 11 `file` modifier, making them invisible across assemblies.
   - Generated extension methods are emitted into per-assembly unique namespaces (`DSoftStudio.Mediator.Generated.{AssemblyName}`) with a `global using` for transparent usage.
-- **Cross-project handler discovery** ó Handlers defined in referenced projects are now discovered automatically via `[assembly: MediatorHandlerRegistration]` attributes, replacing the previous PE metadata scanning approach that could miss `internal` members.
-- **`Send(object)` namespace shadowing** ó The runtime `Send(object)` extension is now generated alongside typed extensions in the per-assembly namespace, preventing C# resolution from shadowing typed overloads.
+- **Cross-project handler discovery** ‚Äî Handlers defined in referenced projects are now discovered automatically via `[assembly: MediatorHandlerRegistration]` attributes, replacing the previous PE metadata scanning approach that could miss `internal` members.
+- **`Send(object)` namespace shadowing** ‚Äî The runtime `Send(object)` extension is now generated alongside typed extensions in the per-assembly namespace, preventing C# resolution from shadowing typed overloads.
 
 ### Changed
 
-- `Send(object)` is now fully source-generated ó removed `SenderObjectExtensions.cs` from the runtime DLL.
+- `Send(object)` is now fully source-generated ‚Äî removed `SenderObjectExtensions.cs` from the runtime DLL.
 
 ---
 
-## [1.1.3] ó 2026-03-15
+## [1.1.3] ‚Äî 2026-03-15
 
 ### Changed
 
-- **Documentation site** ó all doc links now point to [docs.dsoftstudio.com/mediator](https://docs.dsoftstudio.com/mediator) instead of relative GitHub paths.
-- **Project website** ó NuGet "Project website" updated to `https://docs.dsoftstudio.com/mediator`.
+- **Documentation site** ‚Äî all doc links now point to [docs.dsoftstudio.com/mediator](https://docs.dsoftstudio.com/mediator) instead of relative GitHub paths.
+- **Project website** ‚Äî NuGet "Project website" updated to `https://docs.dsoftstudio.com/mediator`.
 
 ### Fixed
 
-- **SonarCloud quality gate** ó excluded `docs/`, `samples/`, and `benchmarks/` from analysis to prevent false-positive bugs on non-production code.
+- **SonarCloud quality gate** ‚Äî excluded `docs/`, `samples/`, and `benchmarks/` from analysis to prevent false-positive bugs on non-production code.
 
 ---
 
-## [1.1.2] ó 2026-03-15
+## [1.1.2] ‚Äî 2026-03-15
 
 ### Fixed
 
-- **NuGet README rendering** ó replaced `<picture>` HTML tag with pure Markdown image syntax (`![alt](url)`) across all package READMEs. NuGet does not support `<picture>` or `<p align="center">` HTML tags, causing raw HTML to render on package pages.
+- **NuGet README rendering** ‚Äî replaced `<picture>` HTML tag with pure Markdown image syntax (`![alt](url)`) across all package READMEs. NuGet does not support `<picture>` or `<p align="center">` HTML tags, causing raw HTML to render on package pages.
 
 ---
 
-## [1.1.1] ó 2026-03-15
+## [1.1.1] ‚Äî 2026-03-15
 
 ### Fixed
 
-- **`Send(object)` dispatch fails when multiple `ServiceProvider` instances coexist** ó
+- **`Send(object)` dispatch fails when multiple `ServiceProvider` instances coexist** ‚Äî
   The `Send(object)` runtime dispatch delegate referenced the static
   `RequestDispatch<TRequest, TResponse>.Pipeline` field, which is write-once
   (`Interlocked.CompareExchange`). When parallel test classes (or multi-tenant hosts)
@@ -101,11 +101,11 @@ description: "All notable changes to DSoftStudio.Mediator."
 
 ---
 
-## [1.1.0] ó 2026-03-15
+## [1.1.0] ‚Äî 2026-03-15
 
 ### Added
 
-- **Self-handling requests** ó request classes (or records) that implement `IRequest<T>`,
+- **Self-handling requests** ‚Äî request classes (or records) that implement `IRequest<T>`,
   `ICommand<T>`, or `IQuery<T>` and contain a `static Execute` method are automatically
   discovered at compile time and wired into the mediator pipeline. No separate handler
   class is required. The source generator emits an internal adapter that bridges the
@@ -124,7 +124,7 @@ description: "All notable changes to DSoftStudio.Mediator."
   typed `Send()` extensions, and `ValidateMediatorHandlers()` all work with
   self-handling requests.
 
-- **Fail-fast handler validation** ó new source-generated `ValidateMediatorHandlers()`
+- **Fail-fast handler validation** ‚Äî new source-generated `ValidateMediatorHandlers()`
   extension method on `IServiceProvider`. Resolves every mediator handler from DI at
   startup and throws an `AggregateException` with all failures if any handler is
   misconfigured. Detects missing registrations, broken constructor dependencies, and
@@ -135,35 +135,35 @@ description: "All notable changes to DSoftStudio.Mediator."
   app.Services.ValidateMediatorHandlers(); // throws AggregateException if misconfigured
   ```
 
-- **DSOFT002: Duplicate request handler** ó compile-time diagnostic (Warning) when
+- **DSOFT002: Duplicate request handler** ‚Äî compile-time diagnostic (Warning) when
   multiple `IRequestHandler<TRequest, TResponse>` implementations are found for the
   same `<TRequest, TResponse>` pair. With Microsoft.Extensions.DI, only the last
-  registration is resolved via `GetRequiredService<T>()` ó earlier handlers are
+  registration is resolved via `GetRequiredService<T>()` ‚Äî earlier handlers are
   silently ignored. The diagnostic lists all conflicting implementations.
 
-- **DSOFT003: Duplicate stream handler** ó compile-time diagnostic (Warning) when
+- **DSOFT003: Duplicate stream handler** ‚Äî compile-time diagnostic (Warning) when
   multiple `IStreamRequestHandler<TRequest, TResponse>` implementations are found for
   the same `<TRequest, TResponse>` pair. Same root cause as DSOFT002.
 
-- **Runtime-typed `Send(object)` dispatch** ó new `Send(this ISender, object, CancellationToken)`
+- **Runtime-typed `Send(object)` dispatch** ‚Äî new `Send(this ISender, object, CancellationToken)`
   extension method for message bus / command queue scenarios where the consumer only has
   an `object` reference at runtime. Uses a compile-time generated
   `FrozenDictionary<Type, DispatchDelegate>` dispatch table (same architecture as
-  `Publish(object)`) ó no reflection, no `MakeGenericType`, fully AOT-safe.
+  `Publish(object)`) ‚Äî no reflection, no `MakeGenericType`, fully AOT-safe.
 
   The extension method design preserves overload resolution: generated typed extensions
   (e.g. `Send(this ISender, Ping)`) are always preferred when the compile-time type is
   known. `Send(object)` is only selected when the argument is typed as `object`.
 
-  Zero impact on the existing `Send<TRequest, TResponse>()` hot path ó completely
+  Zero impact on the existing `Send<TRequest, TResponse>()` hot path ‚Äî completely
   separate dispatch table and code path.
 
   See [ADR-0004](docs/mediator/adr/0004-runtime-typed-send.md) for design rationale.
 
-- **`DSoftStudio.Mediator.OpenTelemetry` package** ó New companion NuGet package providing
+- **`DSoftStudio.Mediator.OpenTelemetry` package** ‚Äî New companion NuGet package providing
   automatic distributed tracing and metrics for all mediator operations via standard
   `IPipelineBehavior<,>`, `IStreamPipelineBehavior<,>`, and an `INotificationPublisher`
-  decorator ó zero changes to the core mediator library.
+  decorator ‚Äî zero changes to the core mediator library.
 
   **Tracing:** Single `ActivitySource("DSoftStudio.Mediator")` with span names following
   `{TypeName} {kind}` convention (e.g. `CreateUser command`, `GetUsers query`).
@@ -176,7 +176,7 @@ description: "All notable changes to DSoftStudio.Mediator."
   (up-down counter), `mediator.request.errors` (counter with `error.type` tag).
 
   **Notification instrumentation:** `InstrumentedNotificationPublisher` decorator
-  creates a parent span per `Publish()` call with per-handler child spans ó unique
+  creates a parent span per `Publish()` call with per-handler child spans ‚Äî unique
   among .NET mediator libraries.
 
   **Zero-cost when unused:** `HasListeners()` / `Instrument.Enabled` short-circuits
@@ -188,7 +188,7 @@ description: "All notable changes to DSoftStudio.Mediator."
 
   See [ADR-0005](docs/mediator/adr/0005-opentelemetry-instrumentation.md) for design rationale.
 
-- **`DSoftStudio.Mediator.FluentValidation` package** ó New companion NuGet package
+- **`DSoftStudio.Mediator.FluentValidation` package** ‚Äî New companion NuGet package
   providing automatic request validation via FluentValidation. Registers a single
   open-generic `ValidationBehavior<TRequest, TResponse>` pipeline behavior that
   resolves all `IValidator<TRequest>` instances from DI, runs validation before the
@@ -198,10 +198,10 @@ description: "All notable changes to DSoftStudio.Mediator."
   - Aggregates failures from multiple validators per request type
   - `MediatorValidationException.ErrorsByProperty` for easy `ValidationProblemDetails` mapping
   - Zero-overhead pass-through when no validators are registered for a request type
-  - Validators support full DI (constructor injection) ó no static registry
+  - Validators support full DI (constructor injection) ‚Äî no static registry
   - Single extension method: `services.AddMediatorFluentValidation()`
 
-- **`DSoftStudio.Mediator.HybridCache` package** ó New companion NuGet package
+- **`DSoftStudio.Mediator.HybridCache` package** ‚Äî New companion NuGet package
   providing automatic query/request caching via Microsoft's `HybridCache`
   (`Microsoft.Extensions.Caching.Hybrid`). Registers a single open-generic
   `CachingBehavior<TRequest, TResponse>` pipeline behavior that checks if the
@@ -209,7 +209,7 @@ description: "All notable changes to DSoftStudio.Mediator."
 
   **Key features:**
   - Multi-layer caching (L1 in-memory + optional L2 distributed) via `HybridCache`
-  - Built-in stampede prevention ó concurrent requests for the same key share one execution
+  - Built-in stampede prevention ‚Äî concurrent requests for the same key share one execution
   - `ICachedRequest` marker interface with `CacheKey` and `Duration` (default: 60s)
   - Zero-overhead pass-through when the request does not implement `ICachedRequest`
   - Single extension method: `services.AddMediatorHybridCache()`
@@ -221,14 +221,14 @@ description: "All notable changes to DSoftStudio.Mediator."
 
 ### Architecture Decisions Recorded
 
-- **ADR-0004: Runtime-Typed Send(object) Dispatch** ó Accepted. Adds `Send(object)`
+- **ADR-0004: Runtime-Typed Send(object) Dispatch** ‚Äî Accepted. Adds `Send(object)`
   as an extension method (not interface method) using a compile-time generated
   `FrozenDictionary` dispatch table. Extension method design is required because
   `ISender.Send<TRequest, TResponse>` has two generic type parameters that cannot be
-  inferred ó an instance `Send(object)` would shadow all generated typed extensions
+  inferred ‚Äî an instance `Send(object)` would shadow all generated typed extensions
   due to C# overload resolution rules. See [`docs/mediator/adr/0004-runtime-typed-send.md`](docs/mediator/adr/0004-runtime-typed-send.md).
 
-- **ADR-0005: OpenTelemetry Instrumentation Package** ó Accepted. Separate NuGet
+- **ADR-0005: OpenTelemetry Instrumentation Package** ‚Äî Accepted. Separate NuGet
   package (`DSoftStudio.Mediator.OpenTelemetry`) providing automatic distributed
   tracing and metrics via standard pipeline behaviors, with zero impact on the core
   mediator library. See [`docs/mediator/adr/0005-opentelemetry-instrumentation.md`](docs/mediator/adr/0005-opentelemetry-instrumentation.md).
@@ -239,54 +239,54 @@ description: "All notable changes to DSoftStudio.Mediator."
 
 ### Fixed
 
-- **Open-generic pipeline behavior detection** ó `MediatorPipelineGenerator` now checks `IsGenericTypeDefinition` for `IPipelineBehavior<,>`, `IRequestPreProcessor<>`, `IRequestPostProcessor<,>`, and `IRequestExceptionHandler<,>`, fixing a bug where behaviors registered as open generics were silently skipped.
-- **`IStreamRequestHandler<TRequest, TResponse>` covariance** ó `TResponse` changed from invariant to `out` to match the `IStreamRequest<out TResponse>` contract.
+- **Open-generic pipeline behavior detection** ‚Äî `MediatorPipelineGenerator` now checks `IsGenericTypeDefinition` for `IPipelineBehavior<,>`, `IRequestPreProcessor<>`, `IRequestPostProcessor<,>`, and `IRequestExceptionHandler<,>`, fixing a bug where behaviors registered as open generics were silently skipped.
+- **`IStreamRequestHandler<TRequest, TResponse>` covariance** ‚Äî `TResponse` changed from invariant to `out` to match the `IStreamRequest<out TResponse>` contract.
 
 ### Performance
 
-- **ThreadStatic pipeline chain caches** ó `PipelineChainCache<TRequest, TResponse>` and `StreamPipelineChainCache<TRequest, TResponse>` cache Scoped/Singleton chains per-thread, eliminating a `GetService` call on the hot path. Transient chains continue resolving fresh each call.
-- **Handler resolution cache** ó `HandlerCache<TRequest, TResponse>` replaces `GetRequiredService` on every `Send()` with a cached resolution.
-- **Pre-linked stream behavior chain** ó `StreamPipelineChainHandler` now pre-links the behavior chain at construction (like `PipelineChainHandler`), removing mutable state (`_behaviorIndex`, `_active`, `Interlocked`) from the hot path.
-- **`SequentialNotificationPublisher` optimized** ó Materialize handlers to array once; index-based `for` loop with `IsCompletedSuccessfully` short-circuit; `AwaitRemaining` resumes from `currentIndex + 1` instead of re-scanning with `ReferenceEquals`.
-- **`IsPipelineChainCacheable` / `IsStreamChainCacheable`** ó New `Volatile.Read`/`Volatile.Write` static flags in `RequestDispatch<T,R>` and `StreamDispatch<T,R>` for zero-cost cache-vs-resolve branching.
+- **ThreadStatic pipeline chain caches** ‚Äî `PipelineChainCache<TRequest, TResponse>` and `StreamPipelineChainCache<TRequest, TResponse>` cache Scoped/Singleton chains per-thread, eliminating a `GetService` call on the hot path. Transient chains continue resolving fresh each call.
+- **Handler resolution cache** ‚Äî `HandlerCache<TRequest, TResponse>` replaces `GetRequiredService` on every `Send()` with a cached resolution.
+- **Pre-linked stream behavior chain** ‚Äî `StreamPipelineChainHandler` now pre-links the behavior chain at construction (like `PipelineChainHandler`), removing mutable state (`_behaviorIndex`, `_active`, `Interlocked`) from the hot path.
+- **`SequentialNotificationPublisher` optimized** ‚Äî Materialize handlers to array once; index-based `for` loop with `IsCompletedSuccessfully` short-circuit; `AwaitRemaining` resumes from `currentIndex + 1` instead of re-scanning with `ReferenceEquals`.
+- **`IsPipelineChainCacheable` / `IsStreamChainCacheable`** ‚Äî New `Volatile.Read`/`Volatile.Write` static flags in `RequestDispatch<T,R>` and `StreamDispatch<T,R>` for zero-cost cache-vs-resolve branching.
 
 ### AOT & Trimming
 
-- **Eliminate `MakeGenericType` + `Expression.Compile` from `Publish(object)`** ó The `NotificationHandlerWrapper` / `NotificationHandlerWrapperImpl<T>` pattern (runtime reflection) replaced with `NotificationObjectDispatch`, a compile-time generated dispatch table. Fully AOT/trimmer-safe.
-- **Delete `NotificationDispatcher`** ó Replaced with `NotificationCachedDispatcher` (compile-time dispatch with handler caching).
-- **Delete `NotificationHandlerWrapper` / `NotificationHandlerWrapperImpl<T>`** ó No longer needed; AOT dispatch table handles all scenarios.
-- **Move `IServiceProviderAccessor` from Abstractions to core** ó Interceptor-internal interface no longer exposed in the public Abstractions assembly.
-- **Mark Abstractions assembly as trimmable/AOT-compatible** ó Added `IsTrimmable` and conditional `IsAotCompatible` to the Abstractions csproj.
+- **Eliminate `MakeGenericType` + `Expression.Compile` from `Publish(object)`** ‚Äî The `NotificationHandlerWrapper` / `NotificationHandlerWrapperImpl<T>` pattern (runtime reflection) replaced with `NotificationObjectDispatch`, a compile-time generated dispatch table. Fully AOT/trimmer-safe.
+- **Delete `NotificationDispatcher`** ‚Äî Replaced with `NotificationCachedDispatcher` (compile-time dispatch with handler caching).
+- **Delete `NotificationHandlerWrapper` / `NotificationHandlerWrapperImpl<T>`** ‚Äî No longer needed; AOT dispatch table handles all scenarios.
+- **Move `IServiceProviderAccessor` from Abstractions to core** ‚Äî Interceptor-internal interface no longer exposed in the public Abstractions assembly.
+- **Mark Abstractions assembly as trimmable/AOT-compatible** ‚Äî Added `IsTrimmable` and conditional `IsAotCompatible` to the Abstractions csproj.
 
 ### Code Quality
 
-- **CA1068** ó `CancellationToken` moved to last parameter in `PipelineChainHandler.AwaitPostProcessorAndContinue`, `SequentialNotificationPublisher.AwaitRemaining`, `NotificationCachedDispatcher`.
-- **S2699** ó Added assertions to `PublishTests` and `NotificationWrapperTests`.
-- **CA2211** ó Static field visibility fixes.
-- **xUnit1031** ó Replaced blocking `.Result` calls with `await` in tests.
-- **Cognitive complexity** ó Extracted `InterceptorHelpers` (shared `ImplementsInterface`, `ResolveRequestParameter`), refactored `ReferencedAssemblyScanner.CollectHandlersFromAssembly`, extracted `TryResolveInferredTypes` in `SendInterceptorGenerator`, extracted `PipelineChainHandler.ComputePipelineMode`.
-- **`Unit` operators** ó Added `<`, `>`, `<=`, `>=` comparison operators (CA1036).
-- **False positive suppressions** ó S2326, S2743, S3267.
+- **CA1068** ‚Äî `CancellationToken` moved to last parameter in `PipelineChainHandler.AwaitPostProcessorAndContinue`, `SequentialNotificationPublisher.AwaitRemaining`, `NotificationCachedDispatcher`.
+- **S2699** ‚Äî Added assertions to `PublishTests` and `NotificationWrapperTests`.
+- **CA2211** ‚Äî Static field visibility fixes.
+- **xUnit1031** ‚Äî Replaced blocking `.Result` calls with `await` in tests.
+- **Cognitive complexity** ‚Äî Extracted `InterceptorHelpers` (shared `ImplementsInterface`, `ResolveRequestParameter`), refactored `ReferencedAssemblyScanner.CollectHandlersFromAssembly`, extracted `TryResolveInferredTypes` in `SendInterceptorGenerator`, extracted `PipelineChainHandler.ComputePipelineMode`.
+- **`Unit` operators** ‚Äî Added `<`, `>`, `<=`, `>=` comparison operators (CA1036).
+- **False positive suppressions** ‚Äî S2326, S2743, S3267.
 
 ### Testing
 
-- **Performance regression tests** ó `AllocationRegressionTests` and `ThroughputRegressionTests` with CI-safe thresholds (Send = 50 µs, Publish = 50 µs, Stream = 100 µs; Send = 128 B, Publish = 64 B, Stream = 512 B).
+- **Performance regression tests** ‚Äî `AllocationRegressionTests` and `ThroughputRegressionTests` with CI-safe thresholds (Send = 50 ¬µs, Publish = 50 ¬µs, Stream = 100 ¬µs; Send = 128 B, Publish = 64 B, Stream = 512 B).
 
 ### Benchmarks
 
 - **Added Mediator (martinothamar/Mediator) 3.0.1** to comparison suite.
-- **Updated all benchmark results** ó Send ~7 ns, Publish ~8.5 ns (down from ~18 ns each).
+- **Updated all benchmark results** ‚Äî Send ~7 ns, Publish ~8.5 ns (down from ~18 ns each).
 - **Updated `generate-benchmarks-md.ps1`** with isolated vs. combined run variance note.
 
 ### Documentation
 
-- **Major README rewrite** ó 4-way latency/allocation comparison tables (DSoft, Mediator SG, DispatchR, MediatR), feature comparison table, updated messaging.
+- **Major README rewrite** ‚Äî 4-way latency/allocation comparison tables (DSoft, Mediator SG, DispatchR, MediatR), feature comparison table, updated messaging.
 
 ### CI/CD
 
-- **SonarCloud workflow** ó `.github/workflows/sonar.yml` with Coverlet/OpenCover coverage, sample/benchmark exclusions.
+- **SonarCloud workflow** ‚Äî `.github/workflows/sonar.yml` with Coverlet/OpenCover coverage, sample/benchmark exclusions.
 
 ### Stream Pipeline
 
-- **Lifetime-aware stream chain registration** ó `StreamGenerator` registers `StreamPipelineChainHandler` as Singleton/Scoped/Transient based on component lifetimes.
-- **No-behaviors fast path for streams** ó When no stream behaviors are registered, the generated pipeline resolves the handler directly, skipping chain allocation.
+- **Lifetime-aware stream chain registration** ‚Äî `StreamGenerator` registers `StreamPipelineChainHandler` as Singleton/Scoped/Transient based on component lifetimes.
+- **No-behaviors fast path for streams** ‚Äî When no stream behaviors are registered, the generated pipeline resolves the handler directly, skipping chain allocation.
