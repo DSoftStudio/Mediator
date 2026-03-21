@@ -11,7 +11,7 @@ description: "All notable changes to DSoftStudio.Mediator."
   </picture>
 </p>
 
-[â† Back to Documentation](index.md)
+[&larr; Back to Documentation](index.md)
 
 # Changelog
 
