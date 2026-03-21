@@ -15,7 +15,7 @@ description: "All notable changes to DSoftStudio.Mediator."
 
 # Changelog
 
-## [1.1.6-rc.1] — 2026-03-21
+## [1.1.6] — 2026-03-21
 
 ### Added
 
@@ -33,7 +33,7 @@ description: "All notable changes to DSoftStudio.Mediator."
 
 - **README rewrite** — Complete restructure with new sections: Execution Model (ASCII pipeline diagram), When to Use This (explicit DSoft vs MediatR positioning), Ecosystem (category-labeled companion packages). Feature Comparison table empirically verified against martinothamar/Mediator 3.0.1, DispatchR 2.1.1, and MediatR 12.4.1 with live test projects. DispatchR corrected to ✅ for exact-type notification dispatch. Mediator (SG) Native AOT compatibility confirmed via `dotnet publish` AOT + native binary execution.
 - **Design-time build cache cleanup** — Stale `.dtbcache.v2` causing IntelliSense false positives (CS0246/CS0518) documented and resolved via cache invalidation.
-- **Companion packages bumped to 1.0.4-rc.1** — `DSoftStudio.Mediator.FluentValidation`, `DSoftStudio.Mediator.HybridCache`, `DSoftStudio.Mediator.OpenTelemetry` updated to depend on `DSoftStudio.Mediator >= 1.1.6-rc.1`.
+- **Companion packages bumped to 1.0.4** — `DSoftStudio.Mediator.FluentValidation`, `DSoftStudio.Mediator.HybridCache`, `DSoftStudio.Mediator.OpenTelemetry` updated to depend on `DSoftStudio.Mediator >= 1.1.6`.
 
 ---
 
