@@ -88,7 +88,7 @@ public class SelfHandlerTests : IDisposable
     public async Task SelfHandler_Sync_ReturnsCorrectValue()
     {
         var result = await _mediator.Send<SelfHandledPing, int>(
-            new SelfHandledPing(21));
+            new SelfHandledPing(21), TestContext.Current.CancellationToken);
 
         result.ShouldBe(42);
     }
@@ -97,7 +97,7 @@ public class SelfHandlerTests : IDisposable
     public async Task SelfHandler_WithDIService_ReturnsCorrectValue()
     {
         var result = await _mediator.Send<SelfHandledGreet, string>(
-            new SelfHandledGreet("World"));
+            new SelfHandledGreet("World"), TestContext.Current.CancellationToken);
 
         result.ShouldBe("Hello, World!");
     }
@@ -106,7 +106,7 @@ public class SelfHandlerTests : IDisposable
     public async Task SelfHandler_Async_ReturnsCorrectValue()
     {
         var result = await _mediator.Send<SelfHandledAsync, int>(
-            new SelfHandledAsync(32));
+            new SelfHandledAsync(32), TestContext.Current.CancellationToken);
 
         result.ShouldBe(42);
     }
@@ -117,7 +117,7 @@ public class SelfHandlerTests : IDisposable
         SelfHandledVoid.WasExecuted = false;
 
         var result = await _mediator.Send<SelfHandledVoid, Unit>(
-            new SelfHandledVoid());
+            new SelfHandledVoid(), TestContext.Current.CancellationToken);
 
         result.ShouldBe(Unit.Value);
         SelfHandledVoid.WasExecuted.ShouldBeTrue();

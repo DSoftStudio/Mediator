@@ -46,7 +46,7 @@ public class PipelineGcLeakTests : IDisposable
     {
         // Warm pipeline
         for (int i = 0; i < 100; i++)
-            await _mediator.Send(new MemoryPing());
+            await _mediator.Send(new MemoryPing(), TestContext.Current.CancellationToken);
 
         GC.Collect();
         GC.WaitForPendingFinalizers();
@@ -57,7 +57,7 @@ public class PipelineGcLeakTests : IDisposable
         const int iterations = 1_000_000;
 
         for (int i = 0; i < iterations; i++)
-            await _mediator.Send(new MemoryPing());
+            await _mediator.Send(new MemoryPing(), TestContext.Current.CancellationToken);
 
         GC.Collect();
         GC.WaitForPendingFinalizers();
@@ -78,7 +78,7 @@ public class PipelineGcLeakTests : IDisposable
     [Fact]
     public async Task Send_ScopedExecution_HandlerIsCollectedAfterDisposal()
     {
-        await _mediator.Send(new MemoryPing());
+        await _mediator.Send(new MemoryPing(), TestContext.Current.CancellationToken);
 
         var weakRef = ResolveSendAndTrackHandler();
 

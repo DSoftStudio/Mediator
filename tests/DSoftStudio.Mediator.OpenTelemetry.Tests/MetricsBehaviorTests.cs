@@ -48,7 +48,7 @@ public class MetricsBehaviorTests : IDisposable
         var behavior = new MediatorMetricsBehavior<TestCommand, string>(options);
         var handler = new TestCommandHandler();
 
-        await behavior.Handle(new TestCommand("test"), handler, CancellationToken.None);
+        await behavior.Handle(new TestCommand("test"), handler, TestContext.Current.CancellationToken);
         _listener.RecordObservableInstruments();
 
         var duration = _measurements.Where(m => m.Name == "mediator.request.duration").ToList();
@@ -67,7 +67,7 @@ public class MetricsBehaviorTests : IDisposable
         var behavior = new MediatorMetricsBehavior<TestCommand, string>(options);
         var handler = new TestCommandHandler();
 
-        await behavior.Handle(new TestCommand("test"), handler, CancellationToken.None);
+        await behavior.Handle(new TestCommand("test"), handler, TestContext.Current.CancellationToken);
         _listener.RecordObservableInstruments();
 
         var active = _counterMeasurements.Where(m => m.Name == "mediator.request.active").ToList();
@@ -84,7 +84,7 @@ public class MetricsBehaviorTests : IDisposable
         var handler = new FailingCommandHandler();
 
         await Should.ThrowAsync<InvalidOperationException>(async () =>
-            await behavior.Handle(new FailingCommand("boom"), handler, CancellationToken.None));
+            await behavior.Handle(new FailingCommand("boom"), handler, TestContext.Current.CancellationToken));
 
         _listener.RecordObservableInstruments();
 
@@ -100,7 +100,7 @@ public class MetricsBehaviorTests : IDisposable
         var behavior = new MediatorMetricsBehavior<TestCommand, string>(options);
         var handler = new TestCommandHandler();
 
-        await behavior.Handle(new TestCommand("test"), handler, CancellationToken.None);
+        await behavior.Handle(new TestCommand("test"), handler, TestContext.Current.CancellationToken);
         _listener.RecordObservableInstruments();
 
         _measurements.ShouldBeEmpty();

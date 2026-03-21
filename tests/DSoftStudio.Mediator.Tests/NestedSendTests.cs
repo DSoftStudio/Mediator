@@ -56,7 +56,7 @@ public class NestedSendTests : IDisposable
     [Fact]
     public async Task Mediator_Should_Support_Nested_Send()
     {
-        var result = await _mediator.Send(new OuterPing());
+        var result = await _mediator.Send(new OuterPing(),TestContext.Current.CancellationToken);
 
         result.ShouldBe(42);
     }

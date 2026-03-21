@@ -34,7 +34,7 @@ public class TypedExtensionTests : IDisposable
     public async Task Send_WithTypeInference_ReturnsCorrectResult()
     {
         // Uses generated extension: Send(Ping) → Send<Ping, int>(Ping)
-        var result = await _mediator.Send(new Ping());
+        var result = await _mediator.Send(new Ping(), TestContext.Current.CancellationToken);
 
         result.ShouldBe(42);
     }
@@ -43,10 +43,10 @@ public class TypedExtensionTests : IDisposable
     public async Task Send_WithExplicitGenerics_ReturnsSameResult()
     {
         // Explicit generics (existing API)
-        var explicit_ = await _mediator.Send(new Ping());
+        var explicit_ = await _mediator.Send(new Ping(), TestContext.Current.CancellationToken);
 
         // Type-inferred (generated extension)
-        var inferred = await _mediator.Send(new Ping());
+        var inferred = await _mediator.Send(new Ping(), TestContext.Current.CancellationToken);
 
         explicit_.ShouldBe(inferred);
     }
@@ -56,7 +56,7 @@ public class TypedExtensionTests : IDisposable
     {
         // Uses generated extension: CreateStream(PingStream) → CreateStream<PingStream, int>(PingStream)
         var values = new List<int>();
-        await foreach (var v in _mediator.CreateStream(new PingStream()))
+        await foreach (var v in _mediator.CreateStream(new PingStream(), TestContext.Current.CancellationToken))
             values.Add(v);
 
         values.ShouldBe([1, 2, 3]);
@@ -66,11 +66,11 @@ public class TypedExtensionTests : IDisposable
     public async Task CreateStream_WithExplicitGenerics_ReturnsSameValues()
     {
         var explicitValues = new List<int>();
-        await foreach (var v in _mediator.CreateStream(new PingStream()))
+        await foreach (var v in _mediator.CreateStream(new PingStream(), TestContext.Current.CancellationToken))
             explicitValues.Add(v);
 
         var inferredValues = new List<int>();
-        await foreach (var v in _mediator.CreateStream(new PingStream()))
+        await foreach (var v in _mediator.CreateStream(new PingStream(), TestContext.Current.CancellationToken))
             inferredValues.Add(v);
 
         explicitValues.ShouldBe(inferredValues);
@@ -91,7 +91,7 @@ public class TypedExtensionTests : IDisposable
 
         // Resolves to: MediatorTypedExtensions.Send(sender, Ping, ct)
         //   → sender.Send<Ping, int>(request, ct)   (virtual dispatch, no cast)
-        var result = await sender.Send(new Ping());
+        var result = await sender.Send(new Ping(), TestContext.Current.CancellationToken);
 
         result.ShouldBe(42);
     }

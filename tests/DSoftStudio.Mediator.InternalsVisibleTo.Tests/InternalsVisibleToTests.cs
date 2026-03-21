@@ -34,7 +34,7 @@ public class InternalsVisibleToTests
     {
         // PingQueryHandler lives in the Host project
         var mediator = _sp.GetRequiredService<IMediator>();
-        var result = await mediator.Send<PingQuery, string>(new PingQuery());
+        var result = await mediator.Send<PingQuery, string>(new PingQuery(), TestContext.Current.CancellationToken);
         Assert.Equal("Pong", result);
     }
 
@@ -43,7 +43,7 @@ public class InternalsVisibleToTests
     {
         // EchoQueryHandler lives in THIS test project
         var mediator = _sp.GetRequiredService<IMediator>();
-        var result = await mediator.Send<EchoQuery, string>(new EchoQuery("Hello"));
+        var result = await mediator.Send<EchoQuery, string>(new EchoQuery("Hello"), TestContext.Current.CancellationToken);
         Assert.Equal("Hello", result);
     }
 
@@ -60,6 +60,6 @@ public class InternalsVisibleToTests
     {
         var mediator = _sp.GetRequiredService<IMediator>();
         // Should not throw — notification handler from Host is registered
-        await mediator.Publish(new PingNotification());
+        await mediator.Publish(new PingNotification(), TestContext.Current.CancellationToken);
     }
 }

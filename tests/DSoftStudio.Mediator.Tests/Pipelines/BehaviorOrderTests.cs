@@ -30,7 +30,7 @@ public class BehaviorOrderTests
         using var sp = services.BuildServiceProvider();
 
         var pipeline = PipelineBuilder.Build<Ping, int>();
-        await pipeline(new Ping(), sp, CancellationToken.None);
+        await pipeline(new Ping(), sp, TestContext.Current.CancellationToken);
 
         log.ShouldBe(new[] {
             "First:before",
@@ -61,7 +61,7 @@ public class BehaviorOrderTests
         using var sp = services.BuildServiceProvider();
 
         var pipeline = PipelineBuilder.Build<Ping, int>();
-        var result = await pipeline(new Ping(), sp, CancellationToken.None);
+        var result = await pipeline(new Ping(), sp, TestContext.Current.CancellationToken);
 
         result.ShouldBe(42);
         log.Where(e => e.EndsWith(":before")).Count().ShouldBe(5);

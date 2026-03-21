@@ -127,7 +127,7 @@ public class ParallelNotificationPublisherTests
         using var provider = BuildProvider(a, b);
         var mediator = provider.GetRequiredService<IMediator>();
 
-        await mediator.Publish(new ParallelPing());
+        await mediator.Publish(new ParallelPing(), TestContext.Current.CancellationToken);
 
         a.CallCount.ShouldBe(1);
         b.CallCount.ShouldBe(1);
@@ -142,7 +142,7 @@ public class ParallelNotificationPublisherTests
         var mediator = provider.GetRequiredService<IMediator>();
 
         ConcurrencyTracker.Reset();
-        await mediator.Publish(new ParallelSlowPing());
+        await mediator.Publish(new ParallelSlowPing(), TestContext.Current.CancellationToken);
 
         // Both handlers call Enter() synchronously before the first await,
         // so peak >= 2 proves they overlapped — no wall-clock timing needed.
@@ -157,7 +157,7 @@ public class ParallelNotificationPublisherTests
         using var provider = BuildProvider<ParallelThrowPing>(new ThrowParallelHandler(), new SafeParallelHandler());
         var mediator = provider.GetRequiredService<IMediator>();
 
-        Func<Task> act = () => mediator.Publish(new ParallelThrowPing());
+        Func<Task> act = () => mediator.Publish(new ParallelThrowPing(), TestContext.Current.CancellationToken);
 
         await Should.ThrowAsync<InvalidOperationException>(act);
     }
@@ -170,7 +170,7 @@ public class ParallelNotificationPublisherTests
         using var provider = BuildProvider(a, b);
         var mediator = provider.GetRequiredService<IMediator>();
 
-        await mediator.Publish((object)new ParallelPing());
+        await mediator.Publish((object)new ParallelPing(), TestContext.Current.CancellationToken);
 
         a.CallCount.ShouldBe(1);
         b.CallCount.ShouldBe(1);

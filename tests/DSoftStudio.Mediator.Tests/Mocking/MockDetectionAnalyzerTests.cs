@@ -161,14 +161,14 @@ public class MockDetectionAnalyzerTests
             private readonly Dictionary<string, string> _values;
             public TestGlobalOptions(Dictionary<string, string> values) => _values = values;
 
-            public override bool TryGetValue(string key, out string? value)
-                => _values.TryGetValue(key, out value);
+            public override bool TryGetValue(string key, out string value)
+                => _values.TryGetValue(key, out value!);
         }
 
         private sealed class EmptyOptions : AnalyzerConfigOptions
         {
             public static readonly EmptyOptions Instance = new();
-            public override bool TryGetValue(string key, out string? value) { value = null; return false; }
+            public override bool TryGetValue(string key, out string value) { value = null!; return false; }
         }
     }
 }

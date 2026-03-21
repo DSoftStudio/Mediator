@@ -97,7 +97,7 @@ public class PipelineProcessorAsyncTests
         services.PrecompilePipelines();
 
         using var provider = services.BuildServiceProvider();
-        var result = await provider.GetRequiredService<IMediator>().Send(new ProcessorSyncPing());
+        var result = await provider.GetRequiredService<IMediator>().Send(new ProcessorSyncPing(), TestContext.Current.CancellationToken);
 
         result.ShouldBe(42);
         pre.Log.ShouldBe(new[] {"pre:sync"});
@@ -116,7 +116,7 @@ public class PipelineProcessorAsyncTests
         services.PrecompilePipelines();
 
         using var provider = services.BuildServiceProvider();
-        var result = await provider.GetRequiredService<IMediator>().Send(new ProcessorSyncPing());
+        var result = await provider.GetRequiredService<IMediator>().Send(new ProcessorSyncPing(), TestContext.Current.CancellationToken);
 
         result.ShouldBe(42);
         pre.Log.ShouldBe(new[] {"pre:async"});
@@ -135,7 +135,7 @@ public class PipelineProcessorAsyncTests
         services.PrecompilePipelines();
 
         using var provider = services.BuildServiceProvider();
-        var result = await provider.GetRequiredService<IMediator>().Send(new ProcessorAsyncPing());
+        var result = await provider.GetRequiredService<IMediator>().Send(new ProcessorAsyncPing(), TestContext.Current.CancellationToken);
 
         result.ShouldBe(99);
         pre.Log.ShouldBe(new[] {"pre:sync"});
@@ -154,7 +154,7 @@ public class PipelineProcessorAsyncTests
         services.PrecompilePipelines();
 
         using var provider = services.BuildServiceProvider();
-        var result = await provider.GetRequiredService<IMediator>().Send(new ProcessorSyncPing());
+        var result = await provider.GetRequiredService<IMediator>().Send(new ProcessorSyncPing(), TestContext.Current.CancellationToken);
 
         result.ShouldBe(42);
         pre.Log.ShouldBe(new[] {"pre:sync"});
@@ -173,7 +173,7 @@ public class PipelineProcessorAsyncTests
         services.PrecompilePipelines();
 
         using var provider = services.BuildServiceProvider();
-        var result = await provider.GetRequiredService<IMediator>().Send(new ProcessorSyncPing());
+        var result = await provider.GetRequiredService<IMediator>().Send(new ProcessorSyncPing(), TestContext.Current.CancellationToken);
 
         result.ShouldBe(42);
         pre1.Log.ShouldBe(new[] {"pre:async"});
@@ -190,7 +190,7 @@ public class PipelineProcessorAsyncTests
         services.PrecompilePipelines();
 
         using var provider = services.BuildServiceProvider();
-        var result = await provider.GetRequiredService<IMediator>().Send(new ProcessorSyncPing());
+        var result = await provider.GetRequiredService<IMediator>().Send(new ProcessorSyncPing(), TestContext.Current.CancellationToken);
 
         result.ShouldBe(42);
         post.Log.ShouldBe(new[] {"post:sync:42"});
@@ -213,7 +213,7 @@ public class PipelineProcessorAsyncTests
 
         using var provider = services.BuildServiceProvider();
         var result = await provider.GetRequiredService<IMediator>().Send(
-            new ProcessorWithExPing(true));
+            new ProcessorWithExPing(true), TestContext.Current.CancellationToken);
 
         result.ShouldBe(-1);
         pre.Log.ShouldBe(new[] {"pre:sync"});

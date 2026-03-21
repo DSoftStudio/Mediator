@@ -19,7 +19,7 @@ public class TracingBehaviorTests
         var handler = new TestCommandHandler();
 
         var result = await behavior.Handle(
-            new TestCommand("test"), handler, CancellationToken.None);
+            new TestCommand("test"), handler, TestContext.Current.CancellationToken);
 
         result.ShouldBe("handled:test");
 
@@ -37,7 +37,7 @@ public class TracingBehaviorTests
         var behavior = new MediatorTracingBehavior<TestQuery, string>(options);
         var handler = new TestQueryHandler();
 
-        await behavior.Handle(new TestQuery(42), handler, CancellationToken.None);
+        await behavior.Handle(new TestQuery(42), handler, TestContext.Current.CancellationToken);
 
         var activity = collector.Activities.ShouldHaveSingleItem();
         activity.DisplayName.ShouldBe("TestQuery query");
@@ -52,7 +52,7 @@ public class TracingBehaviorTests
         var behavior = new MediatorTracingBehavior<TestRequest, int>(options);
         var handler = new TestRequestHandler();
 
-        await behavior.Handle(new TestRequest("hello"), handler, CancellationToken.None);
+        await behavior.Handle(new TestRequest("hello"), handler, TestContext.Current.CancellationToken);
 
         var activity = collector.Activities.ShouldHaveSingleItem();
         activity.DisplayName.ShouldBe("TestRequest request");
@@ -67,7 +67,7 @@ public class TracingBehaviorTests
         var behavior = new MediatorTracingBehavior<TestCommand, string>(options);
         var handler = new TestCommandHandler();
 
-        await behavior.Handle(new TestCommand("test"), handler, CancellationToken.None);
+        await behavior.Handle(new TestCommand("test"), handler, TestContext.Current.CancellationToken);
 
         var activity = collector.Activities.ShouldHaveSingleItem();
         activity.GetTagItem("mediator.request.type")!.ShouldBe(typeof(TestCommand).FullName);
@@ -84,7 +84,7 @@ public class TracingBehaviorTests
         var handler = new FailingCommandHandler();
 
         await Should.ThrowAsync<InvalidOperationException>(async () =>
-            await behavior.Handle(new FailingCommand("boom"), handler, CancellationToken.None));
+            await behavior.Handle(new FailingCommand("boom"), handler, TestContext.Current.CancellationToken));
 
         var activity = collector.Activities.ShouldHaveSingleItem();
         activity.Status.ShouldBe(ActivityStatusCode.Error);
@@ -104,7 +104,7 @@ public class TracingBehaviorTests
         var handler = new FailingCommandHandler();
 
         await Should.ThrowAsync<InvalidOperationException>(async () =>
-            await behavior.Handle(new FailingCommand("boom"), handler, CancellationToken.None));
+            await behavior.Handle(new FailingCommand("boom"), handler, TestContext.Current.CancellationToken));
 
         var exceptionEvent = collector.Activities.Single().Events.ShouldHaveSingleItem();
         var stacktrace = exceptionEvent.Tags.FirstOrDefault(t => t.Key == "exception.stacktrace").Value;
@@ -121,7 +121,7 @@ public class TracingBehaviorTests
         var handler = new FailingCommandHandler();
 
         await Should.ThrowAsync<InvalidOperationException>(async () =>
-            await behavior.Handle(new FailingCommand("boom"), handler, CancellationToken.None));
+            await behavior.Handle(new FailingCommand("boom"), handler, TestContext.Current.CancellationToken));
 
         var exceptionEvent = collector.Activities.Single().Events.ShouldHaveSingleItem();
         var stacktrace = exceptionEvent.Tags.FirstOrDefault(t => t.Key == "exception.stacktrace").Value;
@@ -143,7 +143,7 @@ public class TracingBehaviorTests
         var behavior = new MediatorTracingBehavior<TestCommand, string>(options);
         var handler = new TestCommandHandler();
 
-        await behavior.Handle(new TestCommand("enriched"), handler, CancellationToken.None);
+        await behavior.Handle(new TestCommand("enriched"), handler, TestContext.Current.CancellationToken);
 
         var activity = collector.Activities.ShouldHaveSingleItem();
         activity.GetTagItem("custom.value")!.ShouldBe("enriched");
@@ -158,7 +158,7 @@ public class TracingBehaviorTests
         var handler = new TestCommandHandler();
 
         var result = await behavior.Handle(
-            new TestCommand("test"), handler, CancellationToken.None);
+            new TestCommand("test"), handler, TestContext.Current.CancellationToken);
 
         result.ShouldBe("handled:test");
         // No exception = pass-through works correctly
@@ -172,7 +172,7 @@ public class TracingBehaviorTests
         var behavior = new MediatorTracingBehavior<TestCommand, string>(options);
         var handler = new TestCommandHandler();
 
-        await behavior.Handle(new TestCommand("test"), handler, CancellationToken.None);
+        await behavior.Handle(new TestCommand("test"), handler, TestContext.Current.CancellationToken);
 
         collector.Activities.ShouldBeEmpty();
     }

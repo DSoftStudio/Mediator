@@ -165,7 +165,7 @@ public class SequentialNotificationPublisherCoverageTests
         var publisher = new SequentialNotificationPublisher();
         var handlers = Array.Empty<INotificationHandler<CovSyncNotification>>();
 
-        var task = publisher.Publish(handlers, new CovSyncNotification(), CancellationToken.None);
+        var task = publisher.Publish(handlers, new CovSyncNotification(), TestContext.Current.CancellationToken);
         await task;
 
         task.IsCompletedSuccessfully.ShouldBeTrue();
@@ -178,7 +178,7 @@ public class SequentialNotificationPublisherCoverageTests
         var publisher = new SequentialNotificationPublisher();
         var handlers = new INotificationHandler<CovSyncNotification>[] { h1 };
 
-        await publisher.Publish(handlers, new CovSyncNotification(), CancellationToken.None);
+        await publisher.Publish(handlers, new CovSyncNotification(), TestContext.Current.CancellationToken);
 
         h1.CallCount.ShouldBe(1);
     }
@@ -191,7 +191,7 @@ public class SequentialNotificationPublisherCoverageTests
         var publisher = new SequentialNotificationPublisher();
         var handlers = new INotificationHandler<CovAsyncNotification>[] { h1, h2 };
 
-        await publisher.Publish(handlers, new CovAsyncNotification(), CancellationToken.None);
+        await publisher.Publish(handlers, new CovAsyncNotification(), TestContext.Current.CancellationToken);
 
         h1.CallCount.ShouldBe(1);
         h2.CallCount.ShouldBe(1);
@@ -204,7 +204,7 @@ public class SequentialNotificationPublisherCoverageTests
         var publisher = new SequentialNotificationPublisher();
         var handlers = new List<INotificationHandler<CovSyncNotification>> { h1 };
 
-        await publisher.Publish(handlers, new CovSyncNotification(), CancellationToken.None);
+        await publisher.Publish(handlers, new CovSyncNotification(), TestContext.Current.CancellationToken);
 
         h1.CallCount.ShouldBe(1);
     }
@@ -218,7 +218,7 @@ public class ParallelNotificationPublisherCoverageTests
         var publisher = new ParallelNotificationPublisher();
         var handlers = Array.Empty<INotificationHandler<CovSyncNotification>>();
 
-        var task = publisher.Publish(handlers, new CovSyncNotification(), CancellationToken.None);
+        var task = publisher.Publish(handlers, new CovSyncNotification(), TestContext.Current.CancellationToken);
         await task;
 
         task.IsCompletedSuccessfully.ShouldBeTrue();
@@ -231,7 +231,7 @@ public class ParallelNotificationPublisherCoverageTests
         var publisher = new ParallelNotificationPublisher();
         var handlers = new List<INotificationHandler<CovSyncNotification>> { h1 };
 
-        await publisher.Publish(handlers, new CovSyncNotification(), CancellationToken.None);
+        await publisher.Publish(handlers, new CovSyncNotification(), TestContext.Current.CancellationToken);
 
         h1.CallCount.ShouldBe(1);
     }
@@ -247,7 +247,7 @@ public class NotificationObjectDispatchCoverageTests
 
         Should.Throw<InvalidOperationException>(
             () => NotificationObjectDispatch.Dispatch(
-                new UnregisteredNotification(), sp, null, CancellationToken.None));
+                new UnregisteredNotification(), sp, null, TestContext.Current.CancellationToken));
     }
 }
 
@@ -263,7 +263,7 @@ public class MediatorPublishObjectCoverageTests
         var mediator = sp.GetRequiredService<IMediator>();
 
         await Should.ThrowAsync<ArgumentException>(
-            () => mediator.Publish("not a notification", CancellationToken.None));
+            () => mediator.Publish("not a notification", TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -276,7 +276,7 @@ public class MediatorPublishObjectCoverageTests
         var mediator = sp.GetRequiredService<IMediator>();
 
         await Should.ThrowAsync<ArgumentNullException>(
-            () => mediator.Publish((object)null!, CancellationToken.None));
+            () => mediator.Publish((object)null!, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -289,7 +289,7 @@ public class MediatorPublishObjectCoverageTests
         var mediator = sp.GetRequiredService<IMediator>();
 
         await Should.ThrowAsync<ArgumentNullException>(
-            () => mediator.Publish<CovSyncNotification>(null!, CancellationToken.None));
+            () => mediator.Publish<CovSyncNotification>(null!, TestContext.Current.CancellationToken));
     }
 }
 
@@ -307,7 +307,7 @@ public class MediatorPublishWithCustomPublisherTests
         var sp = services.BuildServiceProvider();
         var mediator = sp.GetRequiredService<IMediator>();
 
-        await mediator.Publish(new CovSyncNotification());
+        await mediator.Publish(new CovSyncNotification(), TestContext.Current.CancellationToken);
 
         h1.CallCount.ShouldBe(1);
     }
@@ -326,7 +326,7 @@ public class StreamPipelineInvokerCoverageTests
         var mediator = sp.GetRequiredService<IMediator>();
 
         var items = new List<int>();
-        await foreach (var item in mediator.CreateStream<CovStream, int>(new CovStream()))
+        await foreach (var item in mediator.CreateStream<CovStream, int>(new CovStream(), TestContext.Current.CancellationToken))
             items.Add(item);
 
         items.ShouldBe(new[] { 10, 20 });
@@ -344,7 +344,7 @@ public class StreamPipelineInvokerCoverageTests
         var mediator = sp.GetRequiredService<IMediator>();
 
         var items = new List<int>();
-        await foreach (var item in mediator.CreateStream<CovBehaviorStream, int>(new CovBehaviorStream()))
+        await foreach (var item in mediator.CreateStream<CovBehaviorStream, int>(new CovBehaviorStream(), TestContext.Current.CancellationToken))
             items.Add(item);
 
         items.ShouldBe(new[] { 10, 20 });
@@ -362,7 +362,7 @@ public class StreamPipelineInvokerCoverageTests
 
         var items = new List<int>();
         await foreach (var item in StreamPipelineInvoker.Invoke<CovStream, int>(
-            new CovStream(), sp, CancellationToken.None))
+            new CovStream(), sp, TestContext.Current.CancellationToken))
             items.Add(item);
 
         items.ShouldBe(new[] { 10, 20 });
@@ -380,7 +380,7 @@ public class StreamPipelineInvokerCoverageTests
 
         var items = new List<int>();
         await foreach (var item in StreamPipelineInvoker.Invoke<CovBehaviorStream, int>(
-            new CovBehaviorStream(), sp, CancellationToken.None))
+            new CovBehaviorStream(), sp, TestContext.Current.CancellationToken))
             items.Add(item);
 
         items.ShouldBe(new[] { 10, 20 });

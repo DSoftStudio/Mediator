@@ -47,7 +47,7 @@ public class StreamMetricsBehaviorTests : IDisposable
         var behavior = new MediatorStreamMetricsBehavior<TestStreamRequest, int>(options);
         var handler = new TestStreamHandler();
 
-        await foreach (var _ in behavior.Handle(new TestStreamRequest(3), handler, CancellationToken.None))
+        await foreach (var _ in behavior.Handle(new TestStreamRequest(3), handler, TestContext.Current.CancellationToken))
         { }
 
         _listener.RecordObservableInstruments();
@@ -68,7 +68,7 @@ public class StreamMetricsBehaviorTests : IDisposable
         var behavior = new MediatorStreamMetricsBehavior<TestStreamRequest, int>(options);
         var handler = new TestStreamHandler();
 
-        await foreach (var _ in behavior.Handle(new TestStreamRequest(1), handler, CancellationToken.None))
+        await foreach (var _ in behavior.Handle(new TestStreamRequest(1), handler, TestContext.Current.CancellationToken))
         { }
 
         _listener.RecordObservableInstruments();
@@ -88,7 +88,7 @@ public class StreamMetricsBehaviorTests : IDisposable
 
         await Should.ThrowAsync<InvalidOperationException>(async () =>
         {
-            await foreach (var _ in behavior.Handle(new FailingStreamRequest(), handler, CancellationToken.None))
+            await foreach (var _ in behavior.Handle(new FailingStreamRequest(), handler, TestContext.Current.CancellationToken))
             { }
         });
 
@@ -107,7 +107,7 @@ public class StreamMetricsBehaviorTests : IDisposable
         var behavior = new MediatorStreamMetricsBehavior<TestStreamRequest, int>(options);
         var handler = new TestStreamHandler();
 
-        await foreach (var _ in behavior.Handle(new TestStreamRequest(1), handler, CancellationToken.None))
+        await foreach (var _ in behavior.Handle(new TestStreamRequest(1), handler, TestContext.Current.CancellationToken))
         { }
 
         _listener.RecordObservableInstruments();

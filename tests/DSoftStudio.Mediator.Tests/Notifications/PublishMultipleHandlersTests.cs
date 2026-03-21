@@ -32,7 +32,7 @@ public class PublishMultipleHandlersTests : IDisposable
     [Fact]
     public async Task Publish_MultipleHandlers_AllInvoked()
     {
-        await _mediator.Publish(new OrderedNotification());
+        await _mediator.Publish(new OrderedNotification(), TestContext.Current.CancellationToken);
 
         _log.Count.ShouldBe(2);
     }
@@ -40,7 +40,7 @@ public class PublishMultipleHandlersTests : IDisposable
     [Fact]
     public async Task Publish_MultipleHandlers_OrderPreserved()
     {
-        await _mediator.Publish(new OrderedNotification());
+        await _mediator.Publish(new OrderedNotification(), TestContext.Current.CancellationToken);
 
         _log.ShouldBe(new[] {"A", "B"});
     }

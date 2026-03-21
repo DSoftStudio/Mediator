@@ -113,7 +113,7 @@ public class PipelineChainHandlerCoverageTests
         var sp = services.BuildServiceProvider();
         var mediator = sp.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send<CovAsyncPre, int>(new CovAsyncPre());
+        var result = await mediator.Send<CovAsyncPre, int>(new CovAsyncPre(), TestContext.Current.CancellationToken);
         result.ShouldBe(1);
     }
 
@@ -128,7 +128,7 @@ public class PipelineChainHandlerCoverageTests
         var sp = services.BuildServiceProvider();
         var mediator = sp.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send<CovAsyncPost, int>(new CovAsyncPost());
+        var result = await mediator.Send<CovAsyncPost, int>(new CovAsyncPost(), TestContext.Current.CancellationToken);
         result.ShouldBe(2);
     }
 
@@ -144,7 +144,7 @@ public class PipelineChainHandlerCoverageTests
         var sp = services.BuildServiceProvider();
         var mediator = sp.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send<CovAsyncPrePost, int>(new CovAsyncPrePost());
+        var result = await mediator.Send<CovAsyncPrePost, int>(new CovAsyncPrePost(), TestContext.Current.CancellationToken);
         result.ShouldBe(3);
     }
 
@@ -159,7 +159,7 @@ public class PipelineChainHandlerCoverageTests
         var sp = services.BuildServiceProvider();
         var mediator = sp.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send<CovExOnly, int>(new CovExOnly());
+        var result = await mediator.Send<CovExOnly, int>(new CovExOnly(), TestContext.Current.CancellationToken);
         result.ShouldBe(default(int));
     }
 
@@ -176,7 +176,7 @@ public class PipelineChainHandlerCoverageTests
         var sp = services.BuildServiceProvider();
         var mediator = sp.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send<CovPreExPost, int>(new CovPreExPost());
+        var result = await mediator.Send<CovPreExPost, int>(new CovPreExPost(), TestContext.Current.CancellationToken);
         result.ShouldBe(default(int));
     }
 
@@ -190,7 +190,7 @@ public class PipelineChainHandlerCoverageTests
         var sp = services.BuildServiceProvider();
         var mediator = sp.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send<CovPassThrough, int>(new CovPassThrough());
+        var result = await mediator.Send<CovPassThrough, int>(new CovPassThrough(), TestContext.Current.CancellationToken);
         result.ShouldBe(99);
     }
 
@@ -205,7 +205,7 @@ public class PipelineChainHandlerCoverageTests
         var sp = services.BuildServiceProvider();
         var mediator = sp.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send<CovPreOnly, int>(new CovPreOnly());
+        var result = await mediator.Send<CovPreOnly, int>(new CovPreOnly(), TestContext.Current.CancellationToken);
         result.ShouldBe(44);
     }
 }

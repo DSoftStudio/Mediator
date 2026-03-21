@@ -42,7 +42,7 @@ public class NotificationWrapperTests : IDisposable
     {
         object notification = new PingNotification();
 
-        await _mediator.Publish(notification);
+        await _mediator.Publish(notification, TestContext.Current.CancellationToken);
 
         _handler.CallCount.ShouldBe(1);
     }
@@ -52,8 +52,8 @@ public class NotificationWrapperTests : IDisposable
     {
         object notification = new PingNotification();
 
-        await _mediator.Publish(notification);
-        await _mediator.Publish(notification);
+        await _mediator.Publish(notification, TestContext.Current.CancellationToken);
+        await _mediator.Publish(notification, TestContext.Current.CancellationToken);
 
         _handler.CallCount.ShouldBe(2);
     }

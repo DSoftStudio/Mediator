@@ -37,7 +37,7 @@ public class SendBehaviorTests : IDisposable
     [Fact]
     public async Task Send_WithBehaviors_ExecutesBehaviors()
     {
-        await _mediator.Send(new Ping());
+        await _mediator.Send(new Ping(), TestContext.Current.CancellationToken);
 
         _log.ShouldContain("B1:before");
         _log.ShouldContain("B2:before");
@@ -46,7 +46,7 @@ public class SendBehaviorTests : IDisposable
     [Fact]
     public async Task Send_WithBehaviors_PreservesOrder()
     {
-        await _mediator.Send(new Ping());
+        await _mediator.Send(new Ping(), TestContext.Current.CancellationToken);
 
         // B1 registered first ? outermost ? enters first, exits last
         _log.ShouldBe(new[] {"B1:before", "B2:before", "B2:after", "B1:after"});
@@ -55,7 +55,7 @@ public class SendBehaviorTests : IDisposable
     [Fact]
     public async Task Send_WithBehaviors_StillReturnsHandlerResult()
     {
-        var result = await _mediator.Send(new Ping());
+        var result = await _mediator.Send(new Ping(), TestContext.Current.CancellationToken);
 
         result.ShouldBe(42);
     }
@@ -72,7 +72,7 @@ public class SendBehaviorTests : IDisposable
         using var sp = services.BuildServiceProvider();
         var mediator = sp.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send(new Ping());
+        var result = await mediator.Send(new Ping(), TestContext.Current.CancellationToken);
         result.ShouldBe(42);
     }
 }

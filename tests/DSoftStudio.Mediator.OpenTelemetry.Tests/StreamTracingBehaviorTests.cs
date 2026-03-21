@@ -18,7 +18,7 @@ public class StreamTracingBehaviorTests
         var handler = new TestStreamHandler();
 
         var items = new List<int>();
-        await foreach (var item in behavior.Handle(new TestStreamRequest(3), handler, CancellationToken.None))
+        await foreach (var item in behavior.Handle(new TestStreamRequest(3), handler, TestContext.Current.CancellationToken))
         {
             items.Add(item);
         }
@@ -39,7 +39,7 @@ public class StreamTracingBehaviorTests
         var behavior = new MediatorStreamTracingBehavior<TestStreamRequest, int>(options);
         var handler = new TestStreamHandler();
 
-        await foreach (var _ in behavior.Handle(new TestStreamRequest(1), handler, CancellationToken.None))
+        await foreach (var _ in behavior.Handle(new TestStreamRequest(1), handler, TestContext.Current.CancellationToken))
         { }
 
         var activity = collector.Activities.ShouldHaveSingleItem();
@@ -57,7 +57,7 @@ public class StreamTracingBehaviorTests
         var handler = new TestStreamHandler();
 
         // Enumeration should keep the span open until fully consumed
-        await foreach (var _ in behavior.Handle(new TestStreamRequest(5), handler, CancellationToken.None))
+        await foreach (var _ in behavior.Handle(new TestStreamRequest(5), handler, TestContext.Current.CancellationToken))
         { }
 
         // Activity is stopped (added to collector) only after full enumeration
@@ -77,7 +77,7 @@ public class StreamTracingBehaviorTests
         var items = new List<int>();
         await Should.ThrowAsync<InvalidOperationException>(async () =>
         {
-            await foreach (var item in behavior.Handle(new FailingStreamRequest(), handler, CancellationToken.None))
+            await foreach (var item in behavior.Handle(new FailingStreamRequest(), handler, TestContext.Current.CancellationToken))
             {
                 items.Add(item);
             }
@@ -105,7 +105,7 @@ public class StreamTracingBehaviorTests
         var behavior = new MediatorStreamTracingBehavior<TestStreamRequest, int>(options);
         var handler = new TestStreamHandler();
 
-        await foreach (var _ in behavior.Handle(new TestStreamRequest(2), handler, CancellationToken.None))
+        await foreach (var _ in behavior.Handle(new TestStreamRequest(2), handler, TestContext.Current.CancellationToken))
         { }
 
         var activity = collector.Activities.ShouldHaveSingleItem();
@@ -120,7 +120,7 @@ public class StreamTracingBehaviorTests
         var handler = new TestStreamHandler();
 
         var items = new List<int>();
-        await foreach (var item in behavior.Handle(new TestStreamRequest(3), handler, CancellationToken.None))
+        await foreach (var item in behavior.Handle(new TestStreamRequest(3), handler, TestContext.Current.CancellationToken))
         {
             items.Add(item);
         }
@@ -136,7 +136,7 @@ public class StreamTracingBehaviorTests
         var behavior = new MediatorStreamTracingBehavior<TestStreamRequest, int>(options);
         var handler = new TestStreamHandler();
 
-        await foreach (var _ in behavior.Handle(new TestStreamRequest(1), handler, CancellationToken.None))
+        await foreach (var _ in behavior.Handle(new TestStreamRequest(1), handler, TestContext.Current.CancellationToken))
         { }
 
         collector.Activities.ShouldBeEmpty();

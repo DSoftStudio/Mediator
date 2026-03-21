@@ -35,6 +35,11 @@ namespace DSoftStudio.Mediator.Generators
         private const string NotificationHandlerMetadataName = "INotificationHandler`1";
         private const string StreamHandlerMetadataName = "IStreamRequestHandler`2";
 
+        private const string PipelineBehaviorMetadataName = "IPipelineBehavior`2";
+        private const string PostProcessorMetadataName = "IRequestPostProcessor`2";
+        private const string ExceptionHandlerMetadataName = "IRequestExceptionHandler`2";
+        private const string StreamPipelineBehaviorMetadataName = "IStreamPipelineBehavior`2";
+
         private const string AbstractionsNamespace = "DSoftStudio.Mediator.Abstractions";
         private const string AbstractionsAssemblyName = "DSoftStudio.Mediator.Abstractions";
 
@@ -48,7 +53,7 @@ namespace DSoftStudio.Mediator.Generators
         /// </summary>
         public static List<ExternalHandlerInfo> GetAllExternalHandlers(
             Compilation compilation,
-            List<SkippedHandlerInfo> skippedInternalHandlers = null)
+            List<SkippedHandlerInfo>? skippedInternalHandlers = null)
         {
             var results = new List<ExternalHandlerInfo>();
 
@@ -428,6 +433,104 @@ namespace DSoftStudio.Mediator.Generators
             }
 
             return (results, skippedInternals);
+        }
+
+        // ── Display format for base type names (no generic parameters) ──
+
+        private static readonly SymbolDisplayFormat BaseTypeNameFormat = new(
+            globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Included,
+            typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
+            genericsOptions: SymbolDisplayGenericsOptions.None);
+
+        // ── Open-generic behavior discovery ──────────────────────────────
+
+        /// <summary>
+        /// Discovers open-generic pipeline behavior types from referenced assemblies.
+        /// Returns <see cref="BehaviorTypeInfo"/> for each public, non-abstract, generic class
+        /// that implements <c>IPipelineBehavior&lt;,&gt;</c>, <c>IRequestPostProcessor&lt;,&gt;</c>,
+        /// <c>IRequestExceptionHandler&lt;,&gt;</c>, or <c>IStreamPipelineBehavior&lt;,&gt;</c>.
+        /// </summary>
+        public static List<BehaviorTypeInfo> GetExternalOpenGenericBehaviors(Compilation compilation)
+        {
+            var results = new List<BehaviorTypeInfo>();
+
+            foreach (var reference in compilation.References)
+            {
+                if (compilation.GetAssemblyOrModuleSymbol(reference) is not IAssemblySymbol assembly)
+                    continue;
+
+                if (!ReferencesAbstractions(assembly))
+                    continue;
+
+                CollectOpenGenericBehaviors(assembly.GlobalNamespace, results);
+            }
+
+            return results;
+        }
+
+        /// <summary>
+        /// Recursively walks namespaces to find public, non-abstract, generic classes
+        /// implementing pipeline behavior interfaces.
+        /// </summary>
+        private static void CollectOpenGenericBehaviors(
+            INamespaceSymbol ns,
+            List<BehaviorTypeInfo> results)
+        {
+            foreach (var type in ns.GetTypeMembers())
+            {
+                if (type.TypeKind == TypeKind.Class
+                    && !type.IsAbstract
+                    && type.IsGenericType
+                    && type.DeclaredAccessibility == Accessibility.Public)
+                {
+                    TryAddBehaviorInfoFrom(type, results);
+                }
+            }
+
+            foreach (var child in ns.GetNamespaceMembers())
+                CollectOpenGenericBehaviors(child, results);
+        }
+
+        /// <summary>
+        /// Checks if a generic type implements any pipeline behavior interface
+        /// and adds a <see cref="BehaviorTypeInfo"/> for each match.
+        /// Also used by <see cref="MediatorPipelineGenerator"/> for local behavior discovery.
+        /// </summary>
+        internal static void TryAddBehaviorInfoFrom(
+            INamedTypeSymbol type,
+            List<BehaviorTypeInfo> results)
+        {
+            foreach (var iface in type.AllInterfaces)
+            {
+                var original = iface.OriginalDefinition;
+
+                var ns = original.ContainingNamespace?.ToDisplayString();
+                if (ns != AbstractionsNamespace)
+                    continue;
+
+                var metaName = original.MetadataName;
+                PipelineInterfaceKind? kind = metaName switch
+                {
+                    PipelineBehaviorMetadataName => PipelineInterfaceKind.Behavior,
+                    PostProcessorMetadataName => PipelineInterfaceKind.PostProcessor,
+                    ExceptionHandlerMetadataName => PipelineInterfaceKind.ExceptionHandler,
+                    StreamPipelineBehaviorMetadataName => PipelineInterfaceKind.StreamBehavior,
+                    _ => null
+                };
+
+                if (kind is null)
+                    continue;
+
+                // Only support behaviors with exactly 2 type parameters matching
+                // the pipeline interface's arity.
+                if (type.TypeParameters.Length != 2)
+                    continue;
+
+                var baseName = type.ToDisplayString(BaseTypeNameFormat);
+                var openName = baseName + "<,>";
+
+                results.Add(new BehaviorTypeInfo(kind.Value, openName, baseName));
+            }
         }
 
         internal readonly struct ExternalHandlerInfo(INamedTypeSymbol serviceType, INamedTypeSymbol implementationType)

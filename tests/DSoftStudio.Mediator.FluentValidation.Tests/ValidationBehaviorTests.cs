@@ -19,7 +19,7 @@ public class ValidationBehaviorTests
             s.AddTransient<IValidator<CreateUser>, CreateUserValidator>());
         var mediator = sp.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send(new CreateUser("Alice", "alice@example.com"));
+        var result = await mediator.Send(new CreateUser("Alice", "alice@example.com"), TestContext.Current.CancellationToken);
 
         result.ShouldNotBe(Guid.Empty);
     }
@@ -30,7 +30,7 @@ public class ValidationBehaviorTests
         var sp = TestServiceProvider.Build();
         var mediator = sp.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send(new Ping(21));
+        var result = await mediator.Send(new Ping(21), TestContext.Current.CancellationToken);
 
         result.ShouldBe(42);
     }
@@ -97,7 +97,7 @@ public class ValidationBehaviorTests
         var sp = TestServiceProvider.BuildWithAllValidators();
         var mediator = sp.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send(new TransferMoney("ACC-1", "ACC-2", 100m));
+        var result = await mediator.Send(new TransferMoney("ACC-1", "ACC-2", 100m), TestContext.Current.CancellationToken);
 
         result.ShouldBe("transferred:100");
     }
@@ -155,7 +155,7 @@ public class ValidationBehaviorTests
         var sp = TestServiceProvider.Build();
         var mediator = sp.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send(new GetUser(Guid.NewGuid()));
+        var result = await mediator.Send(new GetUser(Guid.NewGuid()), TestContext.Current.CancellationToken);
 
         result.ShouldStartWith("user:");
     }

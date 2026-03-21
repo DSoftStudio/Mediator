@@ -33,7 +33,7 @@ public class StreamTests : IDisposable
     {
         var values = new List<int>();
 
-        await foreach (var v in _mediator.CreateStream(new PingStream()))
+        await foreach (var v in _mediator.CreateStream(new PingStream(), TestContext.Current.CancellationToken))
             values.Add(v);
 
         values.ShouldBe(new[] {1, 2, 3});

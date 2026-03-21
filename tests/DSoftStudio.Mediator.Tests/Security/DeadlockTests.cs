@@ -59,7 +59,7 @@ public class DeadlockTests : IDisposable
     [Fact]
     public async Task Send_RecursiveDepth0_CompletesImmediately()
     {
-        var result = await _mediator.Send(new RecursivePing(0));
+        var result = await _mediator.Send(new RecursivePing(0), TestContext.Current.CancellationToken);
 
         result.ShouldBe(1);
     }

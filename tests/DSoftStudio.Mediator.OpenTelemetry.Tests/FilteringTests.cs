@@ -53,7 +53,7 @@ public class FilteringTests : IDisposable
         var behavior = new MediatorTracingBehavior<HealthCheckQuery, string>(options);
         var handler = new HealthCheckHandler();
 
-        var result = await behavior.Handle(new HealthCheckQuery(), handler, CancellationToken.None);
+        var result = await behavior.Handle(new HealthCheckQuery(), handler, TestContext.Current.CancellationToken);
 
         result.ShouldBe("ok");
         collector.Activities.ShouldBeEmpty();
@@ -70,7 +70,7 @@ public class FilteringTests : IDisposable
         var behavior = new MediatorTracingBehavior<TestCommand, string>(options);
         var handler = new TestCommandHandler();
 
-        await behavior.Handle(new TestCommand("test"), handler, CancellationToken.None);
+        await behavior.Handle(new TestCommand("test"), handler, TestContext.Current.CancellationToken);
 
         collector.Activities.ShouldHaveSingleItem();
     }
@@ -85,7 +85,7 @@ public class FilteringTests : IDisposable
         var behavior = new MediatorMetricsBehavior<HealthCheckQuery, string>(options);
         var handler = new HealthCheckHandler();
 
-        await behavior.Handle(new HealthCheckQuery(), handler, CancellationToken.None);
+        await behavior.Handle(new HealthCheckQuery(), handler, TestContext.Current.CancellationToken);
         _meterListener.RecordObservableInstruments();
 
         _measurements.ShouldBeEmpty();
@@ -103,7 +103,7 @@ public class FilteringTests : IDisposable
         var behavior = new MediatorStreamTracingBehavior<HealthCheckStreamRequest, int>(options);
         var handler = new HealthCheckStreamHandler();
 
-        await foreach (var _ in behavior.Handle(new HealthCheckStreamRequest(), handler, CancellationToken.None))
+        await foreach (var _ in behavior.Handle(new HealthCheckStreamRequest(), handler, TestContext.Current.CancellationToken))
         { }
 
         collector.Activities.ShouldBeEmpty();
@@ -119,7 +119,7 @@ public class FilteringTests : IDisposable
         var behavior = new MediatorStreamMetricsBehavior<HealthCheckStreamRequest, int>(options);
         var handler = new HealthCheckStreamHandler();
 
-        await foreach (var _ in behavior.Handle(new HealthCheckStreamRequest(), handler, CancellationToken.None))
+        await foreach (var _ in behavior.Handle(new HealthCheckStreamRequest(), handler, TestContext.Current.CancellationToken))
         { }
 
         _meterListener.RecordObservableInstruments();
@@ -144,7 +144,7 @@ public class FilteringTests : IDisposable
             new HealthCheckNotificationHandler()
         };
 
-        await publisher.Publish(handlers, new HealthCheckNotification(), CancellationToken.None);
+        await publisher.Publish(handlers, new HealthCheckNotification(), TestContext.Current.CancellationToken);
         _meterListener.RecordObservableInstruments();
 
         collector.Activities.ShouldBeEmpty();
@@ -160,7 +160,7 @@ public class FilteringTests : IDisposable
         var behavior = new MediatorTracingBehavior<HealthCheckQuery, string>(options);
         var handler = new HealthCheckHandler();
 
-        await behavior.Handle(new HealthCheckQuery(), handler, CancellationToken.None);
+        await behavior.Handle(new HealthCheckQuery(), handler, TestContext.Current.CancellationToken);
 
         collector.Activities.ShouldHaveSingleItem();
     }

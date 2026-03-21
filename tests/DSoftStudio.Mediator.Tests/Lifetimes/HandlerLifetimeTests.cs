@@ -57,8 +57,8 @@ public class HandlerLifetimeTests : IDisposable
         using (var scope = _provider.CreateScope())
         {
             var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
-            await mediator.Send(new ScopedPing());
-            await mediator.Send(new ScopedPing());
+            await mediator.Send(new ScopedPing(), TestContext.Current.CancellationToken);
+            await mediator.Send(new ScopedPing(), TestContext.Current.CancellationToken);
 
             id1 = scope.ServiceProvider.GetRequiredService<IRequestHandler<ScopedPing, int>>()
                 is ScopedPingHandler h1 ? h1.InstanceId : Guid.Empty;
@@ -85,7 +85,7 @@ public class HandlerLifetimeTests : IDisposable
         using (var scope1 = _provider.CreateScope())
         {
             var mediator = scope1.ServiceProvider.GetRequiredService<IMediator>();
-            await mediator.Send(new SingletonPing());
+            await mediator.Send(new SingletonPing(), TestContext.Current.CancellationToken);
 
             id1 = scope1.ServiceProvider.GetRequiredService<IRequestHandler<SingletonPing, int>>()
                 is SingletonPingHandler h1 ? h1.InstanceId : Guid.Empty;

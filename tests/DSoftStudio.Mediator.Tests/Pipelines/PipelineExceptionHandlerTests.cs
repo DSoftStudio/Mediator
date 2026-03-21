@@ -80,7 +80,7 @@ public class PipelineExceptionHandlerTests
         using var provider = services.BuildServiceProvider();
         var mediator = provider.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send(new ExHandlerPing(false));
+        var result = await mediator.Send(new ExHandlerPing(false), TestContext.Current.CancellationToken);
 
         result.ShouldBe(42);
         handler.CallCount.ShouldBe(0);
@@ -98,7 +98,7 @@ public class PipelineExceptionHandlerTests
         using var provider = services.BuildServiceProvider();
         var mediator = provider.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send(new ExHandlerPing(true));
+        var result = await mediator.Send(new ExHandlerPing(true), TestContext.Current.CancellationToken);
 
         result.ShouldBe(-1);
         handler.CallCount.ShouldBe(1);
@@ -136,7 +136,7 @@ public class PipelineExceptionHandlerTests
         using var provider = services.BuildServiceProvider();
         var mediator = provider.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send(new ExHandlerPing(true));
+        var result = await mediator.Send(new ExHandlerPing(true), TestContext.Current.CancellationToken);
 
         result.ShouldBe(-1);
         first.CallCount.ShouldBe(1);
@@ -155,7 +155,7 @@ public class PipelineExceptionHandlerTests
         using var provider = services.BuildServiceProvider();
         var mediator = provider.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send(new ExHandlerPing(true));
+        var result = await mediator.Send(new ExHandlerPing(true), TestContext.Current.CancellationToken);
 
         result.ShouldBe(-99);
         handler.CallCount.ShouldBe(1);

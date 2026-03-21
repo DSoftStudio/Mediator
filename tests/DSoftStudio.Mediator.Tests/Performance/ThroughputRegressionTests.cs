@@ -72,13 +72,13 @@ public class ThroughputRegressionTests : IDisposable
 
         // Warmup
         for (int i = 0; i < 100; i++)
-            await _mediator.Send<PerfPing, int>(request);
+            await _mediator.Send<PerfPing, int>(request, TestContext.Current.CancellationToken);
 
         ForceGC();
         var sw = Stopwatch.StartNew();
 
         for (int i = 0; i < iterations; i++)
-            await _mediator.Send<PerfPing, int>(request);
+            await _mediator.Send<PerfPing, int>(request, TestContext.Current.CancellationToken);
 
         sw.Stop();
 
@@ -98,7 +98,7 @@ public class ThroughputRegressionTests : IDisposable
 
         // Warmup
         for (int i = 0; i < 100; i++)
-            await _mediator.Send<PerfPing, int>(request);
+            await _mediator.Send<PerfPing, int>(request, TestContext.Current.CancellationToken);
 
         ForceGC();
         var sw = Stopwatch.StartNew();
@@ -109,8 +109,8 @@ public class ThroughputRegressionTests : IDisposable
             tasks[t] = Task.Run(async () =>
             {
                 for (int i = 0; i < iterationsPerTask; i++)
-                    await _mediator.Send<PerfPing, int>(request);
-            });
+                    await _mediator.Send<PerfPing, int>(request, TestContext.Current.CancellationToken);
+            }, TestContext.Current.CancellationToken);
         }
 
         await Task.WhenAll(tasks);
@@ -135,13 +135,13 @@ public class ThroughputRegressionTests : IDisposable
 
         // Warmup
         for (int i = 0; i < 100; i++)
-            await _mediator.Publish(notification);
+            await _mediator.Publish(notification, TestContext.Current.CancellationToken);
 
         ForceGC();
         var sw = Stopwatch.StartNew();
 
         for (int i = 0; i < iterations; i++)
-            await _mediator.Publish(notification);
+            await _mediator.Publish(notification, TestContext.Current.CancellationToken);
 
         sw.Stop();
 
@@ -162,13 +162,13 @@ public class ThroughputRegressionTests : IDisposable
 
         // Warmup
         for (int i = 0; i < 10; i++)
-            DrainStream(_mediator.CreateStream<PerfStream, int>(request));
+            DrainStream(_mediator.CreateStream<PerfStream, int>(request, TestContext.Current.CancellationToken));
 
         ForceGC();
         var sw = Stopwatch.StartNew();
 
         for (int i = 0; i < iterations; i++)
-            DrainStream(_mediator.CreateStream<PerfStream, int>(request));
+            DrainStream(_mediator.CreateStream<PerfStream, int>(request, TestContext.Current.CancellationToken));
 
         sw.Stop();
 

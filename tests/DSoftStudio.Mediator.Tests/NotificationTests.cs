@@ -72,7 +72,7 @@ public class NotificationTests : IDisposable
     [Fact]
     public async Task Publish_Should_Invoke_All_Handlers()
     {
-        await _mediator.Publish(new CountedNotification());
+        await _mediator.Publish(new CountedNotification(), TestContext.Current.CancellationToken);
 
         _counter.Value.ShouldBe(2);
     }

@@ -55,11 +55,11 @@ public class AllocationRegressionTests : IDisposable
         var request = new PerfPing();
 
         // Warmup iteration (ensure no first-call allocations)
-        await _mediator.Send<PerfPing, int>(request);
+        await _mediator.Send<PerfPing, int>(request, TestContext.Current.CancellationToken);
 
         // Measure
         long before = GC.GetAllocatedBytesForCurrentThread();
-        await _mediator.Send<PerfPing, int>(request);
+        await _mediator.Send<PerfPing, int>(request, TestContext.Current.CancellationToken);
         long after = GC.GetAllocatedBytesForCurrentThread();
 
         long allocated = after - before;
@@ -76,14 +76,14 @@ public class AllocationRegressionTests : IDisposable
 
         // Warmup
         for (int i = 0; i < 10; i++)
-            await _mediator.Send<PerfPing, int>(request);
+            await _mediator.Send<PerfPing, int>(request, TestContext.Current.CancellationToken);
 
         // Measure N calls
         const int iterations = 1_000;
         long before = GC.GetAllocatedBytesForCurrentThread();
 
         for (int i = 0; i < iterations; i++)
-            await _mediator.Send<PerfPing, int>(request);
+            await _mediator.Send<PerfPing, int>(request, TestContext.Current.CancellationToken);
 
         long after = GC.GetAllocatedBytesForCurrentThread();
         long totalAllocated = after - before;
@@ -105,10 +105,10 @@ public class AllocationRegressionTests : IDisposable
         var notification = new PerfNotification();
 
         // Warmup
-        await _mediator.Publish(notification);
+        await _mediator.Publish(notification, TestContext.Current.CancellationToken);
 
         long before = GC.GetAllocatedBytesForCurrentThread();
-        await _mediator.Publish(notification);
+        await _mediator.Publish(notification, TestContext.Current.CancellationToken);
         long after = GC.GetAllocatedBytesForCurrentThread();
 
         long allocated = after - before;
@@ -130,10 +130,10 @@ public class AllocationRegressionTests : IDisposable
         var request = new PerfStream();
 
         // Warmup
-        DrainStream(_mediator.CreateStream<PerfStream, int>(request));
+        DrainStream(_mediator.CreateStream<PerfStream, int>(request, TestContext.Current.CancellationToken));
 
         long before = GC.GetAllocatedBytesForCurrentThread();
-        DrainStream(_mediator.CreateStream<PerfStream, int>(request));
+        DrainStream(_mediator.CreateStream<PerfStream, int>(request, TestContext.Current.CancellationToken));
         long after = GC.GetAllocatedBytesForCurrentThread();
 
         long allocated = after - before;

@@ -61,7 +61,7 @@ public class FinalCoverageTests
         var sp = services.BuildServiceProvider();
         var mediator = sp.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send<CovFinalPing, int>(new CovFinalPing());
+        var result = await mediator.Send<CovFinalPing, int>(new CovFinalPing(), TestContext.Current.CancellationToken);
         result.ShouldBe(55);
     }
 
@@ -77,7 +77,7 @@ public class FinalCoverageTests
         var sp = services.BuildServiceProvider();
         var mediator = sp.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send<CovFinalAsyncPostPing, int>(new CovFinalAsyncPostPing());
+        var result = await mediator.Send<CovFinalAsyncPostPing, int>(new CovFinalAsyncPostPing(), TestContext.Current.CancellationToken);
         result.ShouldBe(66);
     }
 
@@ -157,7 +157,7 @@ public class MediatorPublishGenericCoverageTests
 
         // Call Publish<T> explicitly via the IPublisher interface
         IPublisher publisher = sp.GetRequiredService<IMediator>();
-        await publisher.Publish(new CovDirectPublishNotif());
+        await publisher.Publish(new CovDirectPublishNotif(), TestContext.Current.CancellationToken);
 
         CovDirectPublishHandler.CallCount.ShouldBe(1);
     }
@@ -173,7 +173,7 @@ public class MediatorPublishGenericCoverageTests
         var sp = services.BuildServiceProvider();
 
         IPublisher publisher = sp.GetRequiredService<IMediator>();
-        await publisher.Publish(new CovDirectPublishNotif());
+        await publisher.Publish(new CovDirectPublishNotif(), TestContext.Current.CancellationToken);
 
         CovDirectPublishHandler.CallCount.ShouldBe(1);
     }
@@ -196,7 +196,7 @@ public class MultiAsyncPostProcessorTests
         var sp = services.BuildServiceProvider();
         var mediator = sp.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send<CovMultiPostPing, int>(new CovMultiPostPing());
+        var result = await mediator.Send<CovMultiPostPing, int>(new CovMultiPostPing(), TestContext.Current.CancellationToken);
         result.ShouldBe(88);
     }
 }

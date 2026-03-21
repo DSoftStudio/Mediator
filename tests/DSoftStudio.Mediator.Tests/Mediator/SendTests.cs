@@ -32,7 +32,7 @@ public class SendTests : IDisposable
     [Fact]
     public async Task Send_ReturnsCorrectValue()
     {
-        var result = await _mediator.Send(new Ping());
+        var result = await _mediator.Send(new Ping(), TestContext.Current.CancellationToken);
 
         result.ShouldBe(42);
     }
@@ -40,7 +40,7 @@ public class SendTests : IDisposable
     [Fact]
     public async Task Send_WithUnitResponse_ReturnsUnit()
     {
-        var result = await _mediator.Send(new PingVoid());
+        var result = await _mediator.Send(new PingVoid(), TestContext.Current.CancellationToken);
 
         result.ShouldBe(Unit.Value);
     }
@@ -48,7 +48,7 @@ public class SendTests : IDisposable
     [Fact]
     public async Task Send_AsyncHandler_ReturnsCorrectValue()
     {
-        var result = await _mediator.Send(new SlowPing());
+        var result = await _mediator.Send(new SlowPing(), TestContext.Current.CancellationToken);
 
         result.ShouldBe(99);
     }

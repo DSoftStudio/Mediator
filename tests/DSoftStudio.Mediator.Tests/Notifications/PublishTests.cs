@@ -35,7 +35,7 @@ public class PublishTests : IDisposable
     [Fact]
     public async Task Publish_InvokesHandler()
     {
-        await _mediator.Publish(new PingNotification());
+        await _mediator.Publish(new PingNotification(), TestContext.Current.CancellationToken);
 
         _handler.CallCount.ShouldBe(1);
     }
@@ -43,8 +43,8 @@ public class PublishTests : IDisposable
     [Fact]
     public async Task Publish_CalledTwice_IncrementsTwice()
     {
-        await _mediator.Publish(new PingNotification());
-        await _mediator.Publish(new PingNotification());
+        await _mediator.Publish(new PingNotification(), TestContext.Current.CancellationToken);
+        await _mediator.Publish(new PingNotification(), TestContext.Current.CancellationToken);
 
         _handler.CallCount.ShouldBe(2);
     }
@@ -53,7 +53,7 @@ public class PublishTests : IDisposable
     public async Task Publish_NoHandlersRegistered_CompletesWithoutError()
     {
         // UnregisteredNotification has no dispatch table entry — Handlers is null by default.
-        var task = _mediator.Publish(new UnregisteredNotification());
+        var task = _mediator.Publish(new UnregisteredNotification(), TestContext.Current.CancellationToken);
         await task;
 
         task.IsCompletedSuccessfully.ShouldBeTrue();
@@ -65,7 +65,7 @@ public class PublishTests : IDisposable
         // Initialize with an empty array — first write wins (write-once).
         NotificationDispatch<UnregisteredNotification>.TryInitialize([]);
 
-        var task = _mediator.Publish(new UnregisteredNotification());
+        var task = _mediator.Publish(new UnregisteredNotification(), TestContext.Current.CancellationToken);
         await task;
 
         task.IsCompletedSuccessfully.ShouldBeTrue();

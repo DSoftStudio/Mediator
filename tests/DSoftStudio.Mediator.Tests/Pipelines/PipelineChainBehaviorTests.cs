@@ -84,7 +84,7 @@ public class PipelineChainBehaviorTests
         using var provider = services.BuildServiceProvider();
         var mediator = provider.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send(new BehaviorSyncPing());
+        var result = await mediator.Send(new BehaviorSyncPing(), TestContext.Current.CancellationToken);
 
         result.ShouldBe(42);
         log.ShouldBe(new[] {"sync:before", "sync:after"});
@@ -102,7 +102,7 @@ public class PipelineChainBehaviorTests
         using var provider = services.BuildServiceProvider();
         var mediator = provider.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send(new BehaviorSyncPing());
+        var result = await mediator.Send(new BehaviorSyncPing(), TestContext.Current.CancellationToken);
 
         result.ShouldBe(42);
         log.ShouldBe(new[] {"async:before", "async:after"});
@@ -120,7 +120,7 @@ public class PipelineChainBehaviorTests
         using var provider = services.BuildServiceProvider();
         var mediator = provider.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send(new BehaviorAsyncPing());
+        var result = await mediator.Send(new BehaviorAsyncPing(), TestContext.Current.CancellationToken);
 
         result.ShouldBe(99);
         log.ShouldBe(new[] {"async:before", "async:after"});
@@ -139,7 +139,7 @@ public class PipelineChainBehaviorTests
         using var provider = services.BuildServiceProvider();
         var mediator = provider.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send(new MultiBehaviorPing());
+        var result = await mediator.Send(new MultiBehaviorPing(), TestContext.Current.CancellationToken);
 
         result.ShouldBe(1);
         // "before" entries are deterministic: sync wraps async, so sync enters first.

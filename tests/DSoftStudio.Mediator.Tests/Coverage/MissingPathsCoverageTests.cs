@@ -168,7 +168,7 @@ public class AsyncPreProcessorWithExceptionHandlerTests
         var sp = services.BuildServiceProvider();
         var mediator = sp.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send<CovAsyncPreEx, int>(new CovAsyncPreEx());
+        var result = await mediator.Send<CovAsyncPreEx, int>(new CovAsyncPreEx(), TestContext.Current.CancellationToken);
         result.ShouldBe(default(int));
     }
 
@@ -207,7 +207,7 @@ public class ExceptionHandlersOnlyFullPipelineTests
         var sp = services.BuildServiceProvider();
         var mediator = sp.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send<CovExOnlyFull, int>(new CovExOnlyFull());
+        var result = await mediator.Send<CovExOnlyFull, int>(new CovExOnlyFull(), TestContext.Current.CancellationToken);
         result.ShouldBe(default(int));
     }
 }
@@ -260,7 +260,7 @@ public class SyncPreWithExceptionHandlerTests
         var sp = services.BuildServiceProvider();
         var mediator = sp.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send<CovSyncPreExPost, int>(new CovSyncPreExPost());
+        var result = await mediator.Send<CovSyncPreExPost, int>(new CovSyncPreExPost(), TestContext.Current.CancellationToken);
         result.ShouldBe(default(int));
     }
 }
@@ -284,7 +284,7 @@ public class MultiplePreProcessorAsyncPathTests
         var sp = services.BuildServiceProvider();
         var mediator = sp.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send<CovMultiPreAsync, int>(new CovMultiPreAsync());
+        var result = await mediator.Send<CovMultiPreAsync, int>(new CovMultiPreAsync(), TestContext.Current.CancellationToken);
         result.ShouldBe(55);
     }
 
@@ -300,7 +300,7 @@ public class MultiplePreProcessorAsyncPathTests
         var sp = services.BuildServiceProvider();
         var mediator = sp.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send<CovMultiPreAsync, int>(new CovMultiPreAsync());
+        var result = await mediator.Send<CovMultiPreAsync, int>(new CovMultiPreAsync(), TestContext.Current.CancellationToken);
         result.ShouldBe(55);
     }
 
@@ -317,7 +317,7 @@ public class MultiplePreProcessorAsyncPathTests
         var sp = services.BuildServiceProvider();
         var mediator = sp.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send<CovMultiPreAsync, int>(new CovMultiPreAsync());
+        var result = await mediator.Send<CovMultiPreAsync, int>(new CovMultiPreAsync(), TestContext.Current.CancellationToken);
         result.ShouldBe(55);
     }
 
@@ -334,7 +334,7 @@ public class MultiplePreProcessorAsyncPathTests
         var sp = services.BuildServiceProvider();
         var mediator = sp.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send<CovMultiPreAsync, int>(new CovMultiPreAsync());
+        var result = await mediator.Send<CovMultiPreAsync, int>(new CovMultiPreAsync(), TestContext.Current.CancellationToken);
         result.ShouldBe(55);
     }
 }
@@ -357,7 +357,7 @@ public class AwaitCoreAndRunPostProcessorsTests
         var sp = services.BuildServiceProvider();
         var mediator = sp.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send<CovAsyncPost, int>(new CovAsyncPost());
+        var result = await mediator.Send<CovAsyncPost, int>(new CovAsyncPost(), TestContext.Current.CancellationToken);
         result.ShouldBe(2);
     }
 }
@@ -387,7 +387,7 @@ public class AwaitPostProcessorContinueMultipleTests
         var sp = services.BuildServiceProvider();
         var mediator = sp.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send<CovArrayCtor, int>(new CovArrayCtor());
+        var result = await mediator.Send<CovArrayCtor, int>(new CovArrayCtor(), TestContext.Current.CancellationToken);
         result.ShouldBe(33);
     }
 }
@@ -412,7 +412,7 @@ public class PipelineChainHandlerExplicitInterfaceTests
         chain.ShouldNotBeNull();
 
         IRequestHandler<CovArrayCtor, int> explicitHandler = chain;
-        var result = await explicitHandler.Handle(new CovArrayCtor(), CancellationToken.None);
+        var result = await explicitHandler.Handle(new CovArrayCtor(), TestContext.Current.CancellationToken);
         result.ShouldBe(33);
     }
 }

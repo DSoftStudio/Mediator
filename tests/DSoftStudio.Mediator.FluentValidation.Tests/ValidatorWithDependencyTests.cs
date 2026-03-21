@@ -38,7 +38,7 @@ public class ValidatorWithDependencyTests
         });
         var mediator = sp.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send(new TransferMoney("ACC-1", "ACC-2", 50m));
+        var result = await mediator.Send(new TransferMoney("ACC-1", "ACC-2", 50m), TestContext.Current.CancellationToken);
 
         result.ShouldBe("transferred:50");
     }

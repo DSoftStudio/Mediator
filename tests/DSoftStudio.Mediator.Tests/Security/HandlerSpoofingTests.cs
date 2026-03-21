@@ -30,7 +30,7 @@ public class HandlerSpoofingTests : IDisposable
         var request = new FakePing();
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await _mediator.Send<FakePing, int>(request));
+            async () => await _mediator.Send<FakePing, int>(request, TestContext.Current.CancellationToken));
     }
 
     }

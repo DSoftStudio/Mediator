@@ -39,14 +39,30 @@ public sealed class StreamGenerator : IIncrementalGenerator
                 return new EquatableArray<StreamHandlerInfo>(array);
             });
 
+        // Discover open-generic stream pipeline behavior types (local + external)
+        // for AOT-safe closed-generic DI registration.
+        var allStreamBehaviors = context.CompilationProvider
+            .Select(static (compilation, _) =>
+            {
+                var results = ReferencedAssemblyScanner.GetExternalOpenGenericBehaviors(compilation);
+                CollectLocalBehaviors(compilation.Assembly.GlobalNamespace, results);
+
+                var array = results
+                    .Where(static b => b.Kind == PipelineInterfaceKind.StreamBehavior)
+                    .Distinct()
+                    .OrderBy(static b => b.BaseTypeName)
+                    .ToArray();
+                return new EquatableArray<BehaviorTypeInfo>(array);
+            });
+
         var assemblyName = context.CompilationProvider
             .Select(static (c, _) => c.AssemblyName ?? "Assembly");
 
-        var combined = localCollected.Combine(externalHandlers).Combine(assemblyName);
+        var combined = localCollected.Combine(externalHandlers).Combine(allStreamBehaviors).Combine(assemblyName);
 
         context.RegisterSourceOutput(combined, static (spc, pair) =>
         {
-            var ((localHandlers, external), asmName) = pair;
+            var (((localHandlers, external), behaviors), asmName) = pair;
 
             // Merge local + external, deduplicate
             var localList = localHandlers.IsDefaultOrEmpty
@@ -60,7 +76,7 @@ public sealed class StreamGenerator : IIncrementalGenerator
                 .ThenBy(static h => h.ResponseType)
                 .ToList();
 
-            var code = GenerateCode(registrations, asmName);
+            var code = GenerateCode(registrations, asmName, behaviors);
 
             spc.AddSource(
                 "StreamRegistry.g.cs",
@@ -97,7 +113,34 @@ public sealed class StreamGenerator : IIncrementalGenerator
         return new StreamHandlerInfo(requestType, responseType, handlerType);
     }
 
-    private static string GenerateCode(List<StreamHandlerInfo> registrations, string assemblyName)
+    /// <summary>
+    /// Walks the current compilation's namespace tree to discover local open-generic
+    /// stream pipeline behavior types.
+    /// </summary>
+    private static void CollectLocalBehaviors(
+        INamespaceSymbol ns,
+        List<BehaviorTypeInfo> results)
+    {
+        foreach (var type in ns.GetTypeMembers())
+        {
+            if (type.TypeKind == TypeKind.Class
+                && !type.IsAbstract
+                && type.IsGenericType
+                && (type.DeclaredAccessibility == Accessibility.Public
+                    || type.DeclaredAccessibility == Accessibility.Internal))
+            {
+                ReferencedAssemblyScanner.TryAddBehaviorInfoFrom(type, results);
+            }
+        }
+
+        foreach (var child in ns.GetNamespaceMembers())
+            CollectLocalBehaviors(child, results);
+    }
+
+    private static string GenerateCode(
+        List<StreamHandlerInfo> registrations,
+        string assemblyName,
+        EquatableArray<BehaviorTypeInfo> behaviors)
     {
         var sanitizedAsm = HandlerDiscovery.SanitizeIdentifier(assemblyName);
         var sb = new StringBuilder();
@@ -115,6 +158,27 @@ public sealed class StreamGenerator : IIncrementalGenerator
 
         sb.AppendLine("        public static void Register(global::Microsoft.Extensions.DependencyInjection.IServiceCollection services)");
         sb.AppendLine("        {");
+
+        // Filter stream behaviors from the discovered list
+        var streamBehaviors = new List<BehaviorTypeInfo>();
+        foreach (var b in behaviors)
+        {
+            if (b.Kind == PipelineInterfaceKind.StreamBehavior)
+                streamBehaviors.Add(b);
+        }
+
+        // AOT-safe: emit open-generic stream closure calls before RegisterStreamPipeline
+        if (streamBehaviors.Count > 0 && registrations.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("            // AOT-safe: close open-generic stream pipeline behavior registrations in a single O(S) pass.");
+            sb.AppendLine("            // Replaces open-generic ServiceDescriptors with per-handler-pair closed-generic");
+            sb.AppendLine("            // descriptors so DI never calls MakeGenericType (which fails for value-type");
+            sb.AppendLine("            // TResponse under Native AOT when RuntimeFeature.IsDynamicCodeSupported is false).");
+            sb.AppendLine("            CloseAllOpenGenericStreamBehaviors(services);");
+            sb.AppendLine("            RemoveOpenGenericStreamBehaviorDescriptors(services);");
+            sb.AppendLine();
+        }
 
         foreach (var handler in registrations)
         {
@@ -142,7 +206,8 @@ public sealed class StreamGenerator : IIncrementalGenerator
         sb.AppendLine("            bool hasTransientComponent = false;");
         sb.AppendLine("            foreach (var descriptor in services)");
         sb.AppendLine("            {");
-        sb.AppendLine("                if (descriptor.ServiceType == typeof(global::DSoftStudio.Mediator.Abstractions.IStreamPipelineBehavior<TRequest, TResponse>))");
+        sb.AppendLine("                if (descriptor.ServiceType == typeof(global::DSoftStudio.Mediator.Abstractions.IStreamPipelineBehavior<TRequest, TResponse>) ||");
+        sb.AppendLine("                    (descriptor.ServiceType.IsGenericTypeDefinition && descriptor.ServiceType == typeof(global::DSoftStudio.Mediator.Abstractions.IStreamPipelineBehavior<,>)))");
         sb.AppendLine("                {");
         sb.AppendLine("                    hasBehaviors = true;");
         sb.AppendLine("                    if (descriptor.Lifetime != global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton)");
@@ -189,6 +254,16 @@ public sealed class StreamGenerator : IIncrementalGenerator
         sb.AppendLine("                    return global::DSoftStudio.Mediator.StreamDispatch<TRequest, TResponse>.Handler!(sp).Handle(request, ct);");
         sb.AppendLine("                });");
         sb.AppendLine("        }");
+        sb.AppendLine();
+
+        // Emit AOT-safe open-generic stream closure methods when behaviors are discovered
+        if (streamBehaviors.Count > 0 && registrations.Count > 0)
+        {
+            EmitCloseAllOpenGenericStreamBehaviorsMethod(sb, streamBehaviors, registrations);
+            sb.AppendLine();
+            EmitRemoveOpenGenericStreamBehaviorDescriptorsMethod(sb, streamBehaviors);
+            sb.AppendLine();
+        }
 
         sb.AppendLine("    }");
 
@@ -221,6 +296,77 @@ public sealed class StreamGenerator : IIncrementalGenerator
         sb.AppendLine("} // namespace");
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Emits the <c>CloseAllOpenGenericStreamBehaviors</c> method into the generated source.
+    /// Does a single O(S) forward pass over the service collection for AOT-safe stream
+    /// pipeline behavior closure.
+    /// </summary>
+    private static void EmitCloseAllOpenGenericStreamBehaviorsMethod(
+        StringBuilder sb,
+        List<BehaviorTypeInfo> behaviors,
+        List<StreamHandlerInfo> registrations)
+    {
+        sb.AppendLine("        private static void CloseAllOpenGenericStreamBehaviors(global::Microsoft.Extensions.DependencyInjection.IServiceCollection services)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            var count = services.Count;");
+        sb.AppendLine("            for (int i = 0; i < count; i++)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                var d = services[i];");
+        sb.AppendLine("                if (d.ImplementationType is null || !d.ServiceType.IsGenericTypeDefinition)");
+        sb.AppendLine("                    continue;");
+
+        foreach (var b in behaviors)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"                if (d.ServiceType == typeof(global::DSoftStudio.Mediator.Abstractions.IStreamPipelineBehavior<,>) && d.ImplementationType == typeof({b.OpenTypeName}))");
+            sb.AppendLine("                {");
+
+            foreach (var handler in registrations)
+            {
+                sb.AppendLine("                    services.Add(new global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor(");
+                sb.AppendLine($"                        typeof(global::DSoftStudio.Mediator.Abstractions.IStreamPipelineBehavior<{handler.RequestType}, {handler.ResponseType}>),");
+                sb.AppendLine($"                        typeof({b.BaseTypeName}<{handler.RequestType}, {handler.ResponseType}>),");
+                sb.AppendLine("                        d.Lifetime));");
+            }
+
+            sb.AppendLine("                    continue;");
+            sb.AppendLine("                }");
+        }
+
+        sb.AppendLine("            }");
+        sb.AppendLine("        }");
+    }
+
+    /// <summary>
+    /// Emits the <c>RemoveOpenGenericStreamBehaviorDescriptors</c> method for removing
+    /// original open-generic stream behavior descriptors after closure.
+    /// </summary>
+    private static void EmitRemoveOpenGenericStreamBehaviorDescriptorsMethod(
+        StringBuilder sb,
+        List<BehaviorTypeInfo> behaviors)
+    {
+        sb.AppendLine("        private static void RemoveOpenGenericStreamBehaviorDescriptors(global::Microsoft.Extensions.DependencyInjection.IServiceCollection services)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            for (int i = services.Count - 1; i >= 0; i--)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                var d = services[i];");
+        sb.AppendLine("                if (d.ImplementationType is null || !d.ServiceType.IsGenericTypeDefinition)");
+        sb.AppendLine("                    continue;");
+
+        foreach (var b in behaviors)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"                if (d.ServiceType == typeof(global::DSoftStudio.Mediator.Abstractions.IStreamPipelineBehavior<,>) && d.ImplementationType == typeof({b.OpenTypeName}))");
+            sb.AppendLine("                {");
+            sb.AppendLine("                    services.RemoveAt(i);");
+            sb.AppendLine("                    continue;");
+            sb.AppendLine("                }");
+        }
+
+        sb.AppendLine("            }");
+        sb.AppendLine("        }");
     }
 
     internal readonly struct StreamHandlerInfo : System.IEquatable<StreamHandlerInfo>

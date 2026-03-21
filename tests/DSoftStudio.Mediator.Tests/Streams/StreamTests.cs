@@ -32,7 +32,7 @@ public class StreamTests : IDisposable
     {
         var values = new List<int>();
 
-        await foreach (var value in _mediator.CreateStream(new PingStream()))
+        await foreach (var value in _mediator.CreateStream(new PingStream(), TestContext.Current.CancellationToken))
         {
             values.Add(value);
         }
@@ -46,10 +46,10 @@ public class StreamTests : IDisposable
         var first = new List<int>();
         var second = new List<int>();
 
-        await foreach (var v in _mediator.CreateStream(new PingStream()))
+        await foreach (var v in _mediator.CreateStream(new PingStream(), TestContext.Current.CancellationToken))
             first.Add(v);
 
-        await foreach (var v in _mediator.CreateStream(new PingStream()))
+        await foreach (var v in _mediator.CreateStream(new PingStream(), TestContext.Current.CancellationToken))
             second.Add(v);
 
         first.ShouldBe(second);

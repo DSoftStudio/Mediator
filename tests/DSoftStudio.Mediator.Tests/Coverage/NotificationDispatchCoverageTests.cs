@@ -78,7 +78,7 @@ public class NotificationDispatchCoverageTests
         var sp = services.BuildServiceProvider();
         var mediator = sp.GetRequiredService<IMediator>();
 
-        await mediator.Publish(new CovDispatchAsyncNotif());
+        await mediator.Publish(new CovDispatchAsyncNotif(), TestContext.Current.CancellationToken);
 
         CovDispatchAsyncNotifHandler1.CallCount.ShouldBe(1);
         CovDispatchAsyncNotifHandler2.CallCount.ShouldBe(1);
@@ -95,7 +95,7 @@ public class NotificationDispatchCoverageTests
         var sp = services.BuildServiceProvider();
         var mediator = sp.GetRequiredService<IMediator>();
 
-        await mediator.Publish(new CovDispatchNotif());
+        await   mediator.Publish(new CovDispatchNotif(), TestContext.Current.CancellationToken);
 
         CovDispatchNotifHandler.CallCount.ShouldBe(1);
     }
@@ -111,7 +111,7 @@ public class NotificationDispatchCoverageTests
         var sp = services.BuildServiceProvider();
         var mediator = sp.GetRequiredService<IMediator>();
 
-        await mediator.Publish((object)new CovObjDispatchNotif());
+        await mediator.Publish((object)new CovObjDispatchNotif(), TestContext.Current.CancellationToken);
 
         CovObjDispatchNotifHandler.CallCount.ShouldBe(1);
     }
@@ -128,7 +128,7 @@ public class NotificationDispatchCoverageTests
         var sp = services.BuildServiceProvider();
         var mediator = sp.GetRequiredService<IMediator>();
 
-        await mediator.Publish((object)new CovObjDispatchNotif());
+        await mediator.Publish((object)new CovObjDispatchNotif(), TestContext.Current.CancellationToken);
 
         CovObjDispatchNotifHandler.CallCount.ShouldBe(1);
     }
@@ -146,7 +146,7 @@ public class NotificationDispatchCoverageTests
         var sp = services.BuildServiceProvider();
         var mediator = sp.GetRequiredService<IMediator>();
 
-        await mediator.Publish(new CovDispatchAsyncNotif());
+        await mediator.Publish(new CovDispatchAsyncNotif(), TestContext.Current.CancellationToken);
 
         CovDispatchAsyncNotifHandler1.CallCount.ShouldBe(1);
         CovDispatchAsyncNotifHandler2.CallCount.ShouldBe(1);

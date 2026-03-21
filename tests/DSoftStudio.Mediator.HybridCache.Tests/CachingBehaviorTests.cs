@@ -16,8 +16,8 @@ public class CachingBehaviorTests
         var mediator = provider.GetRequiredService<IMediator>();
 
         var id = Guid.NewGuid();
-        var first = await mediator.Send(new GetProduct(id));
-        var second = await mediator.Send(new GetProduct(id));
+        var first = await mediator.Send(new GetProduct(id), TestContext.Current.CancellationToken);
+        var second = await mediator.Send(new GetProduct(id), TestContext.Current.CancellationToken);
 
         first.ShouldNotBeNull();
         second.ShouldNotBeNull();
@@ -39,9 +39,9 @@ public class CachingBehaviorTests
         var mediator = provider.GetRequiredService<IMediator>();
         var id = Guid.NewGuid();
 
-        await mediator.Send(new GetProduct(id));
-        await mediator.Send(new GetProduct(id));
-        await mediator.Send(new GetProduct(id));
+        await mediator.Send(new GetProduct(id), TestContext.Current.CancellationToken);
+        await mediator.Send(new GetProduct(id), TestContext.Current.CancellationToken);
+        await mediator.Send(new GetProduct(id), TestContext.Current.CancellationToken);
 
         handler.CallCount.ShouldBe(1);
     }
@@ -57,8 +57,8 @@ public class CachingBehaviorTests
 
         var mediator = provider.GetRequiredService<IMediator>();
 
-        await mediator.Send(new GetProduct(Guid.NewGuid()));
-        await mediator.Send(new GetProduct(Guid.NewGuid()));
+        await mediator.Send(new GetProduct(Guid.NewGuid()), TestContext.Current.CancellationToken);
+        await mediator.Send(new GetProduct(Guid.NewGuid()), TestContext.Current.CancellationToken);
 
         handler.CallCount.ShouldBe(2);
     }
@@ -69,8 +69,8 @@ public class CachingBehaviorTests
         var provider = TestServiceProvider.Build();
         var mediator = provider.GetRequiredService<IMediator>();
 
-        var result1 = await mediator.Send(new Ping(21));
-        var result2 = await mediator.Send(new Ping(21));
+        var result1 = await mediator.Send(new Ping(21), TestContext.Current.CancellationToken);
+        var result2 = await mediator.Send(new Ping(21), TestContext.Current.CancellationToken);
 
         result1.ShouldBe(42);
         result2.ShouldBe(42);
@@ -83,7 +83,7 @@ public class CachingBehaviorTests
         var provider = TestServiceProvider.Build();
         var mediator = provider.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send(new GetOrder(1));
+        var result = await mediator.Send(new GetOrder(1), TestContext.Current.CancellationToken);
 
         result.ShouldBe("order:1");
     }
@@ -99,8 +99,8 @@ public class CachingBehaviorTests
 
         var mediator = provider.GetRequiredService<IMediator>();
 
-        await mediator.Send(new GetOrder(42));
-        await mediator.Send(new GetOrder(42));
+        await mediator.Send(new GetOrder(42), TestContext.Current.CancellationToken);
+        await mediator.Send(new GetOrder(42), TestContext.Current.CancellationToken);
 
         handler.CallCount.ShouldBe(1);
     }
@@ -111,8 +111,8 @@ public class CachingBehaviorTests
         var provider = TestServiceProvider.Build();
         var mediator = provider.GetRequiredService<IMediator>();
 
-        var first = await mediator.Send(new GetCachedCount());
-        var second = await mediator.Send(new GetCachedCount());
+        var first = await mediator.Send(new GetCachedCount(), TestContext.Current.CancellationToken);
+        var second = await mediator.Send(new GetCachedCount(), TestContext.Current.CancellationToken);
 
         // Both should return the same cached value
         first.ShouldBe(second);

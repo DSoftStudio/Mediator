@@ -35,7 +35,7 @@ public class MemoryPressureTests : IDisposable
     {
         // Warm up the pipeline to stabilize allocations
         for (int i = 0; i < 100; i++)
-            await _mediator.Send(new Ping());
+            await _mediator.Send(new Ping(), TestContext.Current.CancellationToken);
 
         GC.Collect();
         GC.WaitForPendingFinalizers();
@@ -44,7 +44,7 @@ public class MemoryPressureTests : IDisposable
         var memoryBefore = GC.GetTotalMemory(forceFullCollection: true);
 
         for (int i = 0; i < 1_000_000; i++)
-            await _mediator.Send(new Ping());
+            await _mediator.Send(new Ping(), TestContext.Current.CancellationToken);
 
         GC.Collect();
         GC.WaitForPendingFinalizers();
@@ -64,7 +64,7 @@ public class MemoryPressureTests : IDisposable
     public async Task Send_RepeatedCalls_DoNotLeakHandlers()
     {
         // Warm up
-        await _mediator.Send(new Ping());
+        await _mediator.Send(new Ping(), TestContext.Current.CancellationToken);
 
         var weakRef = ExecuteScopedSend();
 

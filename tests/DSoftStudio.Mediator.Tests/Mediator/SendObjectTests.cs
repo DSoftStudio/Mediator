@@ -41,7 +41,7 @@ public class SendObjectTests : IDisposable
     {
         object request = new Ping();
 
-        var result = await ((ISender)_mediator).Send(request);
+        var result = await ((ISender)_mediator).Send(request, TestContext.Current.CancellationToken);
 
         result.ShouldBe(42);
     }
@@ -51,8 +51,8 @@ public class SendObjectTests : IDisposable
     {
         object request = new Ping();
 
-        var result1 = await ((ISender)_mediator).Send(request);
-        var result2 = await ((ISender)_mediator).Send(request);
+        var result1 = await ((ISender)_mediator).Send(request, TestContext.Current.CancellationToken);
+        var result2 = await ((ISender)_mediator).Send(request, TestContext.Current.CancellationToken);
 
         result1.ShouldBe(42);
         result2.ShouldBe(42);
@@ -63,7 +63,7 @@ public class SendObjectTests : IDisposable
     {
         object request = new PingVoid();
 
-        var result = await ((ISender)_mediator).Send(request);
+        var result = await ((ISender)_mediator).Send(request, TestContext.Current.CancellationToken);
 
         result.ShouldBe(Unit.Value);
     }
@@ -91,7 +91,7 @@ public class SendObjectTests : IDisposable
     {
         // Verify the typed extension method (Ping-specific) still takes priority
         // over the Send(object) extension when the compile-time type is known.
-        var result = await _mediator.Send(new Ping());
+        var result = await _mediator.Send(new Ping(), TestContext.Current.CancellationToken);
 
         result.ShouldBe(42);
     }

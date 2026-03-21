@@ -54,7 +54,7 @@ public class NotificationPublisherTests : IDisposable
         var handler2 = new TestNotificationHandler2();
         var handlers = new INotificationHandler<TestNotification>[] { handler1, handler2 };
 
-        await publisher.Publish(handlers, new TestNotification("hello"), CancellationToken.None);
+        await publisher.Publish(handlers, new TestNotification("hello"), TestContext.Current.CancellationToken);
 
         handler1.Received.ShouldBe(["hello"]);
         handler2.Received.ShouldBe(["hello"]);
@@ -95,7 +95,7 @@ public class NotificationPublisherTests : IDisposable
             new TestNotificationHandler2()
         };
 
-        await publisher.Publish(handlers, new TestNotification("test"), CancellationToken.None);
+        await publisher.Publish(handlers, new TestNotification("test"), TestContext.Current.CancellationToken);
 
         var childNames = collector.Activities
             .Where(a => a.DisplayName.EndsWith(" handle"))
@@ -120,7 +120,7 @@ public class NotificationPublisherTests : IDisposable
         };
 
         await Should.ThrowAsync<InvalidOperationException>(async () =>
-            await publisher.Publish(handlers, new TestNotification("boom"), CancellationToken.None));
+            await publisher.Publish(handlers, new TestNotification("boom"), TestContext.Current.CancellationToken));
 
         var parentSpan = collector.Activities.SingleOrDefault(a => a.DisplayName == "TestNotification publish");
         parentSpan.ShouldNotBeNull();
@@ -144,7 +144,7 @@ public class NotificationPublisherTests : IDisposable
             new TestNotificationHandler1()
         };
 
-        await publisher.Publish(handlers, new TestNotification("test"), CancellationToken.None);
+        await publisher.Publish(handlers, new TestNotification("test"), TestContext.Current.CancellationToken);
         _meterListener.RecordObservableInstruments();
 
         var duration = _measurements.Where(m => m.Name == "mediator.request.duration").ToList();
@@ -170,7 +170,7 @@ public class NotificationPublisherTests : IDisposable
         };
 
         await Should.ThrowAsync<InvalidOperationException>(async () =>
-            await publisher.Publish(handlers, new TestNotification("boom"), CancellationToken.None));
+            await publisher.Publish(handlers, new TestNotification("boom"), TestContext.Current.CancellationToken));
 
         _meterListener.RecordObservableInstruments();
 
@@ -191,7 +191,7 @@ public class NotificationPublisherTests : IDisposable
         var handler = new TestNotificationHandler1();
         var handlers = new INotificationHandler<TestNotification>[] { handler };
 
-        await publisher.Publish(handlers, new TestNotification("test"), CancellationToken.None);
+        await publisher.Publish(handlers, new TestNotification("test"), TestContext.Current.CancellationToken);
 
         handler.Received.ShouldBe(["test"]);
     }
@@ -216,7 +216,7 @@ public class NotificationPublisherTests : IDisposable
             new TestNotificationHandler1()
         };
 
-        await publisher.Publish(handlers, new TestNotification("enriched"), CancellationToken.None);
+        await publisher.Publish(handlers, new TestNotification("enriched"), TestContext.Current.CancellationToken);
 
         var parentSpan = collector.Activities.Single(a => a.DisplayName == "TestNotification publish");
         parentSpan.GetTagItem("custom.value")!.ShouldBe("enriched");

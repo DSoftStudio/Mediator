@@ -39,7 +39,7 @@ public class StreamBehaviorTests : IDisposable
     public async Task CreateStream_WithBehaviors_BehaviorsExecute()
     {
         var values = new List<int>();
-        await foreach (var v in _mediator.CreateStream(new BehaviorPingStream()))
+        await foreach (var v in _mediator.CreateStream(new BehaviorPingStream(), TestContext.Current.CancellationToken))
             values.Add(v);
 
         _log.ShouldContain("SB1:enter");
@@ -50,7 +50,7 @@ public class StreamBehaviorTests : IDisposable
     [Fact]
     public async Task CreateStream_WithBehaviors_OrderPreserved()
     {
-        await foreach (var _ in _mediator.CreateStream(new BehaviorPingStream())) { }
+        await foreach (var _ in _mediator.CreateStream(new BehaviorPingStream(), TestContext.Current.CancellationToken)) { }
 
         // SB1 registered first, SB2 second.
         // Behaviors are reversed during chaining, so SB1 is outermost ? enters first.

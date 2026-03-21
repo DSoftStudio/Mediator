@@ -84,11 +84,11 @@ public class CacheCoverageTests
         var mediator = sp.GetRequiredService<IMediator>();
 
         // First call: cache miss
-        var result1 = await mediator.Send<CovCachePing, int>(new CovCachePing());
+        var result1 = await mediator.Send<CovCachePing, int>(new CovCachePing(), TestContext.Current.CancellationToken);
         result1.ShouldBe(77);
 
         // Second call on same thread/scope: cache hit
-        var result2 = await mediator.Send<CovCachePing, int>(new CovCachePing());
+        var result2 = await mediator.Send<CovCachePing, int>(new CovCachePing(), TestContext.Current.CancellationToken);
         result2.ShouldBe(77);
     }
 
@@ -103,13 +103,13 @@ public class CacheCoverageTests
 
         // First call
         var items1 = new List<int>();
-        await foreach (var item in mediator.CreateStream<CovCacheStream, int>(new CovCacheStream()))
+        await foreach (var item in mediator.CreateStream<CovCacheStream, int>(new CovCacheStream(), TestContext.Current.CancellationToken))
             items1.Add(item);
         items1.ShouldBe(new[] { 100 });
 
         // Second call on same scope (cache hit)
         var items2 = new List<int>();
-        await foreach (var item in mediator.CreateStream<CovCacheStream, int>(new CovCacheStream()))
+        await foreach (var item in mediator.CreateStream<CovCacheStream, int>(new CovCacheStream(), TestContext.Current.CancellationToken))
             items2.Add(item);
         items2.ShouldBe(new[] { 100 });
     }
@@ -126,13 +126,13 @@ public class CacheCoverageTests
 
         // First call: cache miss
         var items1 = new List<int>();
-        await foreach (var item in mediator.CreateStream<CovCacheBehaviorStream, int>(new CovCacheBehaviorStream()))
+        await foreach (var item in mediator.CreateStream<CovCacheBehaviorStream, int>(new CovCacheBehaviorStream(), TestContext.Current.CancellationToken))
             items1.Add(item);
         items1.ShouldBe(new[] { 5 });
 
         // Second call: cache hit
         var items2 = new List<int>();
-        await foreach (var item in mediator.CreateStream<CovCacheBehaviorStream, int>(new CovCacheBehaviorStream()))
+        await foreach (var item in mediator.CreateStream<CovCacheBehaviorStream, int>(new CovCacheBehaviorStream(), TestContext.Current.CancellationToken))
             items2.Add(item);
         items2.ShouldBe(new[] { 5 });
     }

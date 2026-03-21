@@ -38,7 +38,7 @@ public class GenericTypeConfusionTests : IDisposable
     [Fact]
     public async Task Send_ValidPing_ReturnsExpectedResult()
     {
-        var result = await _mediator.Send(new Ping());
+        var result = await _mediator.Send(new Ping(), TestContext.Current.CancellationToken);
 
         result.ShouldBe(42);
     }
@@ -47,14 +47,14 @@ public class GenericTypeConfusionTests : IDisposable
     public async Task Send_ConfusingPing_FastPath_ThrowsInvalidOperationException()
     {
         await Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await _mediator.Send<ConfusingPing, int>(new ConfusingPing()));
+            async () => await _mediator.Send<ConfusingPing, int>(new ConfusingPing(), TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task Send_ConfusingPing_DoesNotReturnPingResult()
     {
         // Ping works fine — returns 42.
-        var validResult = await _mediator.Send(new Ping());
+        var validResult = await _mediator.Send(new Ping(), TestContext.Current.CancellationToken);
         validResult.ShouldBe(42);
 
         // ConfusingPing shares TResponse=int but must NEVER reuse Ping's pipeline.

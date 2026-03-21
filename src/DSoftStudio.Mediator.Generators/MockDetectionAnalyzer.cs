@@ -51,8 +51,8 @@ public sealed class MockDetectionAnalyzer : IIncrementalGenerator
                 return;
 
             // Look for a mocking library among the referenced assemblies.
-            string detectedMockLib = DetectMockingLibrary(compilation);
-            if (detectedMockLib == null)
+            string? detectedMockLib = DetectMockingLibrary(compilation);
+            if (detectedMockLib is null)
                 return;
 
             // Mocking library found + interceptors active → emit DSOFT004.
@@ -70,7 +70,7 @@ public sealed class MockDetectionAnalyzer : IIncrementalGenerator
                && string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string DetectMockingLibrary(Compilation compilation)
+    private static string? DetectMockingLibrary(Compilation compilation)
     {
         foreach (var assembly in compilation.ReferencedAssemblyNames)
         {

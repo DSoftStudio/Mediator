@@ -26,7 +26,7 @@ public class PipelineCompilationTests
 
         var pipeline = PipelineBuilder.Build<Ping, int>();
 
-        var result = await pipeline(new Ping(), sp, CancellationToken.None);
+        var result = await pipeline(new Ping(), sp, TestContext.Current.CancellationToken);
 
         result.ShouldBe(42);
     }
@@ -44,7 +44,7 @@ public class PipelineCompilationTests
         using var sp = services.BuildServiceProvider();
 
         var pipeline = PipelineBuilder.Build<Ping, int>();
-        await pipeline(new Ping(), sp, CancellationToken.None);
+        await pipeline(new Ping(), sp, TestContext.Current.CancellationToken);
 
         log.ShouldBe(new[] {"P1:before", "P1:after"});
     }
@@ -57,7 +57,7 @@ public class PipelineCompilationTests
         using var sp = services.BuildServiceProvider();
 
         var pipeline = PipelineBuilder.Build<Ping, int>();
-        var result = await pipeline(new Ping(), sp, CancellationToken.None);
+        var result = await pipeline(new Ping(), sp, TestContext.Current.CancellationToken);
 
         result.ShouldBe(42);
     }

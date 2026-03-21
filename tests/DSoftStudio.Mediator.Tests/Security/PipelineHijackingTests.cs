@@ -82,7 +82,7 @@ public class PipelineHijackingTests
         using var provider = services.BuildServiceProvider();
         var mediator = provider.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send(new HijackPing());
+        var result = await mediator.Send(new HijackPing(), TestContext.Current.CancellationToken);
 
         result.ShouldBe(42);
 
@@ -117,7 +117,7 @@ public class PipelineHijackingTests
         using var provider = services.BuildServiceProvider();
         var mediator = provider.GetRequiredService<IMediator>();
 
-        await mediator.Send(new HijackPing());
+        await mediator.Send(new HijackPing(), TestContext.Current.CancellationToken);
 
         handlerCallCount.ShouldBe(1);
     }

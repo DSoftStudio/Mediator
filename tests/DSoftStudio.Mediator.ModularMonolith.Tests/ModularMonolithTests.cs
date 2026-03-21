@@ -46,7 +46,7 @@ public class ModularMonolithTests
     {
         var mediator = _sp.GetRequiredService<IMediator>();
 
-        var result = await mediator.Send<GetTemperatureQuery, int>(new GetTemperatureQuery());
+        var result = await mediator.Send<GetTemperatureQuery, int>(new GetTemperatureQuery(), TestContext.Current.CancellationToken);
 
         Assert.Equal(25, result);
     }
@@ -63,7 +63,7 @@ public class ModularMonolithTests
         // GetWeatherQueryHandler is internal — not registered from this project.
         // The mediator should not be able to resolve a handler for GetWeatherQuery.
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => mediator.Send<GetWeatherQuery, string>(new GetWeatherQuery()).AsTask());
+            () => mediator.Send<GetWeatherQuery, string>(new GetWeatherQuery(), TestContext.Current.CancellationToken).AsTask());
     }
 
     /// <summary>
@@ -78,7 +78,7 @@ public class ModularMonolithTests
 
         // WeatherUpdatedNotificationHandler is internal — not registered.
         // Publishing should complete without error (zero handlers is valid).
-        await mediator.Publish(new WeatherUpdatedNotification("Madrid"));
+        await mediator.Publish(new WeatherUpdatedNotification("Madrid"), TestContext.Current.CancellationToken);
     }
 
     /// <summary>
