@@ -15,7 +15,7 @@ description: "All notable changes to DSoftStudio.Mediator."
 
 # Changelog
 
-## [1.1.8-rc.2] — 2026-03-23
+## [1.1.8] — 2026-03-23
 
 ### Added
 
