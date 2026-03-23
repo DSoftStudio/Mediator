@@ -9,7 +9,7 @@
 
 		<!-- NuGet -->
 		<PackageId>DSoftStudio.Mediator.OpenTelemetry</PackageId>
-		<Version>1.0.5</Version>
+		<Version>1.0.6</Version>
 
 		<Authors>DSoftStudio</Authors>
 		<Company>DSoftStudio</Company>

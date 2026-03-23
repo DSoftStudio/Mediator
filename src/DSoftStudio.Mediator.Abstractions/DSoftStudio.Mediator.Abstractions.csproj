@@ -8,7 +8,7 @@
 
 	  <!-- NuGet -->
 	  <PackageId>DSoftStudio.Mediator.Abstractions</PackageId>
-	  <Version>1.1.8-rc.2</Version>
+	  <Version>1.1.8</Version>
 
 	  <Authors>DSoftStudio</Authors>
 	  <Company>DSoftStudio</Company>

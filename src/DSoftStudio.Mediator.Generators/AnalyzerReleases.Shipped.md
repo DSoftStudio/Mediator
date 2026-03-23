@@ -9,7 +9,7 @@ Rule ID | Category | Severity | Notes
 --------|----------|----------|-------
 DSOFT001 | DSoftStudio.Mediator | Warning | No handler found for request type
 
-## Release 1.1.8-rc.1
+## Release 1.1.8
 
 ### New Rules
 
