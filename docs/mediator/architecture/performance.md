@@ -98,6 +98,8 @@ A single `isinst` + branch instruction prevents the JIT's Guarded Devirtualizati
 
 In **Debug** builds (where tests typically run), the generated interceptors detect test doubles (Moq, NSubstitute, etc.) that don't implement `IServiceProviderAccessor` and fall back to virtual dispatch.
 
+**Typed extensions** (e.g. `Send(Ping)`) always use the defensive `isinst` + fallback pattern regardless of build configuration — they are the fallback path when interceptors are suppressed and must remain mock-safe in `dotnet test -c Release` CI pipelines. The ~1–2 ns overhead is negligible. See [Design Notes](design-notes.md) for the full comparison table.
+
 > **Tip:** If you mock `ISender` in a project that references the generator and build in Release mode, the interceptor will throw `InvalidCastException`. Set `<DSoftMediatorSuppressInterceptors>true</DSoftMediatorSuppressInterceptors>` or reference only `DSoftStudio.Mediator.Abstractions` in your test project. See [Source Generators](source-generators.md) for DSOFT004.
 
 ## Publish Interceptor — `NotificationPublisherFlag` Bypass

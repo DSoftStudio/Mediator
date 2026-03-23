@@ -21,18 +21,18 @@ All benchmarks run on .NET 10 using [BenchmarkDotNet](https://benchmarkdotnet.or
 
 | Operation             | **DSoft**   | Mediator (SG) | DispatchR   | MediatR     |
 |-----------------------|------------:|--------------:|------------:|------------:|
-| `Send()`              |  **7.1 ns** |      12.5 ns  |    33.4 ns  |    42.1 ns  |
-| `Send()` (5 behaviors)| **15.5 ns** |      21.2 ns  |    53.5 ns  |   150.2 ns  |
-| `Publish()`           |  **8.5 ns** |      10.2 ns  |    35.0 ns  |   136.1 ns  |
-| `CreateStream()`      |     45.8 ns |  **45.3 ns**  |    67.1 ns  |   124.2 ns  |
-| Cold Start            | **1.63 µs** |     7.41 µs   |   1.91 µs   |    3.10 µs  |
+| `Send()`              |  **7.2 ns** |      12.2 ns  |    33.4 ns  |    41.3 ns  |
+| `Send()` (5 behaviors)| **15.6 ns** |      36.8 ns  |    54.1 ns  |   153.1 ns  |
+| `Publish()`           |  **4.5 ns** |      10.6 ns  |    35.7 ns  |   123.4 ns  |
+| `CreateStream()`      |     45.5 ns |  **44.7 ns**  |    68.1 ns  |   122.9 ns  |
+| Cold Start            | **1.62 µs** |     9.91 µs   |   1.88 µs   |    3.24 µs  |
 
 ### Key Takeaways
 
-- **Send** is ~1.8× faster than the next fastest (Mediator SG) and ~6× faster than MediatR
-- **Send with 5 behaviors** shows the pipeline chain stays efficient under load — only ~8.4 ns per behavior hop
-- **Publish** is ~0.6 ns overhead — effectively a direct call to the handler array
-- **Cold Start** at 1.63 µs means precompiled pipelines warm up in under 2 microseconds
+- **Send** is ~1.7× faster than the next fastest (Mediator SG) and ~5.7× faster than MediatR
+- **Send with 5 behaviors** shows the pipeline chain stays efficient under load — only ~1.7 ns per behavior hop (8.4 ns total overhead for 5 behaviors)
+- **Publish** is ~0.7 ns overhead — effectively a direct call to the handler array
+- **Cold Start** at 1.62 µs means precompiled pipelines warm up in under 2 microseconds
 
 ## Allocations
 
@@ -73,12 +73,32 @@ All benchmarks run on .NET 10 using [BenchmarkDotNet](https://benchmarkdotnet.or
 | Compile-time pipeline     | ✔️ | ✔️ | ❌ | ❌ |
 | MediatR-style API         | ✔️ | ✔️ | ❌ | ✔️ |
 
+## Realistic Pipeline (Enterprise)
+
+Measures all 4 libraries through a production-representative pipeline: **Validation → Logging → Metrics → async database write** with 3 pipeline behaviors, full DI, and simulated async I/O. Each library has its own `DirectCall_WithPipeline` fair baseline measured in the same isolated BenchmarkDotNet process.
+
+| Benchmark | Latency | Allocated | vs DirectCall |
+|---|---:|---:|---:|
+| **DSoft** — Realistic Pipeline | 666.9 ns | 255 B | 0.99× |
+| **DispatchR** — Realistic Pipeline | 666.7 ns | 255 B | 1.01× |
+| **Mediator SG** — Realistic Pipeline | 718.0 ns | 397 B | 1.06× |
+| **MediatR** — Realistic Pipeline | 857.1 ns | 1,032 B | 1.20× |
+
 ## Reproducing
 
 Full BenchmarkDotNet results and source code are available in the [`/benchmarks`](../benchmarks) folder.
 
 ```shell
-dotnet run -c Release --project benchmarks/DSoft.Benchmarks
+dotnet run -c Release --project benchmarks/DSoftStudio.Mediator.Benchmarks
+```
+
+Individual library runs:
+
+```shell
+benchmarks/run-dsoft.cmd
+benchmarks/run-mediatr.cmd
+benchmarks/run-dispatchr.cmd
+benchmarks/run-mediatorsg.cmd
 ```
 
 ## See Also

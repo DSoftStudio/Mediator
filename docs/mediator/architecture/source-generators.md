@@ -15,12 +15,13 @@ description: "Roslyn incremental source generators for handler discovery."
 
 # Source Generators
 
-Four Roslyn incremental source generators handle all discovery and wiring at build time:
+Five Roslyn incremental source generators handle all discovery and wiring at build time:
 
 | Generator | Output | Purpose |
 |---|---|---|
 | `DependencyInjectionGenerator` | `MediatorServiceRegistry.g.cs` | Scans for `IRequestHandler`, `INotificationHandler`, `IStreamRequestHandler`, and self-handling request classes. Emits adapter classes for self-handlers. Registers stateless handlers (no constructor params) as **Singleton**, others as Transient |
 | `MediatorPipelineGenerator` | `MediatorRegistry.g.cs` | Registers `PipelineChainHandler<TRequest, TResponse>` as transient for every request type via `PrecompilePipelines()`. Also populates `RequestObjectDispatch` with a delegate per request type for `Send(object)` runtime-typed dispatch |
+| `MediatorExtensionsGenerator` | `MediatorExtensions.g.cs` | Generates typed extension methods on `ISender` / `IMediator` (e.g. `Send(Ping)`, `CreateStream(PingStream)`) so the compiler infers both generic type parameters. Uses defensive `isinst` + virtual-dispatch fallback (never branchless castclass) to ensure correct behavior in test projects, mocking scenarios, and `dotnet test -c Release` pipelines |
 | `NotificationGenerator` | `NotificationRegistry.g.cs` | Generates static dispatch arrays for each notification type, eliminating runtime service enumeration |
 | `StreamGenerator` | `StreamRegistry.g.cs` | Generates static factory delegates for each stream handler |
 
@@ -33,6 +34,7 @@ The source generators also emit diagnostics to catch handler misconfigurations a
 | **DSOFT001** | Warning | No `IRequestHandler<TRequest, TResponse>` found for a request type |
 | **DSOFT002** | Warning | Multiple request handlers for the same `<TRequest, TResponse>` — only the last registered handler executes |
 | **DSOFT003** | Warning | Multiple stream handlers for the same `<TRequest, TResponse>` — only the last registered handler executes |
+| **DSOFT005** | Warning | A handler in a referenced assembly was discovered but skipped because it is `internal` and the consuming assembly does not have `InternalsVisibleTo` access. The message includes the handler type name and the source assembly |
 
 > **Note:** Multiple `INotificationHandler<T>` implementations for the same notification type are expected and do not trigger a diagnostic — notification fan-out is by design.
 
@@ -46,7 +48,7 @@ Three additional generators emit [C# interceptors](https://learn.microsoft.com/d
 | `PublishInterceptorGenerator` | `IPublisher.Publish<TNotification>()` | `NotificationPublisherFlag` bypass — skips DI probe |
 | `StreamInterceptorGenerator` | `IMediator.CreateStream<TRequest, TResponse>()` | Direct static dispatch |
 
-All three generators adapt to `OptimizationLevel`: Release builds emit branchless patterns for JIT GDV; Debug builds emit `isinst` fallback for mock safety. See [Performance Design](performance.md) for details.
+All three interceptor generators adapt to `OptimizationLevel`: Release builds emit branchless `castclass` for JIT GDV; Debug builds emit `isinst` fallback for mock safety. **Typed extensions** (from `MediatorExtensionsGenerator`) always use defensive `isinst` + virtual-dispatch fallback regardless of build configuration — this ensures they work correctly in `dotnet test -c Release` CI pipelines where interceptors may be suppressed. See [Performance Design](performance.md) for details.
 
 ### Suppressing interceptors
 

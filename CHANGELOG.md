@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.7] — 2026-03-21
+
+### Added
+
+- **Realistic pipeline benchmarks** — New enterprise-realistic benchmark suite measuring all 4 libraries (DSoft, MediatR, DispatchR, Mediator SG) through a production-representative pipeline: Validation → Logging → Metrics → async database write with 3 pipeline behaviors and full DI. Each library has its own `DirectCall_WithPipeline` fair baseline running in the same isolated BenchmarkDotNet process. Shared infrastructure: `CreateOrderCommand` message types, `FakeOrderRepository` with simulated async I/O.
+- **Per-library DirectCall baselines** — Each library's realistic pipeline benchmark now includes its own direct-call baseline measured in the same isolated process, eliminating cross-process variance from comparisons.
+- **Send(object) / Publish(object) benchmarks** — New isolated benchmark classes for all 4 libraries (`DSoftSendObjectBenchmarks`, `DSoftPublishObjectBenchmarks`, `MediatRSendObjectBenchmarks`, `MediatRPublishObjectBenchmarks`, `DispatchRPublishObjectBenchmarks`, `MediatorSGSendObjectBenchmarks`, `MediatorSGPublishObjectBenchmarks`) measuring runtime-typed dispatch overhead vs generic dispatch.
+- **Typed extension vs Mediator SG benchmark** — New `DSoftTypedExtensionVsMediatorSGBenchmarks` class comparing DSoft source-generated typed extensions against martinothamar/Mediator SG dispatch in the same isolated process.
+- **Packaging regression tests** — New `Packaging/BuildTransitivePropsTests` verifying that both `build/` and `buildTransitive/` props files contain `InterceptorsNamespaces`, `InterceptorsPreviewNamespaces`, `DSoftMediatorSuppressInterceptors`, and stay in sync. New `Packaging/InterceptorNamespaceCompilationTests` using Roslyn in-memory compilation to reproduce and guard against CS9137 regressions.
+
+### Fixed
+
+- **CS9137 when consuming the NuGet package** — The `buildTransitive/DSoftStudio.Mediator.props` file was missing `InterceptorsNamespaces` / `InterceptorsPreviewNamespaces` configuration. When NuGet sees both `build/` and `buildTransitive/` with the same filename, `buildTransitive/` takes priority even for direct `PackageReference` consumers. The source generator emitted interceptors but the compiler rejected them because the namespace was not enabled. The transitive props file now mirrors `build/` with full interceptor namespace configuration and `DSoftMediatorSuppressInterceptors` support.
+- **MediatorSG benchmark crash** — Added `FakeOrderRepository` singleton registration to `MediatorSGHelper.AddMediatorSG()` to prevent the eager handler resolution from failing during realistic pipeline benchmarks.
+
+### Changed
+
+- **README rewrite** — Complete production-grade rewrite focused on adoption and enterprise credibility. New hero narrative ("A mediator with zero structural cost"), realistic pipeline proof table with per-library DirectCall baselines, GC pressure / tail latency / pipeline depth analysis, "When to use this" positioning, feature comparison matrix, execution model diagram, ecosystem section, and "Your mediator should not be part of your performance budget" closing. MediatR comparison updated to v14.1.
+- **Shared `InterceptorHelpers` dispatch body builder** — `AppendSendDispatchBody` extracted to a single static method shared by `SendInterceptorGenerator` (interceptors) and `MediatorExtensionsGenerator` (typed extensions). Ensures dispatch logic is defined once, with `isRelease` parameter for branchless castclass (Release interceptors) vs isinst + virtual-dispatch fallback (typed extensions and Debug interceptors).
+- **Typed extensions use defensive dispatch** — `MediatorExtensionsGenerator` now emits `isinst` + virtual-dispatch fallback (never branchless castclass), ensuring typed extensions work correctly in test projects, mocking scenarios, and `dotnet test -c Release` CI pipelines regardless of interceptor suppression.
+- **Benchmark suite restructured** — Deleted legacy combined benchmark classes (`ColdStartBenchmarks`, `ConcurrencyBenchmarks`, `PublishBenchmarks`, `SendBenchmarks`, `SendNoBehaviorsBenchmarks`, `StreamBenchmarks`) and `run-all-benchmarks.cmd`. Each library now has isolated per-category benchmark classes under `Benchmarks/{Library}/` directories.
+- **Benchmark report generator** — `generate-benchmarks-md.ps1` now filters Direct-only rows from "All Libraries" combined sections, removes empty separator rows, and adds library-group separators with dynamic column-width matching for cleaner combined tables.
+- **Benchmark run scripts** — All 4 `run-*.cmd` files updated to include realistic pipeline and Send(object)/Publish(object) benchmark classes.
+- **Companion packages bumped to 1.0.5** — `DSoftStudio.Mediator.FluentValidation`, `DSoftStudio.Mediator.HybridCache`, `DSoftStudio.Mediator.OpenTelemetry` updated to depend on `DSoftStudio.Mediator >= 1.1.7`.
+
+---
+
 ## [1.1.6] — 2026-03-21
 
 ### Added
