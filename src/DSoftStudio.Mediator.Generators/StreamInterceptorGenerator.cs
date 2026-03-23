@@ -212,61 +212,8 @@ public sealed class StreamInterceptorGenerator : IIncrementalGenerator
             sb.Append(reqType);
             sb.AppendLine(" request, global::System.Threading.CancellationToken cancellationToken = default)");
             sb.AppendLine("        {");
-            sb.AppendLine("            global::System.ArgumentNullException.ThrowIfNull(request);");
 
-            if (isRelease)
-            {
-                // Release: branchless castclass — GDV devirtualizes to ~0 ns overhead.
-                sb.AppendLine("            var sp = ((global::DSoftStudio.Mediator.IServiceProviderAccessor)mediator).ServiceProvider;");
-            }
-            else
-            {
-                // Debug: mock-safe type check with graceful fallback for test doubles.
-                sb.AppendLine("            if (mediator is not global::DSoftStudio.Mediator.IServiceProviderAccessor __spa)");
-                sb.Append("                return mediator.CreateStream<");
-                sb.Append(reqType);
-                sb.Append(", ");
-                sb.Append(resType);
-                sb.AppendLine(">(request, cancellationToken);");
-                sb.AppendLine("            var sp = __spa.ServiceProvider;");
-            }
-
-            // Behaviors path: check for stream pipeline chain (cached or direct DI)
-            sb.Append("            var chain = global::DSoftStudio.Mediator.StreamDispatch<");
-            sb.Append(reqType);
-            sb.Append(", ");
-            sb.Append(resType);
-            sb.AppendLine(">.IsStreamChainCacheable");
-            sb.Append("                ? global::DSoftStudio.Mediator.StreamPipelineChainCache<");
-            sb.Append(reqType);
-            sb.Append(", ");
-            sb.Append(resType);
-            sb.AppendLine(">.Resolve(sp)");
-            sb.Append("                : global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions");
-            sb.Append(".GetService<global::DSoftStudio.Mediator.StreamPipelineChainHandler<");
-            sb.Append(reqType);
-            sb.Append(", ");
-            sb.Append(resType);
-            sb.AppendLine(">>(sp);");
-
-            sb.AppendLine("            if (chain is not null)");
-            sb.AppendLine("                return chain.Handle(request, cancellationToken);");
-
-            // No-behaviors fast path: resolve stream handler directly via ThreadStatic cache.
-            // Null guard on Handler factory matches the InvalidOperationException contract.
-            sb.Append("            var factory = global::DSoftStudio.Mediator.StreamDispatch<");
-            sb.Append(reqType);
-            sb.Append(", ");
-            sb.Append(resType);
-            sb.AppendLine(">.Handler");
-            sb.Append("                ?? throw new global::System.InvalidOperationException(\"Stream handler for \" + typeof(");
-            sb.Append(reqType);
-            sb.AppendLine(").Name + \" not registered.\");");
-            sb.Append("            return global::DSoftStudio.Mediator.StreamHandlerCache<");
-            sb.Append(reqType);
-            sb.Append(", ");
-            sb.Append(resType);
-            sb.AppendLine(">.Resolve(sp).Handle(request, cancellationToken);");
+            InterceptorHelpers.AppendStreamDispatchBody(sb, reqType, resType, isRelease, "            ");
 
             sb.AppendLine("        }");
             sb.AppendLine();

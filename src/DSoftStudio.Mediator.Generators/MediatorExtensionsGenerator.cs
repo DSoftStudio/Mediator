@@ -226,22 +226,31 @@ public sealed class MediatorExtensionsGenerator : IIncrementalGenerator
         sb.AppendLine("    {");
 
         // ── Send extensions ──────────────────────────────────────
+        // NOTE: Typed extensions ALWAYS use isRelease: false (isinst + graceful
+        // fallback) rather than honouring the compilation's OptimizationLevel.
+        //
+        // Unlike interceptors — which are transparent, call-site-specific rewrites
+        // that test projects suppress via DSoftMediatorSuppressInterceptors — typed
+        // extensions are PUBLIC API surface generated into every referencing project,
+        // including test projects that exercise mock ISender implementations.
+        //
+        // The isinst check costs ~1-2 extra CPU cycles vs. castclass on the hot
+        // path (< 0.05% of total request processing) while guaranteeing consistent
+        // behaviour across Debug and Release builds — critical because enterprise
+        // CI/CD pipelines routinely run `dotnet test -c Release`.
         foreach (var pair in requests)
         {
             sb.AppendLine("        /// <summary>");
             sb.AppendLine($"        /// Sends a <see cref=\"{EscapeXml(pair.RequestType)}\"/> through the pipeline. Type-inferred shorthand.");
             sb.AppendLine("        /// </summary>");
-            sb.AppendLine("        [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]");
             sb.Append("        public static global::System.Threading.Tasks.ValueTask<");
             sb.Append(pair.ResponseType);
             sb.Append("> Send(this global::DSoftStudio.Mediator.Abstractions.ISender sender, ");
             sb.Append(pair.RequestType);
             sb.AppendLine(" request, global::System.Threading.CancellationToken cancellationToken = default)");
-            sb.Append("            => sender.Send<");
-            sb.Append(pair.RequestType);
-            sb.Append(", ");
-            sb.Append(pair.ResponseType);
-            sb.AppendLine(">(request, cancellationToken);");
+            sb.AppendLine("        {");
+            InterceptorHelpers.AppendSendDispatchBody(sb, pair.RequestType, pair.ResponseType, isRelease: false, "            ");
+            sb.AppendLine("        }");
             sb.AppendLine();
         }
 
@@ -254,43 +263,89 @@ public sealed class MediatorExtensionsGenerator : IIncrementalGenerator
         sb.AppendLine("        /// </para>");
         sb.AppendLine("        /// </summary>");
         sb.AppendLine("        /// <returns>The handler response boxed as <see cref=\"object\"/>.</returns>");
+        sb.AppendLine("        [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]");
         sb.AppendLine("        public static global::System.Threading.Tasks.ValueTask<object?> Send(");
         sb.AppendLine("            this global::DSoftStudio.Mediator.Abstractions.ISender sender,");
         sb.AppendLine("            object request,");
         sb.AppendLine("            global::System.Threading.CancellationToken cancellationToken = default)");
         sb.AppendLine("        {");
-        sb.AppendLine("            if (sender == null) throw new global::System.ArgumentNullException(nameof(sender));");
-        sb.AppendLine("            if (request == null) throw new global::System.ArgumentNullException(nameof(request));");
-        sb.AppendLine("            // Mock-safe guard: when ISender is a test double (Moq, NSubstitute, etc.)");
-        sb.AppendLine("            // it won't implement IServiceProviderAccessor — throw a clear error.");
-        sb.AppendLine("            if (sender is not global::DSoftStudio.Mediator.IServiceProviderAccessor __accessor)");
-        sb.AppendLine("                throw new global::System.InvalidOperationException(");
-        sb.AppendLine("                    \"Runtime object dispatch (Send(object)) requires the real Mediator instance. \" +");
-        sb.AppendLine("                    \"When mocking, use the explicit generic overload: sender.Send<TRequest, TResponse>(request).\");");
-        sb.AppendLine("            var serviceProvider = __accessor.ServiceProvider;");
-        sb.AppendLine("            return global::DSoftStudio.Mediator.RequestObjectDispatch.Dispatch(request, serviceProvider, cancellationToken);");
+        sb.AppendLine("            global::System.ArgumentNullException.ThrowIfNull(request);");
+        sb.AppendLine("            // Mock-safe guard: 'is not' pattern avoids castclass so mock/test-double");
+        sb.AppendLine("            // ISender instances get a clear InvalidOperationException instead of");
+        sb.AppendLine("            // InvalidCastException. The throw lives in a [DoesNotReturn] helper,");
+        sb.AppendLine("            // keeping this method free of IL throw instructions for JIT inlining.");
+        sb.AppendLine("            if (sender is not global::DSoftStudio.Mediator.IServiceProviderAccessor __acc)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                ThrowSenderNotMediator();");
+        sb.AppendLine("                return default; // unreachable — satisfies definite assignment analysis");
+        sb.AppendLine("            }");
+        sb.AppendLine("            var __sp = __acc.ServiceProvider;");
+
+        // Source-generated type switch: eliminates FrozenDictionary lookup + delegate
+        // invocation (~3-5 ns saving). Falls back to RequestObjectDispatch for types
+        // not known at compile time (e.g. from referenced assemblies without source).
+        if (requests.Count > 0)
+        {
+            sb.AppendLine("            switch (request)");
+            sb.AppendLine("            {");
+            for (int i = 0; i < requests.Count; i++)
+            {
+                var pair = requests[i];
+                sb.AppendLine($"                case {pair.RequestType} __r{i}:");
+                sb.AppendLine("                {");
+                EmitSendObjectCaseBody(sb, pair.RequestType, pair.ResponseType, $"__r{i}", "                    ");
+                sb.AppendLine("                }");
+            }
+            sb.AppendLine("                default:");
+            sb.AppendLine("                    return global::DSoftStudio.Mediator.RequestObjectDispatch.Dispatch(request, __sp, cancellationToken);");
+            sb.AppendLine("            }");
+        }
+        else
+        {
+            sb.AppendLine("            return global::DSoftStudio.Mediator.RequestObjectDispatch.Dispatch(request, __sp, cancellationToken);");
+        }
         sb.AppendLine("        }");
         sb.AppendLine();
 
         // ── CreateStream extensions ──────────────────────────────
+        // Same defensive dispatch rationale as Send extensions above.
         foreach (var pair in streams)
         {
             sb.AppendLine("        /// <summary>");
             sb.AppendLine($"        /// Creates an async stream from a <see cref=\"{EscapeXml(pair.RequestType)}\"/>. Type-inferred shorthand.");
             sb.AppendLine("        /// </summary>");
-            sb.AppendLine("        [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]");
             sb.Append("        public static global::System.Collections.Generic.IAsyncEnumerable<");
             sb.Append(pair.ResponseType);
             sb.Append("> CreateStream(this global::DSoftStudio.Mediator.Abstractions.IMediator mediator, ");
             sb.Append(pair.RequestType);
             sb.AppendLine(" request, global::System.Threading.CancellationToken cancellationToken = default)");
-            sb.Append("            => mediator.CreateStream<");
-            sb.Append(pair.RequestType);
-            sb.Append(", ");
-            sb.Append(pair.ResponseType);
-            sb.AppendLine(">(request, cancellationToken);");
+            sb.AppendLine("        {");
+            InterceptorHelpers.AppendStreamDispatchBody(sb, pair.RequestType, pair.ResponseType, isRelease: false, "            ");
+            sb.AppendLine("        }");
             sb.AppendLine();
         }
+
+        // AwaitAndBox helper for Send(object) type switch — boxes async results.
+        if (requests.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("        /// <summary>Async fallback: awaits the result and boxes it. Only allocated when the handler is truly async.</summary>");
+            sb.AppendLine("        private static async global::System.Threading.Tasks.ValueTask<object?> AwaitAndBox<T>(");
+            sb.AppendLine("            global::System.Threading.Tasks.ValueTask<T> task) => await task;");
+        }
+
+        // ThrowSenderNotMediator — mock-safe guard for Send(object).
+        // [DoesNotReturn] + [NoInlining] keeps the throw out of the caller's IL.
+        sb.AppendLine();
+        sb.AppendLine("        /// <summary>Throws when Send(object) is called on a non-Mediator ISender (e.g. mock/test double).</summary>");
+        sb.AppendLine("        [global::System.Diagnostics.CodeAnalysis.DoesNotReturn]");
+        sb.AppendLine("        [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]");
+        sb.AppendLine("        private static void ThrowSenderNotMediator()");
+        sb.AppendLine("        {");
+        sb.AppendLine("            throw new global::System.InvalidOperationException(");
+        sb.AppendLine("                \"Send(object) requires the real Mediator (IServiceProviderAccessor). \" +");
+        sb.AppendLine("                \"For test doubles, use the explicit generic overload sender.Send<TRequest, TResponse>(request).\");");
+        sb.AppendLine("        }");
 
         sb.AppendLine("    }");
         sb.AppendLine("}");
@@ -300,6 +355,38 @@ public sealed class MediatorExtensionsGenerator : IIncrementalGenerator
 
     private static string EscapeXml(string input)
         => input.Replace("<", "{").Replace(">", "}");
+
+    /// <summary>
+    /// Emits the inline dispatch body for a single request type inside the
+    /// Send(object) type switch. Includes pipeline chain check + handler cache
+    /// + sync fast-path boxing.
+    /// </summary>
+    private static void EmitSendObjectCaseBody(
+        StringBuilder sb,
+        string requestType,
+        string responseType,
+        string varName,
+        string indent)
+    {
+        sb.Append(indent).AppendLine($"global::System.Threading.Tasks.ValueTask<{responseType}> __vt;");
+        sb.Append(indent).AppendLine($"if (global::DSoftStudio.Mediator.RequestDispatch<{requestType}, {responseType}>.HasPipelineChain)");
+        sb.Append(indent).AppendLine("{");
+        sb.Append(indent).AppendLine($"    var __chain = global::DSoftStudio.Mediator.RequestDispatch<{requestType}, {responseType}>.IsPipelineChainCacheable");
+        sb.Append(indent).AppendLine($"        ? global::DSoftStudio.Mediator.PipelineChainCache<{requestType}, {responseType}>.Resolve(__sp)");
+        sb.Append(indent).AppendLine($"        : global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetService<global::DSoftStudio.Mediator.PipelineChainHandler<{requestType}, {responseType}>>(__sp);");
+        sb.Append(indent).AppendLine("    if (__chain is not null)");
+        sb.Append(indent).AppendLine("    {");
+        sb.Append(indent).AppendLine($"        __vt = __chain.Handle({varName}, cancellationToken);");
+        sb.Append(indent).AppendLine("        return __vt.IsCompletedSuccessfully");
+        sb.Append(indent).AppendLine("            ? new global::System.Threading.Tasks.ValueTask<object?>(__vt.Result)");
+        sb.Append(indent).AppendLine("            : AwaitAndBox(__vt);");
+        sb.Append(indent).AppendLine("    }");
+        sb.Append(indent).AppendLine("}");
+        sb.Append(indent).AppendLine($"__vt = global::DSoftStudio.Mediator.HandlerCache<{requestType}, {responseType}>.Resolve(__sp).Handle({varName}, cancellationToken);");
+        sb.Append(indent).AppendLine("return __vt.IsCompletedSuccessfully");
+        sb.Append(indent).AppendLine("    ? new global::System.Threading.Tasks.ValueTask<object?>(__vt.Result)");
+        sb.Append(indent).AppendLine("    : AwaitAndBox(__vt);");
+    }
 
     // ── Data model ───────────────────────────────────────────────
 

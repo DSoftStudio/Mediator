@@ -218,59 +218,9 @@ public sealed class SendInterceptorGenerator : IIncrementalGenerator
             sb.Append(reqType);
             sb.AppendLine(" request, global::System.Threading.CancellationToken cancellationToken = default)");
             sb.AppendLine("        {");
-            sb.AppendLine("            global::System.ArgumentNullException.ThrowIfNull(request);");
 
-            if (isRelease)
-            {
-                // Release: branchless castclass — GDV devirtualizes to ~0 ns overhead.
-                sb.AppendLine("            var sp = ((global::DSoftStudio.Mediator.IServiceProviderAccessor)sender).ServiceProvider;");
-            }
-            else
-            {
-                // Debug: mock-safe type check with graceful fallback for test doubles.
-                sb.AppendLine("            if (sender is not global::DSoftStudio.Mediator.IServiceProviderAccessor __spa)");
-                sb.Append("                return sender.Send<");
-                sb.Append(reqType);
-                sb.Append(", ");
-                sb.Append(resType);
-                sb.AppendLine(">(request, cancellationToken);");
-                sb.AppendLine("            var sp = __spa.ServiceProvider;");
-            }
-            sb.AppendLine("            // Zero-delegate dispatch: static bool skips the GetService probe for the");
-            sb.AppendLine("            // no-behaviors path (~0 ns branch vs ~5 ns failed DI lookup).");
-            sb.Append("            if (global::DSoftStudio.Mediator.RequestDispatch<");
-            sb.Append(reqType);
-            sb.Append(", ");
-            sb.Append(resType);
-            sb.AppendLine(">.HasPipelineChain)");
-            sb.AppendLine("            {");
+            InterceptorHelpers.AppendSendDispatchBody(sb, reqType, resType, isRelease, "            ");
 
-            // ThreadStatic cache for Scoped/Singleton chains; direct GetService for Transient.
-            sb.Append("                var chain = global::DSoftStudio.Mediator.RequestDispatch<");
-            sb.Append(reqType);
-            sb.Append(", ");
-            sb.Append(resType);
-            sb.AppendLine(">.IsPipelineChainCacheable");
-            sb.Append("                    ? global::DSoftStudio.Mediator.PipelineChainCache<");
-            sb.Append(reqType);
-            sb.Append(", ");
-            sb.Append(resType);
-            sb.AppendLine(">.Resolve(sp)");
-            sb.Append("                    : global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions");
-            sb.Append(".GetService<global::DSoftStudio.Mediator.PipelineChainHandler<");
-            sb.Append(reqType);
-            sb.Append(", ");
-            sb.Append(resType);
-            sb.AppendLine(">>(sp);");
-
-            sb.AppendLine("                if (chain is not null)");
-            sb.AppendLine("                    return chain.Handle(request, cancellationToken);");
-            sb.AppendLine("            }");
-            sb.Append("            return global::DSoftStudio.Mediator.HandlerCache<");
-            sb.Append(reqType);
-            sb.Append(", ");
-            sb.Append(resType);
-            sb.AppendLine(">.Resolve(sp).Handle(request, cancellationToken);");
             sb.AppendLine("        }");
             sb.AppendLine();
 

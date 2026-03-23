@@ -180,7 +180,52 @@ public sealed class NotificationGenerator : IIncrementalGenerator
 
         // Freeze the dispatch table after all registrations.
         sb.AppendLine("            global::DSoftStudio.Mediator.NotificationObjectDispatch.Freeze();");
+
+        // Install the source-generated type switch for Publish(object) fast path.
+        if (groups.Count > 0)
+        {
+            sb.AppendLine("            global::DSoftStudio.Mediator.NotificationObjectDispatch.SetGeneratedSwitch(PublishObjectSwitch);");
+        }
+
         sb.AppendLine("        }");
+
+        // ── Publish(object) type switch ──────────────────────────────
+        // Eliminates FrozenDictionary lookup + delegate invocation (~1.5 ns saving).
+        // Falls back to DispatchFallback for types not known at compile time.
+        if (groups.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("        private static global::System.Threading.Tasks.Task PublishObjectSwitch(");
+            sb.AppendLine("            object notification,");
+            sb.AppendLine("            global::System.IServiceProvider sp,");
+            sb.AppendLine("            global::DSoftStudio.Mediator.Abstractions.INotificationPublisher? publisher,");
+            sb.AppendLine("            global::System.Threading.CancellationToken ct)");
+            sb.AppendLine("        {");
+            sb.AppendLine("            switch (notification)");
+            sb.AppendLine("            {");
+
+            int caseIndex = 0;
+            foreach (var group in groups)
+            {
+                var varName = $"__n{caseIndex}";
+                sb.AppendLine($"                case {group.Key} {varName}:");
+                sb.AppendLine("                {");
+                sb.AppendLine("                    if (publisher is not null)");
+                sb.AppendLine("                    {");
+                sb.AppendLine($"                        var __handlers = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetServices<global::DSoftStudio.Mediator.Abstractions.INotificationHandler<{group.Key}>>(sp);");
+                sb.AppendLine($"                        return publisher.Publish(__handlers, {varName}, ct);");
+                sb.AppendLine("                    }");
+                sb.AppendLine($"                    return global::DSoftStudio.Mediator.NotificationCachedDispatcher.DispatchSequential({varName}, sp, ct);");
+                sb.AppendLine("                }");
+                caseIndex++;
+            }
+
+            sb.AppendLine("                default:");
+            sb.AppendLine("                    return global::DSoftStudio.Mediator.NotificationObjectDispatch.DispatchFallback(notification, sp, publisher, ct);");
+            sb.AppendLine("            }");
+            sb.AppendLine("        }");
+        }
+
         sb.AppendLine("    }");
 
         sb.AppendLine("}");

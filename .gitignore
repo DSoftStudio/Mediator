@@ -70,3 +70,4 @@ nunit-*.xml
 /analyze-src.ps1
 /__examples
 /tests/IssueRepro
+/.github/copilot-instructions.md
