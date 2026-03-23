@@ -54,16 +54,28 @@ namespace DSoftStudio.Mediator.Generators
             id: "DSOFT005",
             title: "Internal handler in external assembly skipped",
             messageFormat: "Handler '{0}' in assembly '{1}' is internal and cannot be registered from this project. "
-                         + "To fix: make the handler public, add [InternalsVisibleTo] to the handler's project, "
-                         + "or add the source generator to the handler's project so it self-registers.",
+                          + "To fix: make the handler public, add [InternalsVisibleTo] to the handler's project, "
+                          + "or add the source generator to the handler's project so it self-registers.",
             category: "DSoftStudio.Mediator",
             defaultSeverity: DiagnosticSeverity.Warning,
             isEnabledByDefault: true,
             description: "The source generator discovered a handler in a referenced assembly, but the handler class "
-                       + "is internal and not visible to this project. The generated DI registration code cannot "
-                       + "reference internal types across assembly boundaries (CS0122). The handler will be silently "
-                       + "skipped. To register it, either make the handler public, add [InternalsVisibleTo] from the "
-                       + "handler's project to this project, or ensure the handler's project also references the "
-                       + "source generator so it emits its own registration code.");
+                        + "is internal and not visible to this project. The generated DI registration code cannot "
+                        + "reference internal types across assembly boundaries (CS0122). The handler will be silently "
+                        + "skipped. To register it, either make the handler public, add [InternalsVisibleTo] from the "
+                        + "handler's project to this project, or ensure the handler's project also references the "
+                        + "source generator so it emits its own registration code.");
+
+        public static readonly DiagnosticDescriptor PreferCqrsInterface = new(
+            id: "DSOFT006",
+            title: "Consider using ICommand<T> or IQuery<T> instead of IRequest<T>",
+            messageFormat: "Type '{0}' implements IRequest<{1}> directly. Consider using ICommand<{1}> (write) or IQuery<{1}> (read) for CQRS semantic clarity — zero runtime cost.",
+            category: "DSoftStudio.Mediator.Usage",
+            defaultSeverity: DiagnosticSeverity.Info,
+            isEnabledByDefault: true,
+            description: "ICommand<T> and IQuery<T> extend IRequest<T> with zero overhead. "
+                        + "Using them gives pipeline behaviors a runtime type check "
+                        + "(if request is ICommand / is IQuery) for cross-cutting concerns "
+                        + "and makes intent explicit at the type level.");
     }
 }

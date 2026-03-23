@@ -107,7 +107,7 @@ namespace DSoftStudio.Mediator.Generators
 
                 skippedInternalHandlers?.Add(new SkippedHandlerInfo(
                     results[i].ImplementationType
-                        .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                        .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat),
                     results[i].ImplementationType.ContainingAssembly?.Name ?? "unknown"));
 
                 results.RemoveAt(i);
@@ -322,10 +322,10 @@ namespace DSoftStudio.Mediator.Generators
                     continue;
 
                 var requestType = handler.ServiceType.TypeArguments[0]
-                    .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
 
                 var responseType = handler.ServiceType.TypeArguments[1]
-                    .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
 
                 results.Add((requestType, responseType));
             }
@@ -357,10 +357,10 @@ namespace DSoftStudio.Mediator.Generators
                     continue;
 
                 var notificationType = handler.ServiceType.TypeArguments[0]
-                    .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
 
                 var handlerType = handler.ImplementationType
-                    .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
 
                 results.Add((notificationType, handlerType));
             }
@@ -392,13 +392,13 @@ namespace DSoftStudio.Mediator.Generators
                     continue;
 
                 var requestType = handler.ServiceType.TypeArguments[0]
-                    .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
 
                 var responseType = handler.ServiceType.TypeArguments[1]
-                    .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
 
                 var handlerType = handler.ImplementationType
-                    .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
 
                 results.Add((requestType, responseType, handlerType));
             }
@@ -421,10 +421,10 @@ namespace DSoftStudio.Mediator.Generators
             foreach (var handler in GetAllExternalHandlers(compilation, skippedInternals))
             {
                 var serviceType = handler.ServiceType
-                    .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
 
                 var implType = handler.ImplementationType
-                    .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
 
                 bool isStateless = handler.ImplementationType.InstanceConstructors.Length > 0
                     && handler.ImplementationType.InstanceConstructors.All(static c => c.Parameters.IsEmpty);
@@ -433,6 +433,52 @@ namespace DSoftStudio.Mediator.Generators
             }
 
             return (results, skippedInternals);
+        }
+
+        /// <summary>
+        /// Discovers concrete request types (<c>IRequest&lt;TResponse&gt;</c> implementations)
+        /// from referenced assemblies that reference <c>DSoftStudio.Mediator.Abstractions</c>.
+        /// </summary>
+        public static List<(string RequestType, string ResponseType)> GetExternalRequestTypes(
+            Compilation compilation)
+        {
+            var results = new List<(string, string)>();
+            const string requestMetadata = "IRequest`1";
+
+            foreach (var reference in compilation.References)
+            {
+                if (compilation.GetAssemblyOrModuleSymbol(reference) is not IAssemblySymbol assembly)
+                    continue;
+
+                if (!ReferencesAbstractions(assembly))
+                    continue;
+
+                var types = new List<INamedTypeSymbol>();
+                CollectConcreteTypes(assembly.GlobalNamespace, types);
+
+                foreach (var type in types)
+                {
+                    foreach (var iface in type.AllInterfaces)
+                    {
+                        var original = iface.OriginalDefinition;
+                        var ns = original.ContainingNamespace?.ToDisplayString();
+                        if (ns != AbstractionsNamespace)
+                            continue;
+
+                        if (original.MetadataName != requestMetadata)
+                            continue;
+
+                        var requestType = type
+                            .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
+                        var responseType = iface.TypeArguments[0]
+                            .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
+                        results.Add((requestType, responseType));
+                        break;
+                    }
+                }
+            }
+
+            return results;
         }
 
         // ── Display format for base type names (no generic parameters) ──

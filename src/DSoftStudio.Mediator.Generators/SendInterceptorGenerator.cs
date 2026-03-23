@@ -106,9 +106,9 @@ public sealed class SendInterceptorGenerator : IIncrementalGenerator
         {
             // Explicit generic: sender.Send<Ping, int>(request)
             requestType = method.TypeArguments[0]
-                .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
             responseType = method.TypeArguments[1]
-                .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
         }
         else if (method.TypeArguments.Length == 0 && method.Parameters.Length >= 1)
         {
@@ -156,14 +156,14 @@ public sealed class SendInterceptorGenerator : IIncrementalGenerator
             return false;
 
         requestType = requestParam.Type
-            .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
 
         // Return type is ValueTask<TResponse> — extract TResponse
         if (method.ReturnType is not INamedTypeSymbol { TypeArguments.Length: 1 } returnType)
             return false;
 
         responseType = returnType.TypeArguments[0]
-            .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
 
         return true;
     }

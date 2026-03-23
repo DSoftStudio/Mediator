@@ -55,14 +55,43 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
 
         var selfCollected = selfHandlers.Collect();
 
+        // Discover local request types (IRequest<T>, ICommand<T>, IQuery<T> implementations)
+        var localRequestTypes = context.SyntaxProvider
+            .CreateSyntaxProvider(
+                predicate: static (node, _) =>
+                    node is ClassDeclarationSyntax { BaseList: not null }
+                    || node is RecordDeclarationSyntax { BaseList: not null },
+                transform: static (ctx, ct) => GetRequestTypeInfo(ctx, ct))
+            .Where(static info => info is not null)
+            .Select(static (info, _) => info!.Value);
+
+        var localRequestTypesCollected = localRequestTypes.Collect();
+
+        // Discover request types from referenced assemblies
+        var externalRequestTypes = context.CompilationProvider
+            .Select(static (compilation, _) =>
+            {
+                var types = ReferencedAssemblyScanner.GetExternalRequestTypes(compilation);
+                var array = types
+                    .Select(static t => new RequestTypeEntry(t.RequestType, t.ResponseType))
+                    .ToArray();
+                return new EquatableArray<RequestTypeEntry>(array);
+            });
+
+        var allRequestTypes = localRequestTypesCollected.Combine(externalRequestTypes);
+
         var assemblyName = context.CompilationProvider
             .Select(static (c, _) => c.AssemblyName ?? "Assembly");
 
-        var combined = localCollected.Combine(externalHandlers).Combine(selfCollected).Combine(assemblyName);
+        var combined = localCollected
+            .Combine(externalHandlers)
+            .Combine(selfCollected)
+            .Combine(allRequestTypes)
+            .Combine(assemblyName);
 
         context.RegisterSourceOutput(combined, static (spc, pair) =>
         {
-            var (((localHandlers, (external, skippedInternals)), selfHandlers), asmName) = pair;
+            var ((((localHandlers, (external, skippedInternals)), selfHandlers), (localReqTypes, externalReqTypes)), asmName) = pair;
 
             // Report diagnostics for internal handlers that were skipped
             foreach (var skipped in skippedInternals)
@@ -98,6 +127,14 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
 
             // Detect duplicate request/stream handlers (silent "last wins" bug)
             ReportDuplicateHandlers(spc, allRegistrations);
+
+            // Detect request types with no handler implementation (DSOFT001)
+            var allRequestTypeEntries = localReqTypes
+                .Concat(externalReqTypes)
+                .Distinct()
+                .ToArray();
+
+            ReportMissingHandlers(spc, allRegistrations, localSelfHandlers, allRequestTypeEntries);
 
             var code = GenerateCode(localRegistrations, allRegistrations, localSelfHandlers, asmName);
 
@@ -149,6 +186,55 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
         }
     }
 
+    /// <summary>
+    /// Reports compile-time diagnostics for request types that have no corresponding
+    /// <c>IRequestHandler&lt;TRequest, TResponse&gt;</c> implementation registered.
+    /// Self-handling requests (static Execute) are also considered handled.
+    /// </summary>
+    private static void ReportMissingHandlers(
+        SourceProductionContext spc,
+        HandlerInfo[] allHandlers,
+        SelfHandlerDetail[] selfHandlers,
+        RequestTypeEntry[] allRequestTypes)
+    {
+        if (allRequestTypes.Length == 0)
+            return;
+
+        // Build a set of handler interface types for fast lookup
+        var handlerInterfaces = new HashSet<string>();
+        foreach (var h in allHandlers)
+            handlerInterfaces.Add(h.InterfaceType);
+
+        // Self-handler request types
+        var selfHandledRequests = new HashSet<string>();
+        foreach (var s in selfHandlers)
+            selfHandledRequests.Add(s.RequestType);
+
+        foreach (var entry in allRequestTypes)
+        {
+            // Check if a normal handler is registered.
+            // Local handlers use "IRequestHandler<A,B>" (no space) while external handlers
+            // use ToDisplayString which produces "IRequestHandler<A, B>" (with space).
+            var expectedNoSpace =
+                $"global::DSoftStudio.Mediator.Abstractions.IRequestHandler<{entry.RequestType},{entry.ResponseType}>";
+            var expectedWithSpace =
+                $"global::DSoftStudio.Mediator.Abstractions.IRequestHandler<{entry.RequestType}, {entry.ResponseType}>";
+
+            if (handlerInterfaces.Contains(expectedNoSpace) || handlerInterfaces.Contains(expectedWithSpace))
+                continue;
+
+            // Check if it's a self-handling request
+            if (selfHandledRequests.Contains(entry.RequestType))
+                continue;
+
+            spc.ReportDiagnostic(Diagnostic.Create(
+                DiagnosticDescriptors.NoHandlerForRequest,
+                Location.None,
+                entry.RequestType,
+                entry.ResponseType));
+        }
+    }
+
     private static HandlerInfo? GetHandlerInfo(
         GeneratorSyntaxContext ctx,
         CancellationToken ct)
@@ -181,45 +267,66 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
                 case "IRequestHandler`2":
                     {
                         var request = iface.TypeArguments[0]
-                            .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                            .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
 
                         var response = iface.TypeArguments[1]
-                            .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                            .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
 
                         return new HandlerInfo(
                             $"global::DSoftStudio.Mediator.Abstractions.IRequestHandler<{request},{response}>",
-                            symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                            symbol.ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat),
                             isStateless);
                     }
 
                 case "INotificationHandler`1":
                     {
                         var notification = iface.TypeArguments[0]
-                            .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                            .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
 
                         return new HandlerInfo(
                             $"global::DSoftStudio.Mediator.Abstractions.INotificationHandler<{notification}>",
-                            symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                            symbol.ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat),
                             isStateless);
                     }
 
                 case "IStreamRequestHandler`2":
                     {
                         var request = iface.TypeArguments[0]
-                            .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                            .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
 
                         var response = iface.TypeArguments[1]
-                            .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                            .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
 
                         return new HandlerInfo(
                             $"global::DSoftStudio.Mediator.Abstractions.IStreamRequestHandler<{request},{response}>",
-                            symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                            symbol.ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat),
                             isStateless);
                     }
             }
         }
 
         return null;
+    }
+
+    private static RequestTypeEntry? GetRequestTypeInfo(
+        GeneratorSyntaxContext ctx,
+        CancellationToken ct)
+    {
+        var typeDecl = (TypeDeclarationSyntax)ctx.Node;
+
+        if (ctx.SemanticModel.GetDeclaredSymbol(typeDecl, ct) is not INamedTypeSymbol symbol)
+            return null;
+
+        if (symbol.IsAbstract || symbol.TypeKind != TypeKind.Class)
+            return null;
+
+        if (HandlerDiscovery.IsFileLocal(typeDecl))
+            return null;
+
+        if (!HandlerDiscovery.TryGetRequestType(symbol, ct, out var requestType, out var responseType))
+            return null;
+
+        return new RequestTypeEntry(requestType, responseType);
     }
 
     private static SelfHandlerDetail? GetSelfHandlerInfo(
@@ -613,6 +720,27 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
         sb.AppendLine("        MediatorHandlerValidator.Validate(serviceProvider);");
         sb.AppendLine("    }");
         sb.AppendLine("}");
+    }
+
+    internal readonly struct RequestTypeEntry(string requestType, string responseType) : IEquatable<RequestTypeEntry>
+    {
+        public string RequestType { get; } = requestType;
+        public string ResponseType { get; } = responseType;
+
+        public bool Equals(RequestTypeEntry other) =>
+            RequestType == other.RequestType &&
+            ResponseType == other.ResponseType;
+
+        public override bool Equals(object? obj) =>
+            obj is RequestTypeEntry other && Equals(other);
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                return (RequestType.GetHashCode() * 397) ^ ResponseType.GetHashCode();
+            }
+        }
     }
 
     internal readonly struct HandlerInfo(string iface, string handler, bool isStateless = false) : IEquatable<HandlerInfo>

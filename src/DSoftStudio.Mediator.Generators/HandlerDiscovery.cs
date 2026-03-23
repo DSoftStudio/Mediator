@@ -11,6 +11,17 @@ namespace DSoftStudio.Mediator.Generators
 {
     internal static class HandlerDiscovery
     {
+        /// <summary>
+        /// <see cref="SymbolDisplayFormat.FullyQualifiedFormat"/> extended with
+        /// <see cref="SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier"/>
+        /// so that <c>User?</c> is emitted as <c>global::Ns.User?</c> instead of
+        /// <c>global::Ns.User</c>. All generators must use this format to avoid
+        /// CS8631 nullability mismatch warnings in generated code.
+        /// </summary>
+        internal static readonly SymbolDisplayFormat NullableFullyQualifiedFormat =
+            SymbolDisplayFormat.FullyQualifiedFormat.AddMiscellaneousOptions(
+                SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
+
         private const string RequestHandlerMetadataName =
             "DSoftStudio.Mediator.Abstractions.IRequestHandler`2";
 
@@ -40,11 +51,41 @@ namespace DSoftStudio.Mediator.Generators
                     continue;
 
                 requestType = iface.TypeArguments[0]
-                    .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    .ToDisplayString(NullableFullyQualifiedFormat);
 
                 responseType = iface.TypeArguments[1]
-                    .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    .ToDisplayString(NullableFullyQualifiedFormat);
 
+                return true;
+            }
+
+            return false;
+        }
+
+
+        /// <summary>
+        /// Extracts the request type name and response type name from a type symbol
+        /// that implements <c>IRequest&lt;TResponse&gt;</c> (directly or via
+        /// <c>ICommand&lt;T&gt;</c> / <c>IQuery&lt;T&gt;</c>).
+        /// </summary>
+        public static bool TryGetRequestType(
+            INamedTypeSymbol symbol,
+            CancellationToken ct,
+            out string requestType,
+            out string responseType)
+        {
+            requestType = string.Empty;
+            responseType = string.Empty;
+
+            foreach (var iface in symbol.AllInterfaces)
+            {
+                ct.ThrowIfCancellationRequested();
+                if (!IsTargetInterface(iface, RequestMetadataName))
+                    continue;
+
+                requestType = symbol.ToDisplayString(NullableFullyQualifiedFormat);
+                responseType = iface.TypeArguments[0]
+                    .ToDisplayString(NullableFullyQualifiedFormat);
                 return true;
             }
 
@@ -69,10 +110,10 @@ namespace DSoftStudio.Mediator.Generators
                     continue;
 
                 notificationType = iface.TypeArguments[0]
-                    .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    .ToDisplayString(NullableFullyQualifiedFormat);
 
                 handlerType = symbol
-                    .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    .ToDisplayString(NullableFullyQualifiedFormat);
 
                 return true;
             }
@@ -100,13 +141,13 @@ namespace DSoftStudio.Mediator.Generators
                     continue;
 
                 requestType = iface.TypeArguments[0]
-                    .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    .ToDisplayString(NullableFullyQualifiedFormat);
 
                 responseType = iface.TypeArguments[1]
-                    .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    .ToDisplayString(NullableFullyQualifiedFormat);
 
                 handlerType = symbol
-                    .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    .ToDisplayString(NullableFullyQualifiedFormat);
 
                 return true;
             }
@@ -152,7 +193,7 @@ namespace DSoftStudio.Mediator.Generators
                 if (!IsTargetInterface(iface, RequestMetadataName))
                     continue;
                 responseType = iface.TypeArguments[0]
-                    .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    .ToDisplayString(NullableFullyQualifiedFormat);
                 break;
             }
 
@@ -181,7 +222,7 @@ namespace DSoftStudio.Mediator.Generators
             if (executeMethod == null)
                 return false;
 
-            var requestType = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            var requestType = symbol.ToDisplayString(NullableFullyQualifiedFormat);
 
             // 4. Analyze return type
             int returnKind = AnalyzeReturnKind(executeMethod, responseType);
@@ -197,7 +238,7 @@ namespace DSoftStudio.Mediator.Generators
                     parameters.Add(new SelfHandlerParam(
                         SelfHandlerParam.KindRequest, requestType));
                 }
-                else if (param.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                else if (param.Type.ToDisplayString(NullableFullyQualifiedFormat)
                          == "global::System.Threading.CancellationToken")
                 {
                     parameters.Add(new SelfHandlerParam(
@@ -207,7 +248,7 @@ namespace DSoftStudio.Mediator.Generators
                 else
                 {
                     var paramType = param.Type
-                        .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                        .ToDisplayString(NullableFullyQualifiedFormat);
                     parameters.Add(new SelfHandlerParam(
                         SelfHandlerParam.KindService, paramType));
                 }
@@ -241,7 +282,7 @@ namespace DSoftStudio.Mediator.Generators
                     : -1;
 
             var returnTypeName = returnType
-                .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                .ToDisplayString(NullableFullyQualifiedFormat);
 
             // Task (non-generic) → Unit response
             if (returnTypeName == "global::System.Threading.Tasks.Task")
@@ -259,7 +300,7 @@ namespace DSoftStudio.Mediator.Generators
                 && named.TypeArguments.Length == 1)
             {
                 var inner = named.TypeArguments[0]
-                    .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    .ToDisplayString(NullableFullyQualifiedFormat);
 
                 if (inner == expectedResponseType)
                 {

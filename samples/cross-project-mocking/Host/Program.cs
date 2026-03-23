@@ -21,6 +21,7 @@ using DSoftStudio.Mediator;
 using DSoftStudio.Mediator.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Host.Application.Behaviors;
+using Host.Application.Queries;
 using Host.Application.Services;
 using Host.Application.Commands;
 
@@ -50,3 +51,12 @@ Console.WriteLine($"Created order: {orderId}");
 // Query the order
 var summary = await orderService.GetOrderSummaryAsync(orderId);
 Console.WriteLine(summary);
+
+// Look up a user — nullable response (IQuery<UserDto?>)
+var mediator = provider.GetRequiredService<IMediator>();
+
+var alice = await mediator.Send(new FindUserQuery("alice"));
+Console.WriteLine($"Found user: {alice?.Name ?? "(null)"}");
+
+var nobody = await mediator.Send(new FindUserQuery("missing"));
+Console.WriteLine($"Missing user: {nobody?.Name ?? "(null)"}");

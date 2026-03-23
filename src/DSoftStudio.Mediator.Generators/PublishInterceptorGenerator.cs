@@ -106,7 +106,7 @@ public sealed class PublishInterceptorGenerator : IIncrementalGenerator
         {
             // Explicit generic: publisher.Publish<PingNotification>(notification)
             notificationType = method.TypeArguments[0]
-                .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
         }
         else if (method.TypeArguments.Length == 0 && method.Parameters.Length >= 1)
         {
@@ -156,7 +156,7 @@ public sealed class PublishInterceptorGenerator : IIncrementalGenerator
         if (!InterceptorHelpers.ImplementsInterface(namedParamType, compilation, "DSoftStudio.Mediator.Abstractions.INotification"))
             return false;
 
-        notificationType = paramType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        notificationType = paramType.ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
         return true;
     }
 

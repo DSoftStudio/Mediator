@@ -46,6 +46,7 @@
   <Folder Name="/samples/cross-project-mocking/">
     <Project Path="samples/cross-project-mocking/Host/Host.csproj" />
     <Project Path="samples/cross-project-mocking/Host.Application/Host.Application.csproj" />
+    <Project Path="samples/cross-project-mocking/Host.IntegrationTests/Host.IntegrationTests.csproj" />
     <Project Path="samples/cross-project-mocking/Host.Tests/Host.Tests.csproj" />
   </Folder>
   <Folder Name="/src/">

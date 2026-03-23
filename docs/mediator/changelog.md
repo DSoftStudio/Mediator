@@ -15,6 +15,27 @@ description: "All notable changes to DSoftStudio.Mediator."
 
 # Changelog
 
+## [1.1.8-rc.1] — 2026-03-23
+
+### Added
+
+- **DSOFT001: Missing handler detection** — New compile-time diagnostic (Warning) that detects `IRequest<T>`, `ICommand<T>`, and `IQuery<T>` types with no corresponding `IRequestHandler<TRequest, TResponse>` implementation. Works across project boundaries via `ReferencedAssemblyScanner` and also recognizes self-handling requests (`static Execute`). Catches orphan request types before runtime `InvalidOperationException`.
+- **DSOFT006: CQRS semantic analyzer** — New compile-time diagnostic (Info) that suggests using `ICommand<T>` or `IQuery<T>` instead of `IRequest<T>` for improved intent clarity. Zero runtime cost — purely informational at build time.
+- **Nullable response type support** — Source generators now emit fully nullable-qualified type names (`NullableFullyQualifiedFormat`) for all handler registrations, interceptors, and typed extensions. Types like `IRequest<string?>`, `IRequest<List<int?>?>`, and `IRequest<(string? Name, int? Age)?>` are correctly propagated through the entire pipeline.
+- **Diagnostic integration tests** — Comprehensive Roslyn in-memory test suites for all compile-time diagnostics: `DependencyInjectionDiagnosticTests` (12 tests covering DSOFT001/002/003), `ReferencedAssemblyDiagnosticTests` (6 tests covering DSOFT001/005 with 3-assembly pattern), `CqrsSemanticAnalyzerTests` (10 tests for DSOFT006).
+- **Nullable integration tests** — 14 same-assembly tests (`NullableResponseTests`) and 4 cross-assembly tests (`NullableCrossAssemblyTests`) validating nullable type propagation through handlers, interceptors, and cross-project discovery.
+
+### Fixed
+
+- **Nullable type names lost in generated code** — All 6 source generators (`DependencyInjectionGenerator`, `SendInterceptorGenerator`, `PublishInterceptorGenerator`, `StreamInterceptorGenerator`, `CqrsSemanticAnalyzer`, `ReferencedAssemblyScanner`) now use `NullableFullyQualifiedFormat` instead of `SymbolDisplayFormat.FullyQualifiedFormat`, preserving `?` annotations in all emitted code.
+- **Benchmarks documentation link** — Fixed broken relative link in `docs/mediator/benchmarks.md`.
+
+### Changed
+
+- **Analyzer release tracking** — DSOFT002–DSOFT006 moved from `AnalyzerReleases.Unshipped.md` to `AnalyzerReleases.Shipped.md` under Release 1.1.8-rc.1.
+
+---
+
 ## [1.1.7] — 2026-03-22
 
 ### Added

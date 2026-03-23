@@ -86,7 +86,7 @@ Measures all 4 libraries through a production-representative pipeline: **Validat
 
 ## Reproducing
 
-Full BenchmarkDotNet results and source code are available in the [`/benchmarks`](../benchmarks) folder.
+Full BenchmarkDotNet results and source code are available in the [`/benchmarks`](https://github.com/DSoftStudio/Mediator/tree/main/benchmarks) folder.
 
 ```shell
 dotnet run -c Release --project benchmarks/DSoftStudio.Mediator.Benchmarks
