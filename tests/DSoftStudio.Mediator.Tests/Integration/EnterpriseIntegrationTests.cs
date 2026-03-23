@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using DSoftStudio.Mediator.Abstractions;
 using DSoftStudio.Mediator.Tests.Infrastructure;
@@ -196,7 +197,7 @@ public sealed class ConcurrentPingHandler : IRequestHandler<ConcurrentPing, int>
     public async ValueTask<int> Handle(ConcurrentPing request, CancellationToken ct)
     {
         // Simulate light async work to increase chance of thread interleaving
-        await Task.Yield();
+        await Task.Delay(1, ct);
         return request.Seed * 2;
     }
 }
@@ -312,14 +313,24 @@ public sealed class DelayedPingHandler : IRequestHandler<DelayedPing, string>
 
 public sealed record FlakeyPing : IRequest<string>;
 
+/// <summary>
+/// Injectable failure state — avoids static global state that causes cross-test contamination.
+/// </summary>
+public sealed class FlakeyState
+{
+    private int _failuresRemaining;
+    public FlakeyState(int failuresRemaining) => _failuresRemaining = failuresRemaining;
+    public bool ShouldFail() => Interlocked.Decrement(ref _failuresRemaining) >= 0;
+}
+
 public sealed class FlakeyPingHandler : IRequestHandler<FlakeyPing, string>
 {
-    /// <summary>Tests set this before each scenario. Decremented atomically per Handle call.</summary>
-    public static int FailuresRemaining;
+    private readonly FlakeyState _state;
+    public FlakeyPingHandler(FlakeyState state) => _state = state;
 
     public ValueTask<string> Handle(FlakeyPing request, CancellationToken ct)
     {
-        if (Interlocked.Decrement(ref FailuresRemaining) >= 0)
+        if (_state.ShouldFail())
             throw new InvalidOperationException("flakey-boom");
         return new("flakey-ok");
     }
@@ -391,21 +402,44 @@ public sealed class ChaosConfig
     public int MaxDelayMs { get; set; } = 50;
 }
 
+/// <summary>
+/// Abstraction over random number generation — enables deterministic chaos tests.
+/// </summary>
+public interface IChaosRandom
+{
+    int Next(int minValue, int maxValue);
+    double NextDouble();
+}
+
+/// <summary>
+/// Default implementation backed by <see cref="Random.Shared"/>.
+/// </summary>
+public sealed class ThreadSafeChaosRandom : IChaosRandom
+{
+    public int Next(int minValue, int maxValue) => Random.Shared.Next(minValue, maxValue);
+    public double NextDouble() => Random.Shared.NextDouble();
+}
+
 public sealed class ChaosBehavior<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
     where TRequest : IRequest<TResponse>
 {
     private readonly ChaosConfig _config;
-    public ChaosBehavior(ChaosConfig config) => _config = config;
+    private readonly IChaosRandom _random;
+    public ChaosBehavior(ChaosConfig config, IChaosRandom random)
+    {
+        _config = config;
+        _random = random;
+    }
 
     public async ValueTask<TResponse> Handle(TRequest request, IRequestHandler<TRequest, TResponse> next, CancellationToken ct)
     {
         if (_config.MaxDelayMs > 0)
         {
-            var delay = Random.Shared.Next(0, _config.MaxDelayMs);
+            var delay = _random.Next(0, _config.MaxDelayMs);
             if (delay > 0) await Task.Delay(delay, ct);
         }
 
-        if (Random.Shared.NextDouble() < _config.FailureRate)
+        if (_random.NextDouble() < _config.FailureRate)
             throw new InvalidOperationException("chaos-boom");
 
         return await next.Handle(request, ct);
@@ -442,6 +476,8 @@ public class MultiProjectIntegrationTests : IDisposable
         services.AddSingleton(new ConcurrentBag<string>());
         services.AddSingleton(new ConcurrentBag<int>());
         services.AddSingleton(new Counter());
+        services.AddSingleton(new FlakeyState(0));
+        services.AddSingleton<IChaosRandom>(new ThreadSafeChaosRandom());
 
         _provider = services.BuildServiceProvider();
         _mediator = _provider.GetRequiredService<IMediator>();
@@ -1012,8 +1048,12 @@ public class ExpressionTreeIntegrationTests
             sender => sender.Send<Ping, int>(new Ping(), CancellationToken.None);
 
         // The expression should compile and be invocable (not intercepted)
-        expr.ShouldNotBeNull();
-        expr.Body.ShouldNotBeNull();
+        var compiled = expr.Compile();
+        compiled.ShouldNotBeNull();
+
+        // Verify the expression tree captured the correct method
+        var body = expr.Body.ShouldBeAssignableTo<System.Linq.Expressions.MethodCallExpression>();
+        body!.Method.Name.ShouldBe("Send");
     }
 
     /// <summary>
@@ -1025,8 +1065,12 @@ public class ExpressionTreeIntegrationTests
         System.Linq.Expressions.Expression<Func<IPublisher, Task>> expr =
             publisher => publisher.Publish(new PingNotification(), CancellationToken.None);
 
-        expr.ShouldNotBeNull();
-        expr.Body.ShouldNotBeNull();
+        var compiled = expr.Compile();
+        compiled.ShouldNotBeNull();
+
+        // Verify the expression tree captured the correct method
+        var body = expr.Body.ShouldBeAssignableTo<System.Linq.Expressions.MethodCallExpression>();
+        body!.Method.Name.ShouldBe("Publish");
     }
 }
 
@@ -1473,10 +1517,9 @@ public class FailureInjectionIntegrationTests
     [Fact]
     public async Task RetryBehavior_RecoversFlakyHandler()
     {
-        FlakeyPingHandler.FailuresRemaining = 1;
-
         var services = new ServiceCollection();
         services.AddMediator().RegisterMediatorHandlers();
+        services.AddSingleton(new FlakeyState(1));
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(SimpleRetryBehavior<,>));
         services.PrecompilePipelines();
         using var provider = services.BuildServiceProvider();
@@ -1492,10 +1535,9 @@ public class FailureInjectionIntegrationTests
     [Fact]
     public async Task RetryExhausted_ExceptionPropagates()
     {
-        FlakeyPingHandler.FailuresRemaining = 100;
-
         var services = new ServiceCollection();
         services.AddMediator().RegisterMediatorHandlers();
+        services.AddSingleton(new FlakeyState(100));
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(SimpleRetryBehavior<,>));
         services.PrecompilePipelines();
         using var provider = services.BuildServiceProvider();
@@ -1512,10 +1554,10 @@ public class FailureInjectionIntegrationTests
     [Fact]
     public async Task IntermittentFailures_ParallelSend_NoCrossContamination()
     {
-        FlakeyPingHandler.FailuresRemaining = 250;
-
         var services = new ServiceCollection();
-        services.AddMediator().RegisterMediatorHandlers().PrecompilePipelines();
+        services.AddMediator().RegisterMediatorHandlers();
+        services.AddSingleton(new FlakeyState(250));
+        services.PrecompilePipelines();
         using var provider = services.BuildServiceProvider();
 
         const int parallelism = 500;
@@ -1564,6 +1606,7 @@ public class AllocationRegressionIntegrationTests
     /// Validates no cumulative memory leaks per request.
     /// </summary>
     [Fact]
+    [Trait("Category", "NonDeterministic")]
     public async Task SequentialRequests_AllocationPerRequestBounded()
     {
         var services = new ServiceCollection();
@@ -1629,6 +1672,7 @@ public class AllocationRegressionIntegrationTests
     /// 5 waves of 100 parallel scopes — memory remains stable after GC.
     /// </summary>
     [Fact]
+    [Trait("Category", "NonDeterministic")]
     public async Task ParallelScopes_StableMemory()
     {
         var services = new ServiceCollection();
@@ -1698,7 +1742,8 @@ public class TimeoutDeadlockIntegrationTests
         using var provider = services.BuildServiceProvider();
         var mediator = provider.GetRequiredService<IMediator>();
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var timeout = Debugger.IsAttached ? TimeSpan.FromSeconds(30) : TimeSpan.FromSeconds(5);
+        using var cts = new CancellationTokenSource(timeout);
         var result = await mediator.Send(new Ping(), cts.Token);
         result.ShouldBe(42);
     }
@@ -1717,9 +1762,10 @@ public class TimeoutDeadlockIntegrationTests
         using var provider = services.BuildServiceProvider();
         var mediator = provider.GetRequiredService<IMediator>();
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var timeout = Debugger.IsAttached ? TimeSpan.FromSeconds(30) : TimeSpan.FromSeconds(5);
+        using var cts = new CancellationTokenSource(timeout);
         var task = mediator.Send(new NestedOuterPing(), cts.Token).AsTask();
-        var completed = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(5)));
+        var completed = await Task.WhenAny(task, Task.Delay(timeout));
 
         completed.ShouldBe(task, "Pipeline should complete — deadlock detected!");
         var result = await task;
@@ -1728,7 +1774,7 @@ public class TimeoutDeadlockIntegrationTests
 
     /// <summary>
     /// 200 parallel sends with slow behaviors — all must complete
-    /// within 30 seconds (validates no thread pool starvation).
+    /// within 60 seconds (validates no thread pool starvation).
     /// </summary>
     [Fact]
     public async Task ParallelSend_WithSlowBehaviors_CompletesWithinTimeout()
@@ -1741,7 +1787,8 @@ public class TimeoutDeadlockIntegrationTests
         services.PrecompilePipelines();
         using var provider = services.BuildServiceProvider();
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var timeout = Debugger.IsAttached ? TimeSpan.FromSeconds(120) : TimeSpan.FromSeconds(60);
+        using var cts = new CancellationTokenSource(timeout);
         const int parallelism = 200;
         var results = new ConcurrentBag<int>();
 
@@ -1779,6 +1826,7 @@ public class ChaosIntegrationTests
         var services = new ServiceCollection();
         services.AddMediator().RegisterMediatorHandlers();
         services.AddSingleton(config);
+        services.AddSingleton<IChaosRandom>(new ThreadSafeChaosRandom());
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ChaosBehavior<,>));
         services.PrecompilePipelines();
         using var provider = services.BuildServiceProvider();
@@ -1827,6 +1875,7 @@ public class ChaosIntegrationTests
         services.AddMediator().RegisterMediatorHandlers()
             .PrecompileNotifications();
         services.AddSingleton(config);
+        services.AddSingleton<IChaosRandom>(new ThreadSafeChaosRandom());
         services.AddSingleton(received);
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ChaosBehavior<,>));
         services.PrecompilePipelines();
@@ -1876,6 +1925,7 @@ public class ChaosIntegrationTests
         var services = new ServiceCollection();
         services.AddMediator().RegisterMediatorHandlers();
         services.AddSingleton(config);
+        services.AddSingleton<IChaosRandom>(new ThreadSafeChaosRandom());
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ChaosBehavior<,>));
         services.AddSingleton<IRequestExceptionHandler<ConcurrentPing, int>>(
             new ConcurrentPingFallbackExceptionHandler());

@@ -36,6 +36,9 @@ public class HandlerValidationTests
         services.AddTransient<Integration.TransientStamp>();
         services.AddSingleton(new ConcurrentBag<string>());
         services.AddSingleton(new ConcurrentBag<int>());
+        services.AddSingleton(new Integration.FlakeyState(0));
+        services.AddSingleton<Integration.IChaosRandom>(new Integration.ThreadSafeChaosRandom());
+        services.AddSingleton(new Integration.ChaosConfig());
 
         using var provider = services.BuildServiceProvider();
 
