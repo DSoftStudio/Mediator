@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using DSoftStudio.Mediator.Abstractions;
+using System.Runtime.CompilerServices;
 
 namespace DSoftStudio.Mediator
 {
@@ -15,6 +16,7 @@ namespace DSoftStudio.Mediator
         IRequestHandler<TRequest, TResponse> next) : IRequestHandler<TRequest, TResponse>
         where TRequest : IRequest<TResponse>
     {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ValueTask<TResponse> Handle(TRequest request, CancellationToken cancellationToken)
             => behavior.Handle(request, next, cancellationToken);
     }

@@ -81,15 +81,10 @@ namespace DSoftStudio.Mediator
         {
             ArgumentNullException.ThrowIfNull(notification);
 
-            if (notification is not INotification)
-            {
-                throw new ArgumentException(
-                    $"Object of type {notification.GetType().Name} does not implement {nameof(INotification)}.",
-                    nameof(notification));
-            }
-
-            // AOT-safe: uses compile-time generated dispatch table populated by
-            // NotificationRegistry.Register(). No MakeGenericType, no Expression.Compile.
+            // AOT-safe: uses compile-time generated type switch (or FrozenDictionary fallback)
+            // populated by NotificationRegistry.Register().
+            // No INotification type check here — the dispatch table rejects unknown types,
+            // keeping this method free of IL throw instructions for JIT inline-friendliness.
             return NotificationObjectDispatch.Dispatch(
                 notification, _serviceProvider, _notificationPublisher, cancellationToken);
         }

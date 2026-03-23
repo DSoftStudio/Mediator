@@ -1,12 +1,21 @@
 <Project>
-  <!-- Transitive props: only expose the suppress-flag to the source generator
-       so that transitive consumers (e.g. test projects referencing a Host project
-       via ProjectReference) can set DSoftMediatorSuppressInterceptors=true and
-       have the generator read it.
+  <PropertyGroup>
+    <!-- Enable interceptors for transitive consumers as well.
+         When NuGet sees both build/ and buildTransitive/ with the same filename,
+         buildTransitive/ takes priority even for direct PackageReference consumers.
+         Without these properties the source generator emits interceptors but the
+         compiler rejects them with CS9137.
 
-       NOTE: We intentionally do NOT add InterceptorsPreviewNamespaces /
-       InterceptorsNamespaces here — interceptor codegen should only be enabled
-       for direct consumers of the DSoftStudio.Mediator NuGet package. -->
+         To suppress interceptor generation (e.g. in test projects that mock ISender),
+         set DSoftMediatorSuppressInterceptors to true:
+
+           <DSoftMediatorSuppressInterceptors>true</DSoftMediatorSuppressInterceptors>
+    -->
+    <InterceptorsPreviewNamespaces Condition="'$(DSoftMediatorSuppressInterceptors)' != 'true'">$(InterceptorsPreviewNamespaces);DSoftStudio.Mediator.Generated</InterceptorsPreviewNamespaces>
+    <InterceptorsNamespaces Condition="'$(DSoftMediatorSuppressInterceptors)' != 'true'">$(InterceptorsNamespaces);DSoftStudio.Mediator.Generated</InterceptorsNamespaces>
+  </PropertyGroup>
+
+  <!-- Expose the suppress-flag to the source generator via AnalyzerConfigOptionsProvider -->
   <ItemGroup>
     <CompilerVisibleProperty Include="DSoftMediatorSuppressInterceptors" />
   </ItemGroup>
