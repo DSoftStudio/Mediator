@@ -74,6 +74,7 @@ Deep dive into the internal design.
 - [Native AOT & Trimming](architecture/native-aot.md)
 - [Performance Design](architecture/performance.md)
 - [Design Notes](architecture/design-notes.md)
+- [Production Validation](architecture/production-validation.md)
 
 ---
 

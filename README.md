@@ -27,6 +27,21 @@ Source-generated mediator for .NET.
 
 ---
 
+## Production validation
+
+This library is not only benchmarked — it's validated under real-world conditions.
+
+- 2000+ parallel requests (Send / Publish)
+- Deep pipelines (6+ behaviors with retry, exceptions, async flows)
+- Failure injection (flaky handlers, retries, partial failures)
+- Chaos scenarios (random delays, intermittent faults)
+- Native AOT & trimming compatibility
+- Multi-project solutions with source generators
+
+> [Full test catalog →](https://docs.dsoftstudio.com/mediator/architecture/production-validation)
+
+---
+
 ## Why this matters in production
 
 ### The real question
@@ -65,6 +80,23 @@ More GC collections = more variance in p99/p999 response times. Constant-allocat
 DSoft allocates 72 B per Send whether you have 0, 3, or 5 behaviors — the allocation is constant because behaviors chain through interface dispatch, not delegate wrapping. MediatR allocates 272 B → 800 B → 1,088 B as you add behaviors, because each behavior wraps a new delegate and closure.
 
 This is not about being faster in microbenchmarks — it's about not becoming slower as your system grows.
+
+---
+
+## What this means
+
+In real systems, performance issues don't come from averages.
+
+They come from:
+- GC pressure
+- tail latency (p99, p999)
+- unexpected allocations
+- failure scenarios
+
+DSoftStudio.Mediator is designed to:
+- behave like a direct call
+- remain stable under load
+- avoid hidden runtime costs
 
 ---
 
@@ -130,6 +162,21 @@ var result = await mediator.Send(new Ping());
 - A message bus — use MassTransit, NServiceBus, or Azure Service Bus
 - An event sourcing framework
 - A replacement for direct method calls when you don't need the mediator pattern
+
+---
+
+## Comparison
+
+| Feature | DSoft | Mediator (SG) | DispatchR | MediatR |
+|---|:---:|:---:|:---:|:---:|
+| Structural overhead | None | Low | Reduced | High |
+| Allocation scaling | Constant | Grows | Grows | Grows |
+| Failure-tested | ✅ | ❌ | ❌ | ❌ |
+| Chaos-tested | ✅ | ❌ | ❌ | ❌ |
+| Concurrency-tested (2000+) | ✅ | ❌ | ❌ | ❌ |
+| AOT-safe | ✅ | ✅ | ❌ | ❌ |
+
+Among the libraries benchmarked — Mediator (SG), DispatchR, and MediatR — DSoftStudio.Mediator is the only one validated for failure, chaos, and concurrency, with zero overhead in production pipelines.
 
 ---
 
@@ -320,14 +367,12 @@ dotnet run --project samples/basic-api/DSoft.Sample.Api
 - **Core Concepts** — [Requests](https://docs.dsoftstudio.com/mediator/concepts/requests-and-handlers) · [Notifications](https://docs.dsoftstudio.com/mediator/concepts/notifications) · [Streams](https://docs.dsoftstudio.com/mediator/concepts/streams) · [CQRS](https://docs.dsoftstudio.com/mediator/concepts/cqrs)
 - **Features** — [Pipeline Behaviors](https://docs.dsoftstudio.com/mediator/features/pipeline-behaviors) · [Pre/Post Processors](https://docs.dsoftstudio.com/mediator/features/pre-post-processors) · [Self-Handling](https://docs.dsoftstudio.com/mediator/features/self-handling-requests) · [Runtime Dispatch](https://docs.dsoftstudio.com/mediator/features/runtime-dispatch) · [Validation](https://docs.dsoftstudio.com/mediator/features/handler-validation)
 - **Integrations** — [OpenTelemetry](https://docs.dsoftstudio.com/mediator/integrations/opentelemetry) · [FluentValidation](https://docs.dsoftstudio.com/mediator/integrations/fluentvalidation) · [HybridCache](https://docs.dsoftstudio.com/mediator/integrations/hybridcache)
-- **Architecture** — [Dispatch Pipeline](https://docs.dsoftstudio.com/mediator/architecture/dispatch-pipeline) · [Source Generators](https://docs.dsoftstudio.com/mediator/architecture/source-generators) · [Native AOT](https://docs.dsoftstudio.com/mediator/architecture/native-aot) · [Performance](https://docs.dsoftstudio.com/mediator/architecture/performance) · [Design Notes](https://docs.dsoftstudio.com/mediator/architecture/design-notes)
+- **Architecture** — [Dispatch Pipeline](https://docs.dsoftstudio.com/mediator/architecture/dispatch-pipeline) · [Source Generators](https://docs.dsoftstudio.com/mediator/architecture/source-generators) · [Native AOT](https://docs.dsoftstudio.com/mediator/architecture/native-aot) · [Performance](https://docs.dsoftstudio.com/mediator/architecture/performance) · [Design Notes](https://docs.dsoftstudio.com/mediator/architecture/design-notes) · [Production Validation](https://docs.dsoftstudio.com/mediator/architecture/production-validation)
 - **Advanced** — [Caching Patterns](https://docs.dsoftstudio.com/mediator/advanced/caching-patterns) · [Pipeline Patterns](https://docs.dsoftstudio.com/mediator/advanced/pipeline-patterns)
 
 ---
 
-Your mediator should not be part of your performance budget.
-
-This one isn't.
+A mediator should not be part of your performance budget.
 
 ---
 

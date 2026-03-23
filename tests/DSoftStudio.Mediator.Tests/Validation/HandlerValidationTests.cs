@@ -1,6 +1,7 @@
 // Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
+using System.Collections.Concurrent;
 using DSoftStudio.Mediator.Tests.SelfHandler;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -28,6 +29,13 @@ public class HandlerValidationTests
         services.AddSingleton<Counter>();
         services.AddSingleton(new List<string>());
         services.AddSingleton<Greeter>();
+
+        // Dependencies required by enterprise integration test handlers
+        services.AddSingleton<Integration.SingletonCounter>();
+        services.AddScoped<Integration.ScopedCorrelation>();
+        services.AddTransient<Integration.TransientStamp>();
+        services.AddSingleton(new ConcurrentBag<string>());
+        services.AddSingleton(new ConcurrentBag<int>());
 
         using var provider = services.BuildServiceProvider();
 
