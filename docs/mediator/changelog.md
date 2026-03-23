@@ -24,6 +24,8 @@ description: "All notable changes to DSoftStudio.Mediator."
 - **Nullable response type support** — Source generators now emit fully nullable-qualified type names (`NullableFullyQualifiedFormat`) for all handler registrations, interceptors, and typed extensions. Types like `IRequest<string?>`, `IRequest<List<int?>?>`, and `IRequest<(string? Name, int? Age)?>` are correctly propagated through the entire pipeline.
 - **Diagnostic integration tests** — Comprehensive Roslyn in-memory test suites for all compile-time diagnostics: `DependencyInjectionDiagnosticTests` (12 tests covering DSOFT001/002/003), `ReferencedAssemblyDiagnosticTests` (6 tests covering DSOFT001/005 with 3-assembly pattern), `CqrsSemanticAnalyzerTests` (10 tests for DSOFT006).
 - **Nullable integration tests** — 14 same-assembly tests (`NullableResponseTests`) and 4 cross-assembly tests (`NullableCrossAssemblyTests`) validating nullable type propagation through handlers, interceptors, and cross-project discovery.
+- **Enterprise integration tests** — 48 tests across 14 test classes covering multi-project discovery, DI lifetime validation, deep pipeline (6 behaviors), 2000-parallel concurrency, Native AOT precompilation, expression tree safety, complex generics, runtime vs compile-time dispatch, background service patterns, stress testing (5000 sequential + 100 parallel streams), failure injection with retry, allocation regression, timeout/deadlock detection, and chaos testing. See [Production Validation](docs/mediator/architecture/production-validation.md).
+- **Production validation documentation** — New `docs/mediator/architecture/production-validation.md` page documenting all 48 enterprise integration tests organized by category with direct links to source.
 
 ### Fixed
 
@@ -32,6 +34,7 @@ description: "All notable changes to DSoftStudio.Mediator."
 
 ### Changed
 
+- **Enterprise test hardening** — Replaced static `FlakeyPingHandler.FailuresRemaining` with injectable `FlakeyState` class, introduced `IChaosRandom` interface for deterministic chaos tests, added `[Trait("Category", "NonDeterministic")]` to allocation tests, increased timeout margins with `Debugger.IsAttached` awareness, and strengthened expression tree tests with `Compile()` + `MethodCallExpression` verification.
 - **Analyzer release tracking** — DSOFT002–DSOFT006 moved from `AnalyzerReleases.Unshipped.md` to `AnalyzerReleases.Shipped.md` under Release 1.1.8-rc.1.
 
 ---
