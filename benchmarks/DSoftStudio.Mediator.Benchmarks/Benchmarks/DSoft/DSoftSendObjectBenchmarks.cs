@@ -9,48 +9,44 @@ using DSoftStudio.Mediator.Abstractions;
 namespace Benchmarks;
 
 /// <summary>
-/// Isolated DSoft-only benchmark: Send without behaviors.
+/// Isolated DSoft-only benchmark: Send(object) vs typed Send.
 /// Separate class = separate BenchmarkDotNet process — zero static dispatch contamination.
 /// </summary>
 [MemoryDiagnoser]
 [SimpleJob]
 [RankColumn]
 [Orderer(BenchmarkDotNet.Order.SummaryOrderPolicy.FastestToSlowest)]
-public class DSoftSendNoBehaviorsBenchmarks
+public class DSoftSendObjectBenchmarks
 {
-    private static readonly Ping Message = new();
+    private static readonly Ping PingMessage = new();
 
-    private PingHandler _directHandler = null!;
     private IMediator _mediator = null!;
+    private ISender _sender = null!;
     private IServiceScope _scope = null!;
 
     [GlobalSetup]
     public void Setup()
     {
-        _directHandler = new PingHandler();
-
         var services = new ServiceCollection();
-        DSoftStudio.Mediator.ServiceCollectionExtensions.AddMediator(services)
-            .RegisterMediatorHandlers()
-            .PrecompilePipelines();
-
+        DSoftStudio.Mediator.ServiceCollectionExtensions.AddMediator(services).RegisterMediatorHandlers().PrecompilePipelines();
         var provider = services.BuildServiceProvider();
         _scope = provider.CreateScope();
         _mediator = _scope.ServiceProvider.GetRequiredService<IMediator>();
+        _sender = _mediator;
 
-        // Warmup
-        _directHandler.Handle(Message, default).GetAwaiter().GetResult();
-        _mediator.Send<Ping, int>(Message).GetAwaiter().GetResult();
+        // Warmup both paths
+        _mediator.Send<Ping, int>(PingMessage).GetAwaiter().GetResult();
+        _sender.Send((object)PingMessage).GetAwaiter().GetResult();
     }
 
     [GlobalCleanup]
     public void Cleanup() => _scope?.Dispose();
 
     [Benchmark(Baseline = true)]
-    public async Task<int> DirectCall()
-        => await _directHandler.Handle(Message, default);
+    public async Task<int> DSoft_Send_Generic()
+        => await _mediator.Send<Ping, int>(PingMessage);
 
     [Benchmark]
-    public async Task<int> DSoft_Send()
-        => await _mediator.Send<Ping, int>(Message);
+    public async Task<object?> DSoft_Send_Object()
+        => await _sender.Send((object)PingMessage);
 }

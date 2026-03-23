@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging;
 namespace Benchmarks;
 
 /// <summary>
-/// Isolated MediatR-only benchmark: Send with 0 / 3 / 5 behaviors.
+/// Isolated MediatR-only benchmark: Send with 3 / 5 behaviors.
 /// No other mediator libraries — avoids static dispatch table contamination.
 /// Uses counting behaviors to verify the pipeline chain actually executes.
 /// </summary>
@@ -20,10 +20,8 @@ public class MediatRSendBenchmarks
 {
     private static readonly PingMediatR Message = new();
 
-    private MediatR.IMediator _noBehaviors = null!;
     private MediatR.IMediator _threeBehaviors = null!;
     private MediatR.IMediator _fiveBehaviors = null!;
-    private IServiceScope _scope0 = null!;
     private IServiceScope _scope3 = null!;
     private IServiceScope _scope5 = null!;
 
@@ -82,18 +80,6 @@ public class MediatRSendBenchmarks
     [GlobalSetup]
     public void Setup()
     {
-        // ── No behaviors ─────────────────────────────────────────
-        {
-            var services = new ServiceCollection();
-            services.AddLogging();
-            services.AddMediatR(cfg =>
-                cfg.RegisterServicesFromAssembly(typeof(PingMediatRHandler).Assembly));
-
-            var provider = services.BuildServiceProvider();
-            _scope0 = provider.CreateScope();
-            _noBehaviors = _scope0.ServiceProvider.GetRequiredService<MediatR.IMediator>();
-        }
-
         // ── 3 behaviors ──────────────────────────────────────────
         {
             var services = new ServiceCollection();
@@ -129,7 +115,6 @@ public class MediatRSendBenchmarks
         }
 
         // ── Warmup ───────────────────────────────────────────────
-        _noBehaviors.Send(Message).GetAwaiter().GetResult();
         _threeBehaviors.Send(Message).GetAwaiter().GetResult();
         _fiveBehaviors.Send(Message).GetAwaiter().GetResult();
 
@@ -172,7 +157,6 @@ public class MediatRSendBenchmarks
     [GlobalCleanup]
     public void Cleanup()
     {
-        _scope0?.Dispose();
         _scope3?.Dispose();
         _scope5?.Dispose();
     }
@@ -180,10 +164,6 @@ public class MediatRSendBenchmarks
     [Benchmark(Baseline = true)]
     public async Task<int> DirectCall()
         => await new PingMediatRHandler().Handle(Message, default);
-
-    [Benchmark]
-    public async Task<int> MediatR_Send()
-        => await _noBehaviors.Send(Message);
 
     [Benchmark]
     public async Task<int> MediatR_Send_3Behaviors()

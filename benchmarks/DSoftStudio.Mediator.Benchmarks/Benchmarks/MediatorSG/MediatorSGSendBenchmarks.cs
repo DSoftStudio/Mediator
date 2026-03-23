@@ -7,7 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Benchmarks;
 
 /// <summary>
-/// Isolated martinothamar/Mediator-only benchmark: Send with 0 / 3 / 5 behaviors.
+/// Isolated martinothamar/Mediator-only benchmark: Send with 3 / 5 behaviors.
 /// No other mediator libraries — avoids static dispatch table contamination.
 /// Uses counting behaviors to verify the pipeline chain actually executes.
 /// </summary>
@@ -20,10 +20,8 @@ public class MediatorSGSendBenchmarks
     private static readonly PingMediatorSG Message = new();
 
     private PingMediatorSGHandler _directHandler = null!;
-    private global::Mediator.IMediator _noBehaviors = null!;
     private global::Mediator.IMediator _threeBehaviors = null!;
     private global::Mediator.IMediator _fiveBehaviors = null!;
-    private IServiceScope _scope0 = null!;
     private IServiceScope _scope3 = null!;
     private IServiceScope _scope5 = null!;
 
@@ -99,16 +97,6 @@ public class MediatorSGSendBenchmarks
     {
         _directHandler = new PingMediatorSGHandler();
 
-        // ── No behaviors
-        {
-            var services = new ServiceCollection();
-            MediatorSGHelper.AddMediatorSG(services);
-
-            var provider = services.BuildServiceProvider();
-            _scope0 = provider.CreateScope();
-            _noBehaviors = _scope0.ServiceProvider.GetRequiredService<global::Mediator.IMediator>();
-        }
-
         // ── 3 behaviors ──────────────────────────────────────────
         {
             var services = new ServiceCollection();
@@ -141,7 +129,6 @@ public class MediatorSGSendBenchmarks
 
         // ── Warmup ───────────────────────────────────────────────
         _directHandler.Handle(Message, default).GetAwaiter().GetResult();
-        _noBehaviors.Send(Message).GetAwaiter().GetResult();
         _threeBehaviors.Send(Message).GetAwaiter().GetResult();
         _fiveBehaviors.Send(Message).GetAwaiter().GetResult();
 
@@ -163,11 +150,11 @@ public class MediatorSGSendBenchmarks
         Console.WriteLine();
         Console.WriteLine("  ╔══════════════════════════════════════════════════════════╗");
         Console.WriteLine("  ║  MEDIATOR-SG PIPELINE VERIFICATION                      ║");
-        Console.WriteLine($"  ║  Behavior 1: {Behavior1.CallCount} call(s)                                   ║");
-        Console.WriteLine($"  ║  Behavior 2: {Behavior2.CallCount} call(s)                                   ║");
-        Console.WriteLine($"  ║  Behavior 3: {Behavior3.CallCount} call(s)                                   ║");
-        Console.WriteLine($"  ║  Behavior 4: {Behavior4.CallCount} call(s)                                   ║");
-        Console.WriteLine($"  ║  Behavior 5: {Behavior5.CallCount} call(s)                                   ║");
+        Console.WriteLine($"  ║  Behavior 1: {Behavior1.CallCount} call(s)                                     ║");
+        Console.WriteLine($"  ║  Behavior 2: {Behavior2.CallCount} call(s)                                     ║");
+        Console.WriteLine($"  ║  Behavior 3: {Behavior3.CallCount} call(s)                                     ║");
+        Console.WriteLine($"  ║  Behavior 4: {Behavior4.CallCount} call(s)                                     ║");
+        Console.WriteLine($"  ║  Behavior 5: {Behavior5.CallCount} call(s)                                     ║");
         Console.WriteLine($"  ║  Total: {total}/5 behaviors fired                            ║");
         Console.WriteLine($"  ║  Status: {(total == 5 ? "✓ ALL BEHAVIORS EXECUTING" : "✗ BEHAVIORS NOT RUNNING!")}          ║");
         Console.WriteLine("  ╚══════════════════════════════════════════════════════════╝");
@@ -184,7 +171,6 @@ public class MediatorSGSendBenchmarks
     [GlobalCleanup]
     public void Cleanup()
     {
-        _scope0?.Dispose();
         _scope3?.Dispose();
         _scope5?.Dispose();
     }
@@ -192,10 +178,6 @@ public class MediatorSGSendBenchmarks
     [Benchmark(Baseline = true)]
     public async Task<int> DirectCall()
         => await _directHandler.Handle(Message, default);
-
-    [Benchmark]
-    public async Task<int> MediatorSG_Send()
-        => await _noBehaviors.Send(Message);
 
     [Benchmark]
     public async Task<int> MediatorSG_Send_3Behaviors()

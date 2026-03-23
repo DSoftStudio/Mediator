@@ -14,5 +14,11 @@ namespace Benchmarks;
 internal static class MediatorSGHelper
 {
     internal static IServiceCollection AddMediatorSG(this IServiceCollection services)
-        => services.AddMediator();
+    {
+        // FakeOrderRepository must be registered here because the Mediator source generator
+        // eagerly resolves ALL handlers at Mediator construction (ContainerMetadata..ctor),
+        // unlike MediatR/DSoft/DispatchR which resolve lazily per request type.
+        services.AddSingleton<FakeOrderRepository>();
+        return services.AddMediator();
+    }
 }

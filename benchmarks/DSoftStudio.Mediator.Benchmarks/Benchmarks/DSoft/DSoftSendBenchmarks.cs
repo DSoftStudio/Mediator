@@ -9,9 +9,8 @@ using DSoftStudio.Mediator.Abstractions;
 namespace Benchmarks;
 
 /// <summary>
-/// Isolated DSoft-only benchmark: Send with 0 / 3 / 5 behaviors.
+/// Isolated DSoft-only benchmark: Send with 3 / 5 behaviors.
 /// No other mediator libraries — avoids static dispatch table contamination.
-/// Uses separate request types so each gets its own static RequestDispatch table.
 /// </summary>
 [MemoryDiagnoser]
 [SimpleJob]
@@ -19,15 +18,12 @@ namespace Benchmarks;
 [Orderer(BenchmarkDotNet.Order.SummaryOrderPolicy.FastestToSlowest)]
 public class DSoftSendBenchmarks
 {
-    private static readonly Ping PingMessage = new();
     private static readonly PingWithPipeline PingWithPipelineMessage = new();
 
     private PingHandler _directHandler = null!;
-    private IMediator _noBehaviors = null!;
     private IMediator _threeBehaviors = null!;
     private IMediator _fiveBehaviors = null!;
 
-    private IServiceScope _scope0 = null!;
     private IServiceScope _scope3 = null!;
     private IServiceScope _scope5 = null!;
 
@@ -55,7 +51,7 @@ public class DSoftSendBenchmarks
         _directHandler = new PingHandler();
 
         // ── 5 behaviors FIRST (must initialize RequestDispatch<PingWithPipeline, int>
-        // before the no-behaviors setup, because TryInitialize is write-once static) ──
+        // before 3-behaviors setup, because TryInitialize is write-once static) ──
         {
             var services = new ServiceCollection();
             DSoftStudio.Mediator.ServiceCollectionExtensions.AddMediator(services)
@@ -124,21 +120,8 @@ public class DSoftSendBenchmarks
             _threeBehaviors = _scope3.ServiceProvider.GetRequiredService<IMediator>();
         }
 
-        // ── No behaviors (Ping has its own dispatch table — no conflict) ──
-        {
-            var services = new ServiceCollection();
-            DSoftStudio.Mediator.ServiceCollectionExtensions.AddMediator(services)
-                .RegisterMediatorHandlers()
-                .PrecompilePipelines();
-
-            var provider = services.BuildServiceProvider();
-            _scope0 = provider.CreateScope();
-            _noBehaviors = _scope0.ServiceProvider.GetRequiredService<IMediator>();
-        }
-
         // Warmup
-        _directHandler.Handle(PingMessage, default).GetAwaiter().GetResult();
-        _noBehaviors.Send<Ping, int>(PingMessage).GetAwaiter().GetResult();
+        _directHandler.Handle(new Ping(), default).GetAwaiter().GetResult();
         _threeBehaviors.Send<PingWithPipeline, int>(PingWithPipelineMessage).GetAwaiter().GetResult();
         _fiveBehaviors.Send<PingWithPipeline, int>(PingWithPipelineMessage).GetAwaiter().GetResult();
     }
@@ -146,18 +129,13 @@ public class DSoftSendBenchmarks
     [GlobalCleanup]
     public void Cleanup()
     {
-        _scope0?.Dispose();
         _scope3?.Dispose();
         _scope5?.Dispose();
     }
 
     [Benchmark(Baseline = true)]
     public async Task<int> DirectCall()
-        => await _directHandler.Handle(PingMessage, default);
-
-    [Benchmark]
-    public async Task<int> DSoft_Send()
-        => await _noBehaviors.Send<Ping, int>(PingMessage);
+        => await _directHandler.Handle(new Ping(), default);
 
     [Benchmark]
     public async Task<int> DSoft_Send_3Behaviors()

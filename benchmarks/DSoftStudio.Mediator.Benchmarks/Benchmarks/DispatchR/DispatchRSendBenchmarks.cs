@@ -8,7 +8,7 @@ using DispatchR.Extensions;
 namespace Benchmarks;
 
 /// <summary>
-/// Isolated DispatchR-only benchmark: Send with 0 / 3 / 5 behaviors.
+/// Isolated DispatchR-only benchmark: Send with 3 / 5 behaviors.
 /// No other mediator libraries — avoids static dispatch table contamination.
 /// Uses counting behaviors to verify the pipeline chain actually executes.
 /// </summary>
@@ -20,10 +20,8 @@ public class DispatchRSendBenchmarks
 {
     private static readonly PingDispatchR Message = new();
 
-    private DispatchR.IMediator _noBehaviors = null!;
     private DispatchR.IMediator _threeBehaviors = null!;
     private DispatchR.IMediator _fiveBehaviors = null!;
-    private IServiceScope _scope0 = null!;
     private IServiceScope _scope3 = null!;
     private IServiceScope _scope5 = null!;
 
@@ -93,8 +91,6 @@ public class DispatchRSendBenchmarks
             services.AddDispatchR(typeof(PingDispatchRHandler).Assembly, withPipelines: false, withNotifications: false);
 
             var provider = services.BuildServiceProvider();
-            _scope0 = provider.CreateScope();
-            _noBehaviors = _scope0.ServiceProvider.GetRequiredService<DispatchR.IMediator>();
         }
 
         // ── 3 behaviors ──────────────────────────────────────────
@@ -128,7 +124,6 @@ public class DispatchRSendBenchmarks
         }
 
         // ── Warmup ───────────────────────────────────────────────
-        _noBehaviors.Send<PingDispatchR, ValueTask<int>>(Message, default).GetAwaiter().GetResult();
         _threeBehaviors.Send<PingDispatchR, ValueTask<int>>(Message, default).GetAwaiter().GetResult();
         _fiveBehaviors.Send<PingDispatchR, ValueTask<int>>(Message, default).GetAwaiter().GetResult();
 
@@ -171,7 +166,6 @@ public class DispatchRSendBenchmarks
     [GlobalCleanup]
     public void Cleanup()
     {
-        _scope0?.Dispose();
         _scope3?.Dispose();
         _scope5?.Dispose();
     }
@@ -179,10 +173,6 @@ public class DispatchRSendBenchmarks
     [Benchmark(Baseline = true)]
     public async Task<int> DirectCall()
         => await new PingDispatchRHandler().Handle(Message, default);
-
-    [Benchmark]
-    public async Task<int> DispatchR_Send()
-        => await _noBehaviors.Send<PingDispatchR, ValueTask<int>>(Message, default);
 
     [Benchmark]
     public async Task<int> DispatchR_Send_3Behaviors()
