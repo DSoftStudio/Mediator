@@ -111,3 +111,9 @@ app.UseExceptionHandler(error => error.Run(async context =>
 | All validators pass | Handler executes normally |
 | One or more validators fail | `MediatorValidationException` thrown, handler not invoked |
 | Validator has DI dependencies | Fully supported — validators are resolved from the DI container |
+
+## See Also
+
+- [Pipeline Behaviors](../features/pipeline-behaviors.md) — how behaviors wrap the handler pipeline
+- [CQRS](../concepts/cqrs.md) — validate commands separately from queries
+- [Registration Order](../getting-started/registration-order.md) — register `AddMediatorFluentValidation()` before `PrecompilePipelines()`

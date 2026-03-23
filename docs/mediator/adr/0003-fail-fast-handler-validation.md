@@ -1,5 +1,7 @@
 ---
 layout: default
+title: "ADR-0003: Fail-fast Handler Validation - DSoftStudio.Mediator"
+description: "Source-generated startup validation that detects missing handlers, broken DI dependencies, and incomplete pipelines before the first request."
 ---
 <p align="center">
   <picture>

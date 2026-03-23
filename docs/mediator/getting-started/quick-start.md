@@ -88,3 +88,10 @@ var result = await mediator.Send(new Ping());
 - Zero reflection during request execution
 - Fail-fast handler validation via `ValidateMediatorHandlers()` — detect misconfigured handlers at startup
 - Compile-time diagnostics for missing handlers (DSOFT001) and duplicate handler registrations (DSOFT002, DSOFT003)
+
+## See Also
+
+- [Registration Order](registration-order.md) — understand when to call `Precompile*` methods
+- [CQRS (Commands & Queries)](../concepts/cqrs.md) — use `ICommand<T>` and `IQuery<T>` for semantic clarity
+- [Benchmarks](../benchmarks.md) — see how DSoftStudio.Mediator compares to MediatR, Mediator SG, and DispatchR
+- [Migration from MediatR](migration-from-mediatr.md) — coming from MediatR? Start here

@@ -82,3 +82,9 @@ public class FireAndForgetPublisher : INotificationPublisher
     }
 }
 ```
+
+## See Also
+
+- [Design Notes](../architecture/design-notes.md) — why exact-type dispatch was chosen over inheritance scanning
+- [ADR-0002: Handler Discovery](../adr/0002-handler-discovery-and-bug-avoidance.md) — avoiding the MediatR duplicate handler bug
+- [OpenTelemetry](../integrations/opentelemetry.md) — automatic tracing for notification dispatch

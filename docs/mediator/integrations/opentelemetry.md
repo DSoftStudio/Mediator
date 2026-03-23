@@ -73,3 +73,9 @@ services.AddMediatorInstrumentation(options =>
 ```
 
 See [ADR-0005](../adr/0005-opentelemetry-instrumentation.md) for the full design rationale.
+
+## See Also
+
+- [Notifications](../concepts/notifications.md) — per-handler child spans for notification dispatch
+- [Pipeline Behaviors](../features/pipeline-behaviors.md) — how instrumentation wraps the pipeline
+- [Benchmarks](../benchmarks.md) — `HasListeners()` short-circuit adds ~1 ns when no exporter is configured

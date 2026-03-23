@@ -87,3 +87,9 @@ public class DeleteProductHandler : ICommandHandler<DeleteProduct, Unit>
 | Request does not implement `ICachedRequest` | Pass-through — handler executes normally |
 | Same cache key within TTL | Cached result returned, handler not invoked |
 | Concurrent requests for same key | Stampede prevention — one execution, all callers share result |
+
+## See Also
+
+- [Caching Patterns](../advanced/caching-patterns.md) — manual caching approach with `IQuery<T>` constraint
+- [CQRS](../concepts/cqrs.md) — use `IQuery<T>` marker for read-only operations
+- [Pipeline Behaviors](../features/pipeline-behaviors.md) — how `CachingBehavior` wraps the pipeline

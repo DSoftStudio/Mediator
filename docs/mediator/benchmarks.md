@@ -104,3 +104,6 @@ benchmarks/run-mediatorsg.cmd
 ## See Also
 
 - [Performance Design](architecture/performance.md) — explains the techniques behind these numbers
+- [Migration from MediatR](getting-started/migration-from-mediatr.md) — step-by-step guide to switch
+- [Pipeline Behaviors](features/pipeline-behaviors.md) — zero-allocation behavior chains explained
+- [ADR-0001: Architecture Overview](adr/0001-architecture-overview.md) — full architecture decision record

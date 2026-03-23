@@ -1,7 +1,18 @@
-title: DSoftStudio Docs
-description: Documentation for DSoftStudio Mediator
+title: DSoftStudio.Mediator Documentation
+description: "Ultra-low-latency mediator for .NET — compile-time dispatch, zero-allocation pipelines, Native AOT support. The fastest .NET mediator with benchmarks."
 url: https://docs.dsoftstudio.com
 baseurl: ""
+lang: en-US
+
+# SEO — jekyll-seo-tag uses these for og:image and twitter:card
+logo: https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudio.svg
+image: https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/og-image.png
+twitter:
+  card: summary_large_image
+social:
+  name: DSoftStudio
+  links:
+    - https://github.com/DSoftStudio/Mediator
 
 # Theme
 remote_theme: pages-themes/minimal@v0.2.0

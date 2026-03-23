@@ -1,5 +1,7 @@
 ---
 layout: default
+title: "ADR-0004: Runtime-Typed Send(object) Dispatch - DSoftStudio.Mediator"
+description: "AOT-safe runtime-typed Send(object) dispatch via FrozenDictionary for message bus and command queue scenarios — no reflection, no MakeGenericType."
 ---
 <p align="center">
   <picture>

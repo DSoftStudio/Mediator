@@ -2,35 +2,70 @@
 <html lang="en-US">
   <head>
     <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ page.title | default: site.title }}</title>
+    <link rel="icon" href="{{ '/assets/images/favicon.svg' | relative_url }}" type="image/svg+xml">
     <link rel="stylesheet" href="{{ '/assets/css/style.css?v=' | append: site.github.build_revision | relative_url }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <!--[if lt IE 9]>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv.min.js"></script>
-    <![endif]-->
     {% seo %}
-    <!-- Structured data for Google -->
+    <!-- Structured data: TechArticle -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
       "@type": "TechArticle",
-      "name": "{{ page.title | default: site.title }}",
-      "description": "{{ page.description | default: site.description }}",
+      "headline": "{{ page.title | default: site.title | escape }}",
+      "name": "{{ page.title | default: site.title | escape }}",
+      "description": "{{ page.description | default: site.description | escape }}",
       "url": "{{ page.url | absolute_url }}",
-      "publisher": {
+      "datePublished": "2026-03-16",
+      "dateModified": "2026-03-22",
+      "image": "https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudio.svg",
+      "author": {
         "@type": "Organization",
         "name": "DSoftStudio",
         "url": "https://dsoftstudio.com"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "DSoftStudio",
+        "url": "https://dsoftstudio.com",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudio.svg"
+        }
       },
       "isPartOf": {
         "@type": "WebSite",
         "name": "DSoftStudio Mediator Documentation",
         "url": "{{ site.url }}"
+      },
+      "mainEntityOfPage": {
+        "@type": "WebPage",
+        "@id": "{{ page.url | absolute_url }}"
       }
+    }
+    </script>
+    <!-- Structured data: BreadcrumbList -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Documentation",
+          "item": "{{ '/mediator/' | absolute_url }}"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "{{ page.title | default: site.title | escape }}",
+          "item": "{{ page.url | absolute_url }}"
+        }
+      ]
     }
     </script>
     <style>
@@ -49,6 +84,7 @@
         {{ content }}
       </section>
     </div>
+    {% if page.mermaid %}
     <script type="module">
       import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
       // Jekyll renders ```mermaid as <pre><code class="language-mermaid">
@@ -60,5 +96,6 @@
       });
       mermaid.initialize({ startOnLoad: true });
     </script>
+    {% endif %}
   </body>
 </html>

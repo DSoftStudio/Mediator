@@ -1,5 +1,7 @@
 ---
 layout: default
+title: "ADR-0005: OpenTelemetry Instrumentation - DSoftStudio.Mediator"
+description: "Design of the OpenTelemetry companion package: automatic distributed tracing, metrics, and CQRS-aware span naming for .NET mediator operations."
 ---
 <p align="center">
   <picture>

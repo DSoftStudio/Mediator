@@ -143,3 +143,11 @@ Net effect: **~4 ns saved per `Publish` call** in the default (no custom publish
 | Pipeline precompilation | Eliminates cold-start penalty |
 | Interceptor code generation | Release: ~0.6 ns overhead (GDV-optimized) |
 | `NotificationPublisherFlag` bypass | Skips DI probe when no custom publisher (~4 ns saved) |
+
+## See Also
+
+- [Benchmarks](../benchmarks.md) — full latency and allocation comparison across 4 libraries
+- [Source Generators](source-generators.md) — the 5 generators + 3 interceptor generators explained
+- [Dispatch Pipeline](dispatch-pipeline.md) — runtime execution path from `Send()` to handler
+- [Native AOT](native-aot.md) — full AOT and trimming compatibility
+- [ADR-0001: Architecture Overview](../adr/0001-architecture-overview.md) — complete architecture decision record

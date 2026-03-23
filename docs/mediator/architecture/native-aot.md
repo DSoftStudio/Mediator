@@ -31,3 +31,70 @@ This makes the mediator suitable for:
 ## AOT-Safe Runtime Dispatch
 
 The `Publish(object)` and `Send(object)` overloads (runtime-typed dispatch) are also AOT-safe — they use compile-time generated `FrozenDictionary<Type, DispatchDelegate>` dispatch tables populated by the source generator, with no `MakeGenericType` at runtime.
+
+## Publishing a Native AOT Application
+
+```csharp
+// Program.cs — Minimal API with Native AOT
+var builder = WebApplication.CreateSlimBuilder(args);
+
+builder.Services
+    .AddMediator()
+    .RegisterMediatorHandlers()
+    .PrecompilePipelines()
+    .PrecompileNotifications()
+    .PrecompileStreams();
+
+var app = builder.Build();
+app.Services.ValidateMediatorHandlers();
+
+app.MapPost("/ping", async (IMediator mediator) =>
+    await mediator.Send(new Ping()));
+
+app.Run();
+```
+
+Publish with:
+
+```shell
+dotnet publish -c Release -r linux-x64 /p:PublishAot=true
+```
+
+No trimming warnings, no reflection fallbacks, no `rd.xml` configuration needed.
+
+## Cold Start Performance
+
+Native AOT eliminates JIT warm-up entirely. Combined with `PrecompilePipelines()`, the mediator is ready to dispatch on the very first request:
+
+| Metric | JIT (.NET 10) | Native AOT |
+|---|---|---|
+| Cold start (mediator init) | 1.62 µs | < 1 µs (no JIT) |
+| First `Send()` call | Same as warm | Same as warm |
+| Binary size (self-contained) | ~80 MB | ~15-25 MB |
+
+## What Makes It AOT-Compatible
+
+| Technique | Why it matters for AOT |
+|---|---|
+| Source generators (not reflection) | No `Type.GetType()`, no `Assembly.GetTypes()` |
+| `FrozenDictionary<Type, Delegate>` | Pre-built dispatch tables, no `MakeGenericType` |
+| Interface dispatch (not delegates) | No `Expression.Compile()`, no `DynamicMethod` |
+| `ValueTask<T>` returns | No `Task` allocator dependency |
+| Static generic specialization | CLR creates dispatch tables per-type at compile time |
+
+## Trimming
+
+Both `DSoftStudio.Mediator` and `DSoftStudio.Mediator.Abstractions` ship with:
+
+```xml
+<IsTrimmable>true</IsTrimmable>
+<IsAotCompatible>true</IsAotCompatible>
+```
+
+The ILLink trim analyzer runs at build time. If your handlers reference types that are not trim-safe, you'll get standard `IL2xxx` warnings — but the mediator infrastructure itself produces zero trimming warnings.
+
+## See Also
+
+- [Performance Design](performance.md) — zero-allocation dispatch architecture
+- [Source Generators](source-generators.md) — the 5 generators that eliminate runtime reflection
+- [Cold Start Benchmark](../benchmarks.md) — 1.62 µs cold start vs 9.91 µs (Mediator SG) and 3.24 µs (MediatR)

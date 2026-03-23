@@ -1,5 +1,7 @@
 ---
 layout: default
+title: "ADR-0001: Architecture Overview - DSoftStudio.Mediator"
+description: "Architecture decision: compile-time source generators, zero-allocation pipeline dispatch, and package structure for the fastest .NET mediator."
 ---
 <p align="center">
   <picture>

@@ -100,3 +100,10 @@ This pattern enables clean separation of cross-cutting concerns:
 - **Caching** — apply only to queries
 - **Authorization** — enforce different policies per message type
 - **Audit logging** — log writes separately from reads
+
+## See Also
+
+- [Pipeline Patterns](../advanced/pipeline-patterns.md) — transaction behavior using `ICommand` marker
+- [Caching Patterns](../advanced/caching-patterns.md) — query caching with `IQuery<T>` + HybridCache
+- [FluentValidation](../integrations/fluentvalidation.md) — automatic request validation in the pipeline
+- [Self-Handling Requests](../features/self-handling-requests.md) — inline handlers for simple commands

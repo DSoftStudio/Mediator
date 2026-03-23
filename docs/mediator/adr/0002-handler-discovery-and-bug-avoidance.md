@@ -1,5 +1,7 @@
 ---
 layout: default
+title: "ADR-0002: Handler Discovery and Bug Avoidance - DSoftStudio.Mediator"
+description: "How exact-type notification dispatch avoids the MediatR duplicate handler bug and ensures correct cross-assembly handler discovery."
 ---
 <p align="center">
   <picture>

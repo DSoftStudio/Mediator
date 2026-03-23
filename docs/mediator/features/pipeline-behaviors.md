@@ -2,6 +2,7 @@
 layout: default
 title: "Pipeline Behaviors - DSoftStudio.Mediator"
 description: "Zero-allocation pipeline behaviors via interface dispatch."
+mermaid: true
 ---
 <p align="center">
   <picture>
@@ -67,3 +68,10 @@ services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
 ```
 
 Behaviors execute in registration order. The first registered behavior is the outermost wrapper.
+
+## See Also
+
+- [Pipeline Patterns](../advanced/pipeline-patterns.md) — logging, transactions, and other real-world patterns
+- [Pre/Post Processors](pre-post-processors.md) — simpler hooks when you don't need the full chain
+- [Performance Design](../architecture/performance.md) — why interface dispatch keeps allocations at zero
+- [Registration Order](../getting-started/registration-order.md) — register behaviors before `PrecompilePipelines()`

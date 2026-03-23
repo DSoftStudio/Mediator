@@ -91,3 +91,9 @@ This makes the mediator suitable for:
 - **High-density cloud workloads** — reduced memory per instance
 
 The `Publish(object)` and `Send(object)` overloads (runtime-typed dispatch) are also AOT-safe — they use compile-time generated `FrozenDictionary<Type, DispatchDelegate>` dispatch tables populated by the source generator, with no `MakeGenericType` at runtime.
+
+## See Also
+
+- [Quick Start](quick-start.md) — get started in 5 minutes
+- [Migration from MediatR](migration-from-mediatr.md) — coming from MediatR? Step-by-step guide
+- [Registration Order](registration-order.md) — understand when to call `Precompile*` methods

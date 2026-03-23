@@ -172,3 +172,10 @@ For simple commands/queries where the handler is trivial, you can eliminate the 
 ```
 
 See [Self-Handling Requests](../features/self-handling-requests.md) for full documentation.
+
+## See Also
+
+- [Benchmarks](../benchmarks.md) — performance comparison: DSoftStudio.Mediator vs MediatR
+- [Pipeline Behaviors](../features/pipeline-behaviors.md) — zero-allocation pipeline behavior chains
+- [Registration Order](registration-order.md) — correct DI registration sequence
+- [ADR-0002: Handler Discovery](../adr/0002-handler-discovery-and-bug-avoidance.md) — how DSoftStudio.Mediator avoids the MediatR duplicate handler bug
