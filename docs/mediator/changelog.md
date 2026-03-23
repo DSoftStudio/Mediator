@@ -15,7 +15,7 @@ description: "All notable changes to DSoftStudio.Mediator."
 
 # Changelog
 
-## [1.1.8-rc.1] — 2026-03-23
+## [1.1.8-rc.2] — 2026-03-23
 
 ### Added
 
@@ -26,11 +26,13 @@ description: "All notable changes to DSoftStudio.Mediator."
 - **Nullable integration tests** — 14 same-assembly tests (`NullableResponseTests`) and 4 cross-assembly tests (`NullableCrossAssemblyTests`) validating nullable type propagation through handlers, interceptors, and cross-project discovery.
 - **Enterprise integration tests** — 48 tests across 14 test classes covering multi-project discovery, DI lifetime validation, deep pipeline (6 behaviors), 2000-parallel concurrency, Native AOT precompilation, expression tree safety, complex generics, runtime vs compile-time dispatch, background service patterns, stress testing (5000 sequential + 100 parallel streams), failure injection with retry, allocation regression, timeout/deadlock detection, and chaos testing. See [Production Validation](docs/mediator/architecture/production-validation.md).
 - **Production validation documentation** — New `docs/mediator/architecture/production-validation.md` page documenting all 48 enterprise integration tests organized by category with direct links to source.
+- **`NullableCrossAssemblyDiscoveryTests`** — 2 Roslyn in-memory regression tests covering both cross-assembly discovery paths: Phase 1 (attribute-based, where `typeof()` strips nullable — the bug path) and Phase 2 (type-based, where `AllInterfaces` preserves nullable from PE metadata). Both verify generated DI registrations contain the correct `global::User?>` annotation.
 
 ### Fixed
 
 - **Nullable type names lost in generated code** — All 6 source generators (`DependencyInjectionGenerator`, `SendInterceptorGenerator`, `PublishInterceptorGenerator`, `StreamInterceptorGenerator`, `CqrsSemanticAnalyzer`, `ReferencedAssemblyScanner`) now use `NullableFullyQualifiedFormat` instead of `SymbolDisplayFormat.FullyQualifiedFormat`, preserving `?` annotations in all emitted code.
 - **Benchmarks documentation link** — Fixed broken relative link in `docs/mediator/benchmarks.md`.
+- **CS8631 nullable constraint mismatch in cross-assembly handler discovery** — `typeof()` inside `[MediatorHandlerRegistration]` assembly attributes strips nullable reference type annotations at the IL level — e.g., `typeof(IRequestHandler<GetUser, User?>)` becomes `typeof(IRequestHandler<GetUser, User>)` in metadata. This caused CS8631 warnings and false DSOFT001 diagnostics when a test project referenced a project containing handlers with nullable response types. The fix in `ReferencedAssemblyScanner.CollectHandlersFromAttributes()` re-resolves the service type from `implType.AllInterfaces` (which preserves nullable annotations via PE metadata `NullableAttribute`), using `SymbolEqualityComparer.Default` to match ignoring nullable differences.
 
 ### Changed
 

@@ -137,8 +137,40 @@ namespace DSoftStudio.Mediator.Generators
                 if (attr.ConstructorArguments[1].Value is not INamedTypeSymbol implType)
                     continue;
 
-                results.Add(new ExternalHandlerInfo(serviceType, implType));
+                // typeof() in C# attributes does not preserve nullable reference type
+                // annotations at the IL level (typeof(User?) == typeof(User) for ref types).
+                // Re-resolve the service interface from the implementation type's AllInterfaces
+                // which correctly carries nullable annotations from PE metadata.
+                var resolvedServiceType = ResolveNullableServiceType(serviceType, implType)
+                    ?? serviceType;
+
+                results.Add(new ExternalHandlerInfo(resolvedServiceType, implType));
             }
+        }
+
+        /// <summary>
+        /// Finds the matching interface on the implementation type that has the same
+        /// constructed generic shape as the attribute's service type. The interface from
+        /// <see cref="INamedTypeSymbol.AllInterfaces"/> preserves nullable annotations
+        /// from PE metadata (<c>NullableAttribute</c>), whereas <c>typeof()</c> in
+        /// attributes does not.
+        /// <para>
+        /// <see cref="SymbolEqualityComparer.Default"/> ignores nullable annotations,
+        /// so <c>IRequestHandler&lt;GetUser, User?&gt;</c> (from metadata) matches
+        /// <c>IRequestHandler&lt;GetUser, User&gt;</c> (from attribute).
+        /// </para>
+        /// </summary>
+        private static INamedTypeSymbol? ResolveNullableServiceType(
+            INamedTypeSymbol serviceType,
+            INamedTypeSymbol implType)
+        {
+            foreach (var iface in implType.AllInterfaces)
+            {
+                if (SymbolEqualityComparer.Default.Equals(iface, serviceType))
+                    return iface;
+            }
+
+            return null;
         }
 
         // ── Phase 2 helpers ──────────────────────────────────────────────
