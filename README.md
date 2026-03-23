@@ -5,30 +5,79 @@
 [![CI](https://github.com/DSoftStudio/Mediator/actions/workflows/ci.yml/badge.svg)](https://github.com/DSoftStudio/Mediator/actions/workflows/ci.yml)
 [![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=DSoftStudio_Mediator&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=DSoftStudio_Mediator)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/DSoftStudio/Mediator/blob/main/LICENSE.md)
-![Send](https://img.shields.io/badge/send-7ns-blue)
-![Publish](https://img.shields.io/badge/publish-8.5ns-brightgreen)
-![Alloc](https://img.shields.io/badge/alloc-72B-orange)
 ![NativeAOT](https://img.shields.io/badge/NativeAOT-compatible-success)
 
-Source-generated mediator for .NET — compile-time dispatch, zero-allocation pipelines, Native AOT safe, MediatR-compatible API.
+# A mediator that disappears in your pipeline.
 
-Built for hot paths where every nanosecond and every allocation matters.
+A mediator with zero structural cost.
 
-- **~7 ns Send** (≈0.6 ns over a direct call), **~8.5 ns Publish** — measured with BenchmarkDotNet on .NET 10
-- **0 B Publish allocation**
-- **72 B per Send** — `ValueTask` boxing shared by all source-generated mediators. 74% less than MediatR (272 B).
-- **Native AOT and trimming safe** — no reflection, `MakeGenericType`, or dynamic codegen in any hot path.
-- **Auto-Singleton handlers** — stateless handlers detected at compile time, registered as Singleton automatically.
-- **MediatR-compatible API** — `IRequest<T>` / `INotification` / `IPipelineBehavior<,>`. Mechanical migration, no rewrite.
+*The cost of your pipeline should be your code — not your mediator.*
 
-Compared against [MediatR](https://github.com/jbogard/MediatR) 14.1. [Full 4-library benchmark results below](#benchmarks-net-10).
+Designed for high-throughput, latency-sensitive systems where predictability matters.
 
-| | DSoft | MediatR | Δ |
-|---|---:|---:|---|
-| `Send()` | 7.1 ns | 42.1 ns | **5.9× faster** |
-| `Publish()` | 8.5 ns | 136.1 ns | **16× faster** |
-| Send alloc | 72 B | 272 B | **−74%** |
-| Publish alloc | 0 B | 768 B | **−100%** |
+Source-generated mediator for .NET.
+
+- **Zero structural overhead** — direct-call equivalent
+- **Constant allocations** — 72 B per Send (independent of pipeline depth)
+- **Native AOT safe** — no reflection or runtime codegen in any code path
+- **Deterministic dispatch** — no inheritance surprises, no duplicate handlers
+- **MediatR-compatible API** — drop-in migration
+
+> Real-world pipeline: **667 ns with mediator vs 674 ns direct call — zero overhead.**
+
+---
+
+## Why this matters in production
+
+### The real question
+
+Does your mediator add cost to your pipeline?
+
+Microbenchmark tables show framework overhead in isolation — nanoseconds that never exist alone in a real system. The meaningful question is: **does the mediator add cost to your actual pipeline?**
+
+We measured a realistic enterprise pipeline — **Validation → Logging → Metrics → async database write** — with 3 pipeline behaviors and dependency injection. The kind of pipeline you ship to production.
+
+| Library | Pipeline | Latency | Memory | vs Direct Call |
+|---|---|---:|---:|---|
+| **DSoftStudio.Mediator** | Direct call | 674 ns | 271 B | — |
+| | **Mediator pipeline** | **667 ns** | **255 B** | **ratio 0.99** |
+| | | | | |
+| DispatchR 2.1 | Direct call | 661 ns | 271 B | — |
+| | Mediator pipeline | 667 ns | 255 B | ratio 1.01 |
+| | | | | |
+| Mediator (Source Gen) 3.0 | Direct call | 679 ns | 270 B | — |
+| | Mediator pipeline | 718 ns | 397 B | +6%, +47% alloc |
+| | | | | |
+| MediatR 14.1 | Direct call | 714 ns | 270 B | — |
+| | Mediator pipeline | 857 ns | 1,032 B | +20%, **3.8× alloc** |
+
+> **The mediator layer adds zero measurable overhead.** The cost is your handler — not the framework.
+
+Three things this reveals that isolated microbenchmarks hide:
+
+**GC pressure compounds at scale.**
+MediatR allocates 1,032 B per request in this pipeline. At 10k req/s, that's ~10 MB/s of short-lived Gen0 objects. DSoft allocates 255 B — the same as calling the method directly. Under sustained load, the difference shows up as GC pause frequency, not as nanoseconds in a benchmark table.
+
+**Allocation profile determines tail latency.**
+More GC collections = more variance in p99/p999 response times. Constant-allocation pipelines produce tighter latency distributions. This matters more than mean latency in any SLA-bound system.
+
+**Pipeline depth shouldn't change your cost.**
+DSoft allocates 72 B per Send whether you have 0, 3, or 5 behaviors — the allocation is constant because behaviors chain through interface dispatch, not delegate wrapping. MediatR allocates 272 B → 800 B → 1,088 B as you add behaviors, because each behavior wraps a new delegate and closure.
+
+This is not about being faster in microbenchmarks — it's about not becoming slower as your system grows.
+
+---
+
+## Key guarantees
+
+| | |
+|---|---|
+| **No runtime resolution** | All dispatch paths are source-generated. No `IServiceProvider.GetService()` on the hot path. |
+| **No hidden allocations** | Behavior chains use interface dispatch (`IRequestHandler<,>`), not `Func<>` delegates. No closures. |
+| **No reflection** | No `MakeGenericType`, `Expression.Compile`, or assembly scanning in any code path. |
+| **Deterministic notification dispatch** | Compile-time exact-type routing. Publishing `DerivedEvent` never invokes `INotificationHandler<BaseEvent>`. |
+| **AOT-safe by construction** | Structural property of the architecture, not a runtime guard or opt-in flag. |
+| **Constant-allocation pipeline** | 72 B per Send regardless of behavior count. Zero-alloc Publish. |
 
 ---
 
@@ -37,8 +86,6 @@ Compared against [MediatR](https://github.com/jbogard/MediatR) 14.1. [Full 4-lib
 ```shell
 dotnet add package DSoftStudio.Mediator
 ```
-
-Define a request and handler:
 
 ```csharp
 public record Ping() : IRequest<int>;
@@ -50,18 +97,12 @@ public class PingHandler : IRequestHandler<Ping, int>
 }
 ```
 
-Register at startup:
-
 ```csharp
 services
     .AddMediator()
     .RegisterMediatorHandlers()
-    .PrecompilePipelines()
-    .PrecompileNotifications()
-    .PrecompileStreams();
+    .PrecompilePipelines();
 ```
-
-Send a request:
 
 ```csharp
 var result = await mediator.Send(new Ping());
@@ -71,59 +112,24 @@ var result = await mediator.Send(new Ping());
 
 ---
 
-## Why This Library
-
-**Compile-time dispatch**
-All dispatch paths are generated at build time. The hot path is a direct method call through a precompiled chain — no `IServiceProvider.GetService()` on every request, no delegate wrapping, no closure allocations.
-
-**Zero-allocation pipeline**
-Behavior chains use interface dispatch (`IRequestHandler<TRequest, TResponse>`) instead of `Func<>` delegates. Each behavior calls the next handler directly. No delegate allocation, no closure capture.
-
-**Exact-type notification dispatch**
-Notifications dispatch by compile-time type only. Publishing `DerivedEvent` invokes only `INotificationHandler<DerivedEvent>`, never `INotificationHandler<BaseEvent>`. This eliminates the MediatR duplicate handler problem where base-type handlers fire for every derived type. See [Design Notes](#notification-dispatch-by-exact-type).
-
-**Auto-Singleton detection**
-Handlers with no constructor dependencies are registered as Singleton automatically. The source generator inspects constructors at compile time — no runtime heuristics. Handlers with DI dependencies remain Transient.
-
-**AOT by construction**
-No `MakeGenericType`, no `Expression.Compile`, no assembly scanning. Native AOT and trimming compatibility is a structural property of the architecture, not a runtime guard or opt-in flag.
-
----
-
-## Execution Model
-
-All dispatch paths are resolved at compile time:
-
-```
-Send(request)
-  → Precompiled pipeline (compile-time chain)
-    → Behavior₁ → Behavior₂ → … → BehaviorN
-      → Handler (direct call, no GetService)
-        → ValueTask<TResponse>
-
-Publish(notification)
-  → Closed dispatch table (compile-time, exact type)
-    → Handler₁, Handler₂, … → ValueTask (zero alloc)
-```
-
-No delegates. No closures. No `IServiceProvider` on the hot path. Every call is a direct typed invocation through a precompiled chain.
-
-> The mediator becomes a thin, predictable layer — not a runtime system.
-
----
-
-## When to Use This
+## When to use this
 
 **Use DSoftStudio.Mediator when:**
-- Latency matters — hot paths, high-throughput APIs, real-time systems
-- Native AOT or trimming is required — no reflection, no `MakeGenericType`
-- Predictable behavior is non-negotiable — no runtime type walking, no duplicate handler surprises
-- You want MediatR's API without MediatR's overhead
+- You need a mediator that adds zero overhead to your pipeline
+- Native AOT or trimming is required
+- Predictable p99 latency matters — high-throughput APIs, real-time systems
+- You want MediatR's API without MediatR's allocation profile
+- GC pressure is a concern at scale
 
 **Use MediatR when:**
 - Performance is not a primary concern
 - You need runtime flexibility (dynamic handler discovery, inheritance-based notification dispatch)
-- Your team prefers the established ecosystem and community size
+- Your team depends on MediatR's established ecosystem and community
+
+**This library is not:**
+- A message bus — use MassTransit, NServiceBus, or Azure Service Bus
+- An event sourcing framework
+- A replacement for direct method calls when you don't need the mediator pattern
 
 ---
 
@@ -144,30 +150,29 @@ No delegates. No closures. No `IServiceProvider` on the hot path. Every call is 
 
 ---
 
-## Benchmarks (.NET 10)
+## Mental model
 
-Measured with [BenchmarkDotNet](https://benchmarkdotnet.org/) against [Mediator](https://github.com/martinothamar/Mediator) 3.0.1, [DispatchR](https://github.com/hasanxdev/DispatchR) 2.1.1, and [MediatR](https://github.com/jbogard/MediatR) 14.1.
+This mediator does not *execute* your pipeline.
 
-### Latency
+It **becomes** your pipeline at compile time.
 
-| Operation | **DSoft** | Mediator (SG) | DispatchR | MediatR |
-|---|---:|---:|---:|---:|
-| `Send()` | **7.1 ns** | 12.5 ns | 33.4 ns | 42.1 ns |
-| `Send()` 5 behaviors | **15.5 ns** | 21.2 ns | 53.5 ns | 150.2 ns |
-| `Publish()` | **8.5 ns** | 10.2 ns | 35.0 ns | 136.1 ns |
-| `CreateStream()` | 45.8 ns | **45.3 ns** | 67.1 ns | 124.2 ns |
-| Cold Start | **1.63 µs** | 7.41 µs | 1.91 µs | 3.10 µs |
+---
 
-### Allocations
+## Execution Model
 
-| Operation | **DSoft** | Mediator (SG) | DispatchR | MediatR |
-|---|---:|---:|---:|---:|
-| `Send()` | 72 B | 72 B | 72 B | 272 B |
-| `Send()` 5 behaviors | 72 B | 72 B | 72 B | 1,088 B |
-| `Publish()` | 0 B | 0 B | 0 B | 768 B |
-| `CreateStream()` | 232 B | 232 B | 232 B | 624 B |
+```
+Send(request)
+  → Precompiled pipeline (compile-time chain)
+    → Behavior₁ → Behavior₂ → … → BehaviorN
+      → Handler (direct call, no GetService)
+        → ValueTask<TResponse>
 
-> Full BenchmarkDotNet results in [`/benchmarks`](benchmarks).
+Publish(notification)
+  → Closed dispatch table (compile-time, exact type)
+    → Handler₁, Handler₂, … → ValueTask (zero alloc)
+```
+
+No delegates. No closures. No `IServiceProvider` on the hot path. Every call is a direct typed invocation through a precompiled chain.
 
 ---
 
@@ -217,6 +222,73 @@ Interceptor code generation (Release vs Debug), mock safety, `DSoftMediatorSuppr
 
 ---
 
+## Benchmarks (.NET 10)
+
+Measured with [BenchmarkDotNet](https://benchmarkdotnet.org/) on .NET 10. Each library runs in an **isolated process** to prevent cross-contamination.
+Compared against [Mediator](https://github.com/martinothamar/Mediator) 3.0.1, [DispatchR](https://github.com/hasanxdev/DispatchR) 2.1.1, and [MediatR](https://github.com/jbogard/MediatR) 14.1.
+
+### What matters
+
+- DSoft ≈ direct call in real pipelines
+- Constant allocation regardless of behavior count
+- No GC amplification under load
+
+### Latency
+
+| Operation | **DSoft** | Mediator (SG) | DispatchR | MediatR |
+|---|---:|---:|---:|---:|
+| `Send()` | **7.2 ns** | 12.2 ns | 33.4 ns | 41.3 ns |
+| `Send()` 5 behaviors | **15.6 ns** | 36.8 ns | 54.1 ns | 153.1 ns |
+| `Publish()` | **4.5 ns** | 10.6 ns | 35.7 ns | 123.4 ns |
+| `CreateStream()` | 45.5 ns | **44.7 ns** | 68.1 ns | 122.9 ns |
+| Cold Start | **1.62 µs** | 9.91 µs | 1.88 µs | 3.24 µs |
+
+### Allocations
+
+| Operation | **DSoft** | Mediator (SG) | DispatchR | MediatR |
+|---|---:|---:|---:|---:|
+| `Send()` | 72 B | 72 B | 72 B | 272 B |
+| `Send()` 5 behaviors | 72 B | 72 B | 72 B | 1,088 B |
+| `Publish()` | **0 B** | **0 B** | **0 B** | 768 B |
+| `CreateStream()` | 232 B | 232 B | 232 B | 624 B |
+
+### Realistic Pipeline (Validation → Logging → Metrics → async DB)
+
+| Library | Pipeline | Latency | Memory | Overhead |
+|---|---|---:|---:|---:|
+| **DSoft** | Direct call | 674 ns | 271 B | — |
+| | **Mediator pipeline** | **667 ns** | **255 B** | **0.99×** |
+| | | | | |
+| DispatchR | Direct call | 661 ns | 271 B | — |
+| | Mediator pipeline | 667 ns | 255 B | 1.01× |
+| | | | | |
+| Mediator (SG) | Direct call | 679 ns | 270 B | — |
+| | Mediator pipeline | 718 ns | 397 B | 1.06× |
+| | | | | |
+| MediatR | Direct call | 714 ns | 270 B | — |
+| | Mediator pipeline | 857 ns | 1,032 B | 1.20× |
+
+> Full BenchmarkDotNet results: [`benchmarks/BENCHMARKS.md`](benchmarks/BENCHMARKS.md)
+
+---
+
+## Migrating from MediatR
+
+Mechanical code changes. No architectural rewrite.
+
+| Concept | MediatR | DSoftStudio.Mediator |
+|---|---|---|
+| Handler return | `Task<TResponse>` | `ValueTask<TResponse>` |
+| Behavior `next` | `RequestHandlerDelegate<T>` | `IRequestHandler<TReq, TRes>` |
+| Calling next | `await next()` | `await next.Handle(req, ct)` |
+| Pre/Post return | `Task` | `ValueTask` |
+| Handler lifetime | All Transient | Stateless → Singleton |
+| Namespace | `using MediatR;` | `using DSoftStudio.Mediator.Abstractions;` |
+
+> [Step-by-step Migration Guide](https://docs.dsoftstudio.com/mediator/getting-started/migration-from-mediatr)
+
+---
+
 ## Samples
 
 | Sample | Description | Port |
@@ -240,23 +312,6 @@ dotnet run --project samples/basic-api/DSoft.Sample.Api
 
 ---
 
-## Migrating from MediatR
-
-Mechanical code changes. No architectural rewrite.
-
-| Concept | MediatR | DSoftStudio.Mediator |
-|---|---|---|
-| Handler return | `Task<TResponse>` | `ValueTask<TResponse>` |
-| Behavior `next` | `RequestHandlerDelegate<T>` | `IRequestHandler<TReq, TRes>` |
-| Calling next | `await next()` | `await next.Handle(req, ct)` |
-| Pre/Post return | `Task` | `ValueTask` |
-| Handler lifetime | All Transient | Stateless → Singleton |
-| Namespace | `using MediatR;` | `using DSoftStudio.Mediator.Abstractions;` |
-
-> [Step-by-step Migration Guide](https://docs.dsoftstudio.com/mediator/getting-started/migration-from-mediatr)
-
----
-
 ## Documentation
 
 [docs.dsoftstudio.com/mediator](https://docs.dsoftstudio.com/mediator)
@@ -267,6 +322,12 @@ Mechanical code changes. No architectural rewrite.
 - **Integrations** — [OpenTelemetry](https://docs.dsoftstudio.com/mediator/integrations/opentelemetry) · [FluentValidation](https://docs.dsoftstudio.com/mediator/integrations/fluentvalidation) · [HybridCache](https://docs.dsoftstudio.com/mediator/integrations/hybridcache)
 - **Architecture** — [Dispatch Pipeline](https://docs.dsoftstudio.com/mediator/architecture/dispatch-pipeline) · [Source Generators](https://docs.dsoftstudio.com/mediator/architecture/source-generators) · [Native AOT](https://docs.dsoftstudio.com/mediator/architecture/native-aot) · [Performance](https://docs.dsoftstudio.com/mediator/architecture/performance) · [Design Notes](https://docs.dsoftstudio.com/mediator/architecture/design-notes)
 - **Advanced** — [Caching Patterns](https://docs.dsoftstudio.com/mediator/advanced/caching-patterns) · [Pipeline Patterns](https://docs.dsoftstudio.com/mediator/advanced/pipeline-patterns)
+
+---
+
+Your mediator should not be part of your performance budget.
+
+This one isn't.
 
 ---
 
