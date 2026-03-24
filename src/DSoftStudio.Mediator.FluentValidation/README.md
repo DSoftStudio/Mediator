@@ -35,15 +35,37 @@ public class CreateUserValidator : AbstractValidator<CreateUser>
 }
 ```
 
-Register at startup:
+Register the validation pipeline behavior and your validators at startup:
 
 ```csharp
 services
     .AddMediator()
     .RegisterMediatorHandlers()
-    .AddMediatorFluentValidation(typeof(Program).Assembly)
+    .AddMediatorFluentValidation()
     .PrecompilePipelines();
+
+// Register validators — choose one of the approaches below
 ```
+
+### Registering Validators
+
+**Option 1 — Manual registration (AOT-compatible)**
+
+```csharp
+services.AddScoped<IValidator<CreateUser>, CreateUserValidator>();
+```
+
+**Option 2 — Assembly scanning (requires [FluentValidation.DependencyInjectionExtensions](https://www.nuget.org/packages/FluentValidation.DependencyInjectionExtensions))**
+
+```shell
+dotnet add package FluentValidation.DependencyInjectionExtensions
+```
+
+```csharp
+services.AddValidatorsFromAssembly(typeof(Program).Assembly);
+```
+
+> **Note:** `FluentValidation.DependencyInjectionExtensions` uses reflection-based assembly scanning, which is not compatible with NativeAOT / trimming.
 
 Validation runs automatically — if validation fails, a `MediatorValidationException` is thrown before the handler executes.
 
