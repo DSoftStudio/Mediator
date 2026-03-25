@@ -377,12 +377,14 @@ reference only the abstractions package.
 ## 16. Performance Benchmarks (.NET 10, Isolated Runs)
 
 ### Send (No Behaviors)
+
 | Method     | Latency  | Alloc | Ratio |
 |------------|----------|-------|-------|
 | DirectCall | 7.511 ns | 72 B  | 1.00× |
 | DSoft_Send | 8.039 ns | 72 B  | 1.07× |
 
 ### Send (Behaviors)
+
 | Method                | Latency   | Alloc | Ratio |
 |-----------------------|-----------|-------|-------|
 | DirectCall            |  6.646 ns | 72 B  | 1.00× |
@@ -391,6 +393,7 @@ reference only the abstractions package.
 | DSoft_Send_5Behaviors | 16.544 ns | 72 B  | 2.49× |
 
 ### Cross-Library Comparison (All Libraries, Combined Run)
+
 | Operation        | DSoft    | Mediator SG | DispatchR  | MediatR    |
 |------------------|----------|-------------|------------|------------|
 | Send()           | 7.1 ns   | 12.5 ns     | 33.4 ns    | 42.1 ns    |
@@ -400,6 +403,7 @@ reference only the abstractions package.
 | Cold Start       | 1.63 µs  | 7.41 µs     | 1.91 µs    | 3.10 µs    |
 
 ### Allocation Comparison
+
 | Operation        | DSoft | Mediator SG | DispatchR | MediatR |
 |------------------|-------|-------------|-----------|---------|
 | Send()           | 72 B  | 72 B        | 72 B      | 272 B   |
