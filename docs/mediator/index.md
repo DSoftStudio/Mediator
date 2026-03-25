@@ -13,8 +13,10 @@ description: "Ultra-low-latency mediator for .NET with compile-time dispatch, ze
 
 # DSoftStudio.Mediator — Documentation
 
-DSoftStudio.Mediator is an ultra-low-latency mediator for .NET with compile-time dispatch,
-zero-allocation pipelines, and Native AOT compatibility.
+A source-generated mediator for .NET that compiles your pipeline ahead of time —
+no reflection, no runtime composition, no hidden cost.
+
+**No surprises. No hidden cost. No runtime magic.**
 
 This documentation is organized to help you move from **quick onboarding**
 to **deep architectural understanding**.

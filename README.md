@@ -23,7 +23,48 @@ Source-generated mediator for .NET.
 - **Deterministic dispatch** — no inheritance surprises, no duplicate handlers
 - **MediatR-compatible API** — drop-in migration
 
-> Real-world pipeline: **667 ns with mediator vs 674 ns direct call — zero overhead.**
+> **Zero overhead in real pipelines.** 667 ns (mediator) vs 674 ns (direct call).
+
+**No surprises. No hidden cost. No runtime magic.**
+
+---
+
+## Why this exists
+
+Most mediator implementations introduce hidden cost as systems grow — allocations scale with pipeline depth, execution flow becomes harder to trace, and tail latency becomes unpredictable.
+
+This library removes those costs — by design.
+
+### What's different
+
+- Compile-time pipeline — no runtime composition
+- Fully inspectable execution — no hidden middleware chains
+- Constant allocation — independent of pipeline depth
+
+### Why this feels different
+
+With traditional mediators:
+- you call `Send()`
+- the pipeline is assembled at runtime
+- the execution path is implicit
+
+With DSoftStudio.Mediator:
+- the pipeline is compiled ahead of time
+- the execution is visible in generated code
+- the call is fully predictable
+
+No hidden composition. No runtime surprises.
+
+**For teams that care about:**
+- Predictable latency (p99)
+- Minimal GC pressure
+- Debuggable pipelines
+
+```csharp
+var result = await mediator.Send(new Ping()); // that's it
+```
+
+> [Quick Start →](#quick-start)
 
 ---
 
@@ -50,7 +91,9 @@ Does your mediator add cost to your pipeline?
 
 Microbenchmark tables show framework overhead in isolation — nanoseconds that never exist alone in a real system. The meaningful question is: **does the mediator add cost to your actual pipeline?**
 
-We measured a realistic enterprise pipeline — **Validation → Logging → Metrics → async database write** — with 3 pipeline behaviors and dependency injection. The kind of pipeline you ship to production.
+### What we measured
+
+A realistic enterprise pipeline — **Validation → Logging → Metrics → async database write** — with 3 pipeline behaviors and dependency injection. The kind of pipeline you ship to production.
 
 | Library | Pipeline | Latency | Memory | vs Direct Call |
 |---|---|---:|---:|---|
@@ -68,7 +111,9 @@ We measured a realistic enterprise pipeline — **Validation → Logging → Met
 
 > **The mediator layer adds zero measurable overhead.** The cost is your handler — not the framework.
 
-Three things this reveals that isolated microbenchmarks hide:
+### What this reveals
+
+Four things that isolated microbenchmarks hide:
 
 **GC pressure compounds at scale.**
 MediatR allocates 1,032 B per request in this pipeline. At 10k req/s, that's ~10 MB/s of short-lived Gen0 objects. DSoft allocates 255 B — the same as calling the method directly. Under sustained load, the difference shows up as GC pause frequency, not as nanoseconds in a benchmark table.
@@ -79,7 +124,10 @@ More GC collections = more variance in p99/p999 response times. Constant-allocat
 **Pipeline depth shouldn't change your cost.**
 DSoft allocates 72 B per Send whether you have 0, 3, or 5 behaviors — the allocation is constant because behaviors chain through interface dispatch, not delegate wrapping. MediatR allocates 272 B → 800 B → 1,088 B as you add behaviors, because each behavior wraps a new delegate and closure.
 
-This is not about being faster in microbenchmarks — it's about not becoming slower as your system grows.
+**Implicit pipelines can become opaque as they grow.**
+In MediatR, the behavior chain is assembled at runtime through service resolution. As systems grow, understanding the exact execution flow often requires tracing through middleware layers and the DI container. DSoftStudio.Mediator takes a different approach: the full pipeline is generated at compile time. The behavior chain is visible in source-generated code, inspectable in your IDE, and fully deterministic. What you register is what runs, in the order you registered it.
+
+This is not about being faster in microbenchmarks — it's about keeping your system predictable and understandable as it scales.
 
 ---
 
@@ -107,6 +155,7 @@ DSoftStudio.Mediator is designed to:
 | **No runtime resolution** | All dispatch paths are source-generated. No `IServiceProvider.GetService()` on the hot path. |
 | **No hidden allocations** | Behavior chains use interface dispatch (`IRequestHandler<,>`), not `Func<>` delegates. No closures. |
 | **No reflection** | No `MakeGenericType`, `Expression.Compile`, or assembly scanning in any code path. |
+| **Compile-time pipeline transparency** | The full behavior chain is visible in generated code — inspectable, debuggable, and deterministic. No runtime assembly of middleware. |
 | **Deterministic notification dispatch** | Compile-time exact-type routing. Publishing `DerivedEvent` never invokes `INotificationHandler<BaseEvent>`. |
 | **AOT-safe by construction** | Structural property of the architecture, not a runtime guard or opt-in flag. |
 | **Constant-allocation pipeline** | 72 B per Send regardless of behavior count. Zero-alloc Publish. |
