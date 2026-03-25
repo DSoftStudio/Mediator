@@ -380,27 +380,26 @@ reference only the abstractions package.
 
 | Method     | Latency  | Alloc | Ratio |
 |------------|----------|-------|-------|
-| DirectCall | 7.511 ns | 72 B  | 1.00× |
-| DSoft_Send | 8.039 ns | 72 B  | 1.07× |
+| DirectCall | 6.996 ns | 72 B  | 1.00× |
+| DSoft_Send | 7.245 ns | 72 B  | 1.04× |
 
 ### Send (Behaviors)
 
 | Method                | Latency   | Alloc | Ratio |
 |-----------------------|-----------|-------|-------|
-| DirectCall            |  6.646 ns | 72 B  | 1.00× |
-| DSoft_Send            |  7.886 ns | 72 B  | 1.19× |
-| DSoft_Send_3Behaviors | 15.306 ns | 72 B  | 2.30× |
-| DSoft_Send_5Behaviors | 16.544 ns | 72 B  | 2.49× |
+| DirectCall            |  6.745 ns | 72 B  | 1.00× |
+| DSoft_Send_3Behaviors | 13.820 ns | 72 B  | 2.05× |
+| DSoft_Send_5Behaviors | 15.635 ns | 72 B  | 2.32× |
 
-### Cross-Library Comparison (All Libraries, Combined Run)
+### Cross-Library Comparison (All Libraries, Isolated Runs)
 
 | Operation        | DSoft    | Mediator SG | DispatchR  | MediatR    |
 |------------------|----------|-------------|------------|------------|
-| Send()           | 7.1 ns   | 12.5 ns     | 33.4 ns    | 42.1 ns    |
-| Send() 5 beh     | 15.5 ns  | 21.2 ns     | 53.5 ns    | 150.2 ns   |
-| Publish()        | 8.5 ns   | 10.2 ns     | 35.0 ns    | 136.1 ns   |
-| CreateStream()   | 45.8 ns  | 45.3 ns     | 67.1 ns    | 124.2 ns   |
-| Cold Start       | 1.63 µs  | 7.41 µs     | 1.91 µs    | 3.10 µs    |
+| Send()           | 7.2 ns   | 12.2 ns     | 33.4 ns    | 41.3 ns    |
+| Send() 5 beh     | 15.6 ns  | 36.8 ns     | 54.1 ns    | 153.1 ns   |
+| Publish()        | 4.5 ns   | 10.6 ns     | 35.7 ns    | 123.4 ns   |
+| CreateStream()   | 45.5 ns  | 44.7 ns     | 68.1 ns    | 122.9 ns   |
+| Cold Start       | 1.62 µs  | 9.91 µs     | 1.88 µs    | 3.24 µs    |
 
 ### Allocation Comparison
 
@@ -410,6 +409,19 @@ reference only the abstractions package.
 | Send() 5 beh     | 72 B  | 72 B        | 72 B      | 1,088 B |
 | Publish()        | 0 B   | 0 B         | 0 B       | 768 B   |
 | CreateStream()   | 232 B | 232 B       | 232 B     | 624 B   |
+
+### Realistic Pipeline (Validation → Logging → Metrics → async DB)
+
+| Library       | Pipeline          | Latency | Memory | Overhead |
+|---------------|-------------------|---------|--------|----------|
+| **DSoft**     | Direct call       | 674 ns  | 271 B  | —        |
+|               | Mediator pipeline | 667 ns  | 255 B  | 0.99×    |
+| DispatchR     | Direct call       | 661 ns  | 271 B  | —        |
+|               | Mediator pipeline | 667 ns  | 255 B  | 1.01×    |
+| Mediator (SG) | Direct call       | 679 ns  | 270 B  | —        |
+|               | Mediator pipeline | 718 ns  | 397 B  | 1.06×    |
+| MediatR       | Direct call       | 714 ns  | 270 B  | —        |
+|               | Mediator pipeline | 857 ns  | 1,032 B| 1.20×    |
 
 ---
 
