@@ -23,7 +23,7 @@ Source-generated mediator for .NET.
 - **Deterministic dispatch** — no inheritance surprises, no duplicate handlers
 - **MediatR-compatible API** — drop-in migration
 
-> **Zero overhead in real pipelines.** 667 ns (mediator) vs 674 ns (direct call).
+> **Zero overhead in real pipelines.** Performance parity with direct calls — 667 ns vs 674 ns.
 
 **No surprises. No hidden cost. No runtime magic.**
 
