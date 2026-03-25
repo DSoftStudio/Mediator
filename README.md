@@ -53,7 +53,7 @@ With DSoftStudio.Mediator:
 - the execution is visible in generated code
 - the call is fully predictable
 
-No hidden composition. No runtime surprises.
+No hidden composition — everything is generated and visible. No runtime surprises.
 
 **For teams that care about:**
 - Predictable latency (p99)
