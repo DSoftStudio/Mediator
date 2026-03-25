@@ -19,8 +19,8 @@
       "name": "{{ page.title | default: site.title | escape }}",
       "description": "{{ page.description | default: site.description | escape }}",
       "url": "{{ page.url | absolute_url }}",
-      "datePublished": "2026-03-16",
-      "dateModified": "2026-03-22",
+      "datePublished": "2025-06-16",
+      "dateModified": "2025-07-15",
       "image": "https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudio.svg",
       "author": {
         "@type": "Organization",
@@ -66,6 +66,30 @@
           "item": "{{ page.url | absolute_url }}"
         }
       ]
+    }
+    </script>
+    <!-- Structured data: SoftwareApplication (NuGet library) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareSourceCode",
+      "name": "DSoftStudio.Mediator",
+      "description": "Ultra-low-latency mediator for .NET with compile-time dispatch, zero-allocation pipelines, and Native AOT support.",
+      "url": "https://docs.dsoftstudio.com/mediator/",
+      "codeRepository": "https://github.com/DSoftStudio/Mediator",
+      "programmingLanguage": "C#",
+      "runtimePlatform": ".NET",
+      "license": "https://opensource.org/licenses/MIT",
+      "author": {
+        "@type": "Organization",
+        "name": "DSoftStudio",
+        "url": "https://dsoftstudio.com"
+      },
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      }
     }
     </script>
     <style>
