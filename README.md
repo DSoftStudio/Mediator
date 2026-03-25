@@ -98,16 +98,16 @@ A realistic enterprise pipeline — **Validation → Logging → Metrics → asy
 | Library | Pipeline | Latency | Memory | vs Direct Call |
 |---|---|---:|---:|---|
 | **DSoftStudio.Mediator** | Direct call | 674 ns | 271 B | — |
-| | **Mediator pipeline** | **667 ns** | **255 B** | **ratio 0.99** |
+| | **Mediator pipeline** | **667 ns** | **255 B** | **0.99×** |
 | | | | | |
 | DispatchR 2.1 | Direct call | 661 ns | 271 B | — |
-| | Mediator pipeline | 667 ns | 255 B | ratio 1.01 |
+| | Mediator pipeline | 667 ns | 255 B | 1.01× |
 | | | | | |
 | Mediator (Source Gen) 3.0 | Direct call | 679 ns | 270 B | — |
-| | Mediator pipeline | 718 ns | 397 B | +6%, +47% alloc |
+| | Mediator pipeline | 718 ns | 397 B | 1.06×, 1.5× alloc |
 | | | | | |
 | MediatR 14.1 | Direct call | 714 ns | 270 B | — |
-| | Mediator pipeline | 857 ns | 1,032 B | +20%, **3.8× alloc** |
+| | Mediator pipeline | 857 ns | 1,032 B | 1.20×, **3.8× alloc** |
 
 > **The mediator layer adds zero measurable overhead.** The cost is your handler — not the framework.
 
