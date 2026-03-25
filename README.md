@@ -219,7 +219,7 @@ var result = await mediator.Send(new Ping());
 | Feature | DSoft | Mediator (SG) | DispatchR | MediatR |
 |---|:---:|:---:|:---:|:---:|
 | Structural overhead | None | Low | Reduced | High |
-| Allocation scaling | Constant | Grows | Grows | Grows |
+| Pipeline alloc overhead | None | +47% | None | +3.8× |
 | Failure-tested | ✅ | ❌ | ❌ | ❌ |
 | Chaos-tested | ✅ | ❌ | ❌ | ❌ |
 | Concurrency-tested (2000+) | ✅ | ❌ | ❌ | ❌ |
