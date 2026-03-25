@@ -24,7 +24,7 @@
 		</Description>
 
 		<PackageTags>
-			mediator;mediatr;mediatr-alternative;cqrs;pipeline;dotnet;performance;source-generator
+			mediator;mediatr;mediatr-alternative;cqrs;pipeline;dotnet;performance;source-generator;native-aot;high-performance;zero-allocation;aot
 		</PackageTags>
 
 		<PackageProjectUrl>https://docs.dsoftstudio.com/mediator</PackageProjectUrl>

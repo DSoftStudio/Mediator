@@ -256,16 +256,16 @@ It **becomes** your pipeline at compile time.
 
 ## Execution Model
 
-```
+```text
 Send(request)
   → Precompiled pipeline (compile-time chain)
-    → Behavior₁ → Behavior₂ → … → BehaviorN
+    → Behavior1 → Behavior2 → ... → BehaviorN
       → Handler (direct call, no GetService)
         → ValueTask<TResponse>
 
 Publish(notification)
   → Closed dispatch table (compile-time, exact type)
-    → Handler₁, Handler₂, … → ValueTask (zero alloc)
+    → Handler1, Handler2, ... → ValueTask (zero alloc)
 ```
 
 No delegates. No closures. No `IServiceProvider` on the hot path. Every call is a direct typed invocation through a precompiled chain.
