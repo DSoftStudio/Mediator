@@ -1,5 +1,5 @@
 title: DSoftStudio.Mediator Documentation
-description: "Ultra-low-latency mediator for .NET — compile-time dispatch, zero-allocation pipelines, Native AOT support. The fastest .NET mediator with benchmarks."
+description: "Source-generated mediator for .NET with compile-time dispatch, zero-allocation pipelines, and Native AOT support."
 url: https://docs.dsoftstudio.com
 baseurl: ""
 lang: en-US
