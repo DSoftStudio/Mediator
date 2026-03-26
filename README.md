@@ -179,10 +179,10 @@ public class PingHandler : IRequestHandler<Ping, int>
 ```
 
 ```csharp
-services
-    .AddMediator()
-    .RegisterMediatorHandlers()
-    .PrecompilePipelines();
+services.AddMediator(builder =>
+{
+    // optional: register behaviors, processors, etc.
+});
 ```
 
 ```csharp
