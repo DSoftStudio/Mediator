@@ -233,9 +233,16 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
 
         sb.AppendLine("    file static class MediatorRegistry");
         sb.AppendLine("    {");
+        sb.AppendLine("        private sealed class __PipelineSentinel { }");
+        sb.AppendLine();
 
         sb.AppendLine("        public static void RegisterPipelineChains(global::Microsoft.Extensions.DependencyInjection.IServiceCollection services)");
         sb.AppendLine("        {");
+        sb.AppendLine("            foreach (var d in services)");
+        sb.AppendLine("                if (d.ServiceType == typeof(__PipelineSentinel))");
+        sb.AppendLine("                    return;");
+        sb.AppendLine("            global::Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<__PipelineSentinel>(services);");
+        sb.AppendLine();
 
         // Filter behaviors relevant to the request pipeline (not stream)
         var requestBehaviors = new List<BehaviorTypeInfo>();
@@ -400,6 +407,40 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
 
         sb.AppendLine("        {");
 
+        sb.AppendLine("            MediatorRegistry.RegisterPipelineChains(services);");
+        sb.AppendLine("            global::DSoftStudio.Mediator.RequestObjectDispatch.Freeze();");
+        sb.AppendLine("            return services;");
+
+        sb.AppendLine("        }");
+
+        sb.AppendLine();
+
+        // ── AddMediator(Action<MediatorBuilder>) — single entry point (Option B: automatic) ──
+        sb.AppendLine("        /// <summary>");
+        sb.AppendLine("        /// Registers all mediator services, discovered handlers, and precompiled pipelines");
+        sb.AppendLine("        /// in a single call. The optional <paramref name=\"configure\"/> lambda allows");
+        sb.AppendLine("        /// registering open-generic behaviors, custom notification publishers, and more.");
+        sb.AppendLine("        /// </summary>");
+
+        sb.AppendLine(
+            "        public static global::Microsoft.Extensions.DependencyInjection.IServiceCollection AddMediator(");
+        sb.AppendLine(
+            "            this global::Microsoft.Extensions.DependencyInjection.IServiceCollection services,");
+        sb.AppendLine(
+            "            global::System.Action<global::DSoftStudio.Mediator.MediatorBuilder> configure)");
+        sb.AppendLine("        {");
+
+        // 1. Core services (IMediator, ISender, IPublisher) — hand-written in ServiceCollectionExtensions.
+        sb.AppendLine("            global::DSoftStudio.Mediator.ServiceCollectionExtensions.AddMediator(services);");
+
+        // 2. Generated handler registrations — public extension from DependencyInjectionGenerator.
+        sb.AppendLine("            services.RegisterMediatorHandlers();");
+
+        // 3. User customization (open behaviors, parallel publisher, etc.)
+        sb.AppendLine("            var builder = new global::DSoftStudio.Mediator.MediatorBuilder(services);");
+        sb.AppendLine("            configure(builder);");
+
+        // 4. Precompile pipelines (closes open generics, registers chains, freezes dispatch).
         sb.AppendLine("            MediatorRegistry.RegisterPipelineChains(services);");
         sb.AppendLine("            global::DSoftStudio.Mediator.RequestObjectDispatch.Freeze();");
         sb.AppendLine("            return services;");

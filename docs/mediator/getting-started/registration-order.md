@@ -15,6 +15,36 @@ description: "Understand the correct DI registration order for handlers and pipe
 
 # Registration Order
 
+## Recommended: `AddMediator(configure)` (v1.2.0+)
+
+The simplest way to register the mediator is the single-call `AddMediator(configure)` overload. It handles the entire registration sequence automatically:
+
+```csharp
+services.AddMediator(builder =>
+{
+    builder.AddOpenBehavior(typeof(LoggingBehavior<,>));
+    builder.AddRequestPreProcessor<ValidationPreProcessor>();
+    builder.AddRequestPostProcessor<AuditPostProcessor>();
+    builder.AddRequestExceptionHandler<GlobalExceptionHandler>();
+    builder.AddParallelNotificationPublisher();
+});
+```
+
+Internally, this single call executes in order:
+1. `AddMediator()` — registers core services (`IMediator`, `ISender`, `IPublisher`)
+2. `RegisterMediatorHandlers()` — discovers and registers all handlers
+3. `configure(builder)` — your pipeline customization
+4. `PrecompilePipelines()` + `Freeze()` — precompiles dispatch tables
+
+> **Do not mix `AddMediator(configure)` with individual registration calls.**
+> Calling `RegisterMediatorHandlers()` or `PrecompilePipelines()` separately alongside
+> `AddMediator(configure)` causes redundant registrations. The compile-time diagnostic
+> **DSOFT007** will warn you if mixed usage is detected. Runtime idempotency guards prevent
+> actual double-registration, but the intent should be clear in your code.
+
+## Alternative: Step-by-step Registration
+
+If you need fine-grained control over the registration order, use the individual methods.
 The `Precompile*` methods inspect the `IServiceCollection` at startup to determine dispatch strategies and chain lifetimes. **All service registrations must happen before the corresponding `Precompile*` call.**
 
 ```csharp

@@ -168,7 +168,9 @@ public sealed class SendInterceptorGenerator : IIncrementalGenerator
         return true;
     }
 
-    private static string GenerateInterceptors(List<InterceptCallInfo> calls, bool isRelease)
+    private static string GenerateInterceptors(
+        List<InterceptCallInfo> calls,
+        bool isRelease)
     {
         var sb = new StringBuilder(2048);
 

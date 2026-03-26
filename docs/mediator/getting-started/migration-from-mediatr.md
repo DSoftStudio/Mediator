@@ -34,6 +34,19 @@ dotnet add package DSoftStudio.Mediator
 
 ## 3. Update service registration
 
+MediatR's `AddMediatR(cfg => ...)` maps directly to DSoftStudio.Mediator's `AddMediator(builder => ...)`:
+
+```diff
+- services.AddMediatR(cfg => cfg.RegisterServicesFromAssemblyContaining<Program>());
++ services.AddMediator(builder =>
++ {
++     builder.AddOpenBehavior(typeof(LoggingBehavior<,>));
++     // ... other pipeline configuration
++ });
+```
+
+Or, if you prefer the step-by-step approach:
+
 ```diff
 - services.AddMediatR(cfg => cfg.RegisterServicesFromAssemblyContaining<Program>());
 + services
@@ -43,6 +56,8 @@ dotnet add package DSoftStudio.Mediator
 +     .PrecompileNotifications()
 +     .PrecompileStreams();
 ```
+
+> **Do not mix both approaches.** Using `AddMediator(configure)` with `RegisterMediatorHandlers()` or `PrecompilePipelines()` causes redundant registrations. See [Registration Order](registration-order.md).
 
 ## 4. Update handler return types
 

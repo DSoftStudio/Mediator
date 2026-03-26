@@ -21,7 +21,7 @@
 
   <!-- Expose internals to the test project — this is the trigger for CS0436 -->
   <ItemGroup>
-    <InternalsVisibleTo Include="DSoftStudio.Mediator.InternalsVisibleTo.Tests" />
+    <InternalsVisibleTo Include="DSoftStudio.Mediator.InternalsVisibleTo.Tests" Key="$(PublicKey)" />
   </ItemGroup>
 
 </Project>

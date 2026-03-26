@@ -77,5 +77,20 @@ namespace DSoftStudio.Mediator.Generators
                         + "Using them gives pipeline behaviors a runtime type check "
                         + "(if request is ICommand / is IQuery) for cross-cutting concerns "
                         + "and makes intent explicit at the type level.");
+
+        public static readonly DiagnosticDescriptor MixedRegistrationApi = new(
+            id: "DSOFT007",
+            title: "Redundant mediator registration call",
+            messageFormat: "'{0}' should not be called when using 'AddMediator(Action<MediatorBuilder>)'. "
+                         + "The builder overload {1} automatically.",
+            category: "DSoftStudio.Mediator.Usage",
+            defaultSeverity: DiagnosticSeverity.Warning,
+            isEnabledByDefault: true,
+            description: "AddMediator(Action<MediatorBuilder>) is a single entry point that registers "
+                        + "core services, handlers, and precompiled pipelines in one call. "
+                        + "Calling RegisterMediatorHandlers() or PrecompilePipelines() separately "
+                        + "when using the builder overload causes double registration. "
+                        + "Use either the builder overload (recommended) or the individual methods, "
+                        + "but not both.");
     }
 }

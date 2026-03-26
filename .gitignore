@@ -71,3 +71,5 @@ nunit-*.xml
 /__examples
 /tests/IssueRepro
 /.github/copilot-instructions.md
+/docs/mediator/adr/0002-architecture-improvement-plan.md
+/docs/mediator/adr/0006-masstransit-integration.md

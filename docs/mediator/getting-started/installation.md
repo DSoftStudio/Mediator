@@ -34,6 +34,13 @@ dotnet add package DSoftStudio.Mediator.HybridCache         # Query caching
 - .NET 8.0 or later
 - Source generators require the Roslyn compiler (included with .NET SDK)
 
+## Strong Naming
+
+All assemblies are signed with `PublicKeyToken=6c7e753832e8eb05` (v1.2.0+). This enables:
+- Installation in the GAC
+- Referencing from other strong-named assemblies
+- Tamper detection
+
 ## Cross-Project Handler Discovery
 
 `RegisterMediatorHandlers()` automatically discovers all handler implementations

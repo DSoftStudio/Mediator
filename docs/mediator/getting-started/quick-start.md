@@ -29,24 +29,60 @@ public class PingHandler : IRequestHandler<Ping, int>
 
 ## 2. Register at Startup
 
+### Recommended: Single-call registration (v1.2.0+)
+
+```csharp
+services.AddMediator(builder =>
+{
+    // Register pipeline behaviors, processors, etc.
+    builder.AddOpenBehavior(typeof(LoggingBehavior<,>));
+    builder.AddRequestPreProcessor<ValidationPreProcessor>();
+    builder.AddParallelNotificationPublisher();
+});
+```
+
+`AddMediator(configure)` is a single entry point that automatically:
+1. Registers core mediator services (`IMediator`, `ISender`, `IPublisher`)
+2. Discovers and registers all handlers across referenced projects
+3. Applies your pipeline configuration via the builder callback
+4. Precompiles dispatch pipelines and freezes dispatch tables
+
+Available builder methods:
+
+| Method | Purpose |
+|---|---|
+| `AddOpenBehavior(Type, ServiceLifetime)` | Open-generic `IPipelineBehavior<,>` |
+| `AddStreamBehavior<T>(ServiceLifetime)` | Closed `IStreamPipelineBehavior<,>` |
+| `AddRequestPreProcessor<T>(ServiceLifetime)` | `IRequestPreProcessor<T>` |
+| `AddRequestPostProcessor<T>(ServiceLifetime)` | `IRequestPostProcessor<T,R>` |
+| `AddRequestExceptionHandler<T>(ServiceLifetime)` | `IRequestExceptionHandler<T,R>` |
+| `AddParallelNotificationPublisher()` | Replace sequential with `Task.WhenAll` dispatch |
+
+### Alternative: Step-by-step registration
+
 ```csharp
 services
     .AddMediator()
-    .RegisterMediatorHandlers()
+    .RegisterMediatorHandlers();
+
+// Register behaviors, processors, etc.
+services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
+
+services
     .PrecompilePipelines()
     .PrecompileNotifications()
     .PrecompileStreams();
 ```
 
-> **Registration order matters.** The `Precompile*` methods inspect the service collection to determine dispatch strategies and lifetimes. Register all behaviors, processors, exception handlers, notification strategies, and handler lifetime overrides **before** calling `PrecompilePipelines()` / `PrecompileNotifications()` / `PrecompileStreams()`. See [Registration Order](registration-order.md) for details.
+> **Do not mix both approaches.** Using `AddMediator(configure)` together with `RegisterMediatorHandlers()` or `PrecompilePipelines()` causes redundant registrations. The compile-time diagnostic **DSOFT007** will warn you if mixed usage is detected. See [Registration Order](registration-order.md) for details.
 
-> **Cross-project handler discovery.** `RegisterMediatorHandlers()` automatically discovers
+> **Cross-project handler discovery.** Both approaches automatically discover
 > all `IRequestHandler<,>`, `INotificationHandler<>`, and `IStreamRequestHandler<,>` implementations
 > across **all referenced projects** — no manual registration required. Each project that references
 > `DSoftStudio.Mediator` emits `[assembly: MediatorHandlerRegistration]` attributes at compile time,
 > and downstream projects read them to build the complete handler registry.
 > This works for Clean Architecture setups where handlers live in Application or Infrastructure
-> layers and the host/API project only calls `RegisterMediatorHandlers()`.
+> layers and the host/API project only calls `RegisterMediatorHandlers()` (or `AddMediator(configure)`).
 
 ## 3. Send a Request
 
@@ -87,7 +123,9 @@ var result = await mediator.Send(new Ping());
 - Auto-Singleton registration for stateless handlers (no constructor params → Singleton, with DI dependencies → Transient)
 - Zero reflection during request execution
 - Fail-fast handler validation via `ValidateMediatorHandlers()` — detect misconfigured handlers at startup
-- Compile-time diagnostics for missing handlers (DSOFT001) and duplicate handler registrations (DSOFT002, DSOFT003)
+- Compile-time diagnostics for missing handlers (DSOFT001), duplicate handler registrations (DSOFT002, DSOFT003), and mixed registration API (DSOFT007)
+- `MediatorBuilder` fluent API — single-call `AddMediator(configure)` with `AddOpenBehavior`, `AddRequestPreProcessor`, `AddParallelNotificationPublisher`, and more
+- Strong naming — all assemblies signed with `PublicKeyToken=6c7e753832e8eb05` for enterprise compatibility
 
 ## See Also
 

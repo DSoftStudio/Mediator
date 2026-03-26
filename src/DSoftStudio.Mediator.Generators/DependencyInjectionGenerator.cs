@@ -400,9 +400,16 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
 
         sb.AppendLine("file static class MediatorServiceRegistry");
         sb.AppendLine("{");
+        sb.AppendLine("    private sealed class __Sentinel { }");
+        sb.AppendLine();
 
         sb.AppendLine("    public static void Register(global::Microsoft.Extensions.DependencyInjection.IServiceCollection services)");
         sb.AppendLine("    {");
+        sb.AppendLine("        foreach (var d in services)");
+        sb.AppendLine("            if (d.ServiceType == typeof(__Sentinel))");
+        sb.AppendLine("                return;");
+        sb.AppendLine("        global::Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<__Sentinel>(services);");
+        sb.AppendLine();
 
         // Register ALL handlers (local + external) in DI
         var registeredConcreteTypes = new System.Collections.Generic.HashSet<string>();

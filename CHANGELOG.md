@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0-rc.1] — 2026-03-24
+
+### Added
+
+- **`MediatorBuilder` fluent configuration API** — New `AddMediator(Action<MediatorBuilder> configure)` overload (source-generated) that provides a single entry point for mediator registration. The builder automatically calls `RegisterMediatorHandlers()`, applies the user's configuration, calls `RegisterPipelineChains()`, and freezes the dispatch tables — replacing the previous 3-step manual setup. Six fluent methods:
+  - `AddOpenBehavior(Type, ServiceLifetime)` — registers open-generic `IPipelineBehavior<,>` (e.g., `typeof(LoggingBehavior<,>)`)
+  - `AddStreamBehavior<T>(ServiceLifetime)` — registers closed `IStreamPipelineBehavior<TRequest, TResponse>`
+  - `AddRequestPreProcessor<T>(ServiceLifetime)` — registers `IRequestPreProcessor<TRequest>`
+  - `AddRequestPostProcessor<T>(ServiceLifetime)` — registers `IRequestPostProcessor<TRequest, TResponse>`
+  - `AddRequestExceptionHandler<T>(ServiceLifetime)` — registers `IRequestExceptionHandler<TRequest, TResponse>`
+  - `AddParallelNotificationPublisher()` — replaces sequential publisher with `Task.WhenAll` parallel dispatch
+
+  All generic methods are annotated with `[DynamicallyAccessedMembers]` for Native AOT safety. `Services` property is publicly accessible for advanced DI scenarios within the builder callback.
+
+  ```csharp
+  services.AddMediator(builder =>
+  {
+      builder.AddOpenBehavior(typeof(LoggingBehavior<,>));
+      builder.AddRequestPreProcessor<ValidationPreProcessor>();
+      builder.AddParallelNotificationPublisher();
+  });
+  ```
+
+- **Strong naming** — All 5 assemblies (`DSoftStudio.Mediator`, `DSoftStudio.Mediator.Abstractions`, `DSoftStudio.Mediator.FluentValidation`, `DSoftStudio.Mediator.HybridCache`, `DSoftStudio.Mediator.OpenTelemetry`) are now signed with `PublicKeyToken=6c7e753832e8eb05`. Enables installation in GAC, use from other strong-named assemblies, and tamper detection. Key file: `DSoftStudio.Mediator.snk` with `InternalsVisibleTo` attributes updated across all projects. See [ADR-0003](docs/mediator/adr/0003-strong-naming.md).
+- **DSOFT007: Mixed registration API detection** — New compile-time diagnostic (Warning) that detects when `RegisterMediatorHandlers()` or `PrecompilePipelines()` are called alongside `AddMediator(Action<MediatorBuilder>)`. The builder overload already performs these operations internally — calling them separately causes redundant registrations. The diagnostic identifies the specific redundant call and explains what the builder handles automatically.
+- **Runtime idempotency guards** — Source-generated `RegisterMediatorHandlers()` and `RegisterPipelineChains()` now detect duplicate invocations via a per-`IServiceCollection` sentinel pattern (private `__Sentinel` / `__PipelineSentinel` marker types registered as singletons). If the sentinel is already present, the method returns immediately — preventing double handler/pipeline registration when `AddMediator(configure)` is used alongside legacy calls. The sentinel approach was chosen over `static bool` guards to preserve test isolation across parallel test classes with independent `ServiceCollection` instances.
+
+### Changed
+
+- **Companion packages bumped to 1.0.8-rc.1** — `DSoftStudio.Mediator.FluentValidation`, `DSoftStudio.Mediator.HybridCache`, `DSoftStudio.Mediator.OpenTelemetry` updated to depend on `DSoftStudio.Mediator >= 1.2.0-rc.1`. All companion assemblies are now strong-named.
+- **Analyzer release tracking** — DSOFT007 added to `AnalyzerReleases.Unshipped.md` under Release 1.2.0-rc.1.
+
+### Architecture Decisions Recorded
+
+- **ADR-0003: Strong Naming** — Accepted. All published assemblies signed with a committed `.snk` key for enterprise compatibility, GAC installation, and `InternalsVisibleTo` with public key verification. See [`docs/mediator/adr/0003-strong-naming.md`](docs/mediator/adr/0003-strong-naming.md).
+
+---
+
 ## [1.1.8] — 2026-03-23
 
 ### Added
