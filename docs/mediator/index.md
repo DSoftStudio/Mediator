@@ -95,6 +95,7 @@ Deep dive into the internal design. Understand how source generators build the d
 
 Patterns and advanced scenarios for production applications.
 
+- [Minimal API Integration](advanced/minimal-api-integration.md) — Wire mediator requests into ASP.NET Core Minimal API endpoints with zero extra dependencies.
 - [Caching Patterns](advanced/caching-patterns.md) — Implement read-through, write-through, and invalidation strategies with the mediator.
 - [Pipeline Patterns](advanced/pipeline-patterns.md) — Compose behaviors and processors into reusable, testable pipeline configurations.
 

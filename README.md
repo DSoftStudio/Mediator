@@ -401,6 +401,7 @@ Mechanical code changes. No architectural rewrite.
 | [`caching`](samples/caching) | HybridCache integration | 6000 |
 | [`mocking`](samples/mocking) | Expression tree detection + mocks | — |
 | [`cross-project-mocking`](samples/cross-project-mocking) | 3-project testability architecture | — |
+| [`minimal-api`](samples/minimal-api) | Minimal API recipes (CRUD, pagination, auth) | 6100 |
 
 ```shell
 dotnet run --project samples/basic-api/DSoft.Sample.Api
@@ -417,7 +418,7 @@ dotnet run --project samples/basic-api/DSoft.Sample.Api
 - **Features** — [Pipeline Behaviors](https://docs.dsoftstudio.com/mediator/features/pipeline-behaviors) · [Pre/Post Processors](https://docs.dsoftstudio.com/mediator/features/pre-post-processors) · [Self-Handling](https://docs.dsoftstudio.com/mediator/features/self-handling-requests) · [Runtime Dispatch](https://docs.dsoftstudio.com/mediator/features/runtime-dispatch) · [Validation](https://docs.dsoftstudio.com/mediator/features/handler-validation)
 - **Integrations** — [OpenTelemetry](https://docs.dsoftstudio.com/mediator/integrations/opentelemetry) · [FluentValidation](https://docs.dsoftstudio.com/mediator/integrations/fluentvalidation) · [HybridCache](https://docs.dsoftstudio.com/mediator/integrations/hybridcache)
 - **Architecture** — [Dispatch Pipeline](https://docs.dsoftstudio.com/mediator/architecture/dispatch-pipeline) · [Source Generators](https://docs.dsoftstudio.com/mediator/architecture/source-generators) · [Native AOT](https://docs.dsoftstudio.com/mediator/architecture/native-aot) · [Performance](https://docs.dsoftstudio.com/mediator/architecture/performance) · [Design Notes](https://docs.dsoftstudio.com/mediator/architecture/design-notes) · [Production Validation](https://docs.dsoftstudio.com/mediator/architecture/production-validation)
-- **Advanced** — [Caching Patterns](https://docs.dsoftstudio.com/mediator/advanced/caching-patterns) · [Pipeline Patterns](https://docs.dsoftstudio.com/mediator/advanced/pipeline-patterns)
+- **Advanced** — [Caching Patterns](https://docs.dsoftstudio.com/mediator/advanced/caching-patterns) · [Pipeline Patterns](https://docs.dsoftstudio.com/mediator/advanced/pipeline-patterns) · [Minimal API Integration](https://docs.dsoftstudio.com/mediator/advanced/minimal-api-integration)
 
 ---
 

@@ -11,6 +11,10 @@
     <Project Path="samples/fluent-validation/DSoft.Sample.FluentValidation.Api/DSoft.Sample.FluentValidation.Api.csproj" />
     <Project Path="samples/fluent-validation/DSoft.Sample.FluentValidation.Application/DSoft.Sample.FluentValidation.Application.csproj" />
   </Folder>
+  <Folder Name="/samples/minimal-api/">
+    <Project Path="samples/minimal-api/DSoft.Sample.MinimalApi.Api/DSoft.Sample.MinimalApi.Api.csproj" />
+    <Project Path="samples/minimal-api/DSoft.Sample.MinimalApi.Application/DSoft.Sample.MinimalApi.Application.csproj" />
+  </Folder>
   <Folder Name="/samples/open-telemetry/">
     <Project Path="samples/opentelemetry/DSoft.Sample.OpenTelemetry.Api/DSoft.Sample.OpenTelemetry.Api.csproj" />
     <Project Path="samples/opentelemetry/DSoft.Sample.OpenTelemetry.Application/DSoft.Sample.OpenTelemetry.Application.csproj" />
