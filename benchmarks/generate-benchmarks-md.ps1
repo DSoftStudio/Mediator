@@ -148,6 +148,39 @@ function Get-HeaderRows([string]$path) {
     return @()
 }
 
+# ── Column normalization helpers (for "All Libraries" combined tables) ────
+
+# Canonical column order emitted by BenchmarkDotNet
+$canonicalOrder = @('Method','Mean','Error','StdDev','Median','Ratio','RatioSD','Rank','Gen0','Gen1','Gen2','Allocated','Alloc Ratio')
+
+# Parse trimmed column names from a markdown header line
+function Get-ColumnNames([string]$headerLine) {
+    $parts = @($headerLine -split '\|')
+    $cols = @()
+    for ($i = 1; $i -lt $parts.Count - 1; $i++) {
+        $trimmed = $parts[$i].Trim()
+        if ($trimmed) { $cols += $trimmed }
+    }
+    return $cols
+}
+
+# Remap a data row from source columns to superset columns, filling '-' for missing
+function Remap-Row([string]$row, [string[]]$srcCols, [string[]]$superCols) {
+    $parts = @($row -split '\|')
+    $cells = @()
+    for ($i = 1; $i -lt $parts.Count - 1; $i++) { $cells += $parts[$i].Trim() }
+
+    $map = @{}
+    for ($i = 0; $i -lt [Math]::Min($srcCols.Count, $cells.Count); $i++) {
+        $map[$srcCols[$i]] = $cells[$i]
+    }
+
+    $out = foreach ($col in $superCols) {
+        if ($map.ContainsKey($col)) { $map[$col] } else { '-' }
+    }
+    return '| ' + ($out -join ' | ') + ' |'
+}
+
 # Build the markdown
 $sb = [System.Text.StringBuilder]::new()
 [void]$sb.AppendLine("# Benchmarks")
@@ -178,41 +211,62 @@ foreach ($key in $titleMap.Keys) {
     }
 }
 
-# ── Emit "All Libraries" combined sections (concatenated from isolated) ──
+# ── Emit "All Libraries" combined sections (column-normalized) ───────────
 foreach ($title in $combinedSections.Keys) {
     $keys = $combinedSections[$title]
-    $headerEmitted = $false
-    $header = @()
-    $libraryGroups = @()
+
+    # 1. Collect headers and data rows per file, build column superset
+    $fileColumns = @{}
+    $fileDataRows = [ordered]@{}
+    $allColumnSet = [ordered]@{}
 
     foreach ($k in $keys) {
         $file = Join-Path $ResultsDir "$k-report-github.md"
-        if (-not $headerEmitted) {
-            $header = Get-HeaderRows $file
-            if ($header.Count -ge 2) { $headerEmitted = $true }
+        $hdr = Get-HeaderRows $file
+        if ($hdr.Count -ge 2) {
+            $cols = Get-ColumnNames $hdr[0]
+            $fileColumns[$k] = $cols
+            foreach ($c in $cols) {
+                if (-not $allColumnSet.Contains($c)) { $allColumnSet[$c] = $true }
+            }
         }
-        $rows = Get-DataRows $file
-        $rows = @($rows | Where-Object { $_ -match '[a-zA-Z0-9]' })
-        if ($rows.Count -gt 0) { $libraryGroups += ,@($rows) }
+        $rows = @(Get-DataRows $file | Where-Object { $_ -match '[a-zA-Z0-9]' })
+        if ($rows.Count -gt 0) { $fileDataRows[$k] = $rows }
     }
 
-    if ($headerEmitted -and $libraryGroups.Count -gt 0) {
-        $found++
-        [void]$sb.AppendLine("## $title")
-        [void]$sb.AppendLine()
-        [void]$sb.AppendLine(($header -join "`n"))
+    if ($allColumnSet.Count -eq 0 -or $fileDataRows.Count -eq 0) { continue }
 
-        # Build an empty separator row matching the table's column count
-        $colCount = ($header[0] -replace '^\||\|$' -split '\|').Count
-        $sepRow = '|' + (' |' * $colCount)
+    # 2. Build superset columns in canonical order
+    $superCols = @($canonicalOrder | Where-Object { $allColumnSet.Contains($_) })
 
-        for ($i = 0; $i -lt $libraryGroups.Count; $i++) {
-            if ($i -gt 0) { [void]$sb.AppendLine($sepRow) }
-            [void]$sb.AppendLine(($libraryGroups[$i] -join "`n"))
-        }
-
-        [void]$sb.AppendLine()
+    # 3. Build header row and separator
+    $headerRow = '| ' + ($superCols -join ' | ') + ' |'
+    $sepCells = foreach ($col in $superCols) {
+        if ($col -eq 'Method') { '---' } else { '---:' }
     }
+    $sepRow = '| ' + ($sepCells -join ' | ') + ' |'
+
+    # 4. Build empty row for visual group separation
+    $emptyRow = '|' + (' |' * $superCols.Count)
+
+    $found++
+    [void]$sb.AppendLine("## $title")
+    [void]$sb.AppendLine()
+    [void]$sb.AppendLine($headerRow)
+    [void]$sb.AppendLine($sepRow)
+
+    $groupIndex = 0
+    foreach ($k in $keys) {
+        if (-not $fileDataRows.Contains($k)) { continue }
+        if ($groupIndex -gt 0) { [void]$sb.AppendLine($emptyRow) }
+        $srcCols = $fileColumns[$k]
+        foreach ($row in $fileDataRows[$k]) {
+            [void]$sb.AppendLine((Remap-Row $row $srcCols $superCols))
+        }
+        $groupIndex++
+    }
+
+    [void]$sb.AppendLine()
 }
 
 if ($found -eq 0) {
