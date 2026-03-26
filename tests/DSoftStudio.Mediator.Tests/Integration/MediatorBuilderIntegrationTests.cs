@@ -103,6 +103,55 @@ public sealed class BuilderPostProcessor : IRequestPostProcessor<BuilderPreProcP
     }
 }
 
+public sealed record BuilderStreamPing() : IStreamRequest<string>;
+
+public sealed class BuilderStreamPingHandler : IStreamRequestHandler<BuilderStreamPing, string>
+{
+    public async IAsyncEnumerable<string> Handle(BuilderStreamPing request,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+    {
+        await Task.CompletedTask;
+        yield return "stream-ok";
+    }
+}
+
+public sealed class BuilderStreamBehavior : IStreamPipelineBehavior<BuilderStreamPing, string>
+{
+    private readonly List<string> _log;
+    public BuilderStreamBehavior(List<string> log) => _log = log;
+
+    public async IAsyncEnumerable<string> Handle(
+        BuilderStreamPing request,
+        IStreamRequestHandler<BuilderStreamPing, string> next,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+    {
+        _log.Add("stream:before");
+        await foreach (var item in next.Handle(request, ct))
+        {
+            yield return item;
+        }
+        _log.Add("stream:after");
+    }
+}
+
+public sealed record BuilderExcPing() : IRequest<string>;
+
+public sealed class BuilderExcPingHandler : IRequestHandler<BuilderExcPing, string>
+{
+    public ValueTask<string> Handle(BuilderExcPing request, CancellationToken ct)
+        => new("exc-ok");
+}
+
+public sealed class BuilderExceptionHandler : IRequestExceptionHandler<BuilderExcPing, string>
+{
+    public ValueTask Handle(BuilderExcPing request, Exception exception,
+        RequestExceptionHandlerState<string> state, CancellationToken ct)
+    {
+        state.SetHandled("handled-fallback");
+        return default;
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════
 //  TEST CLASSES
 // ═══════════════════════════════════════════════════════════════════
@@ -364,5 +413,106 @@ public class MediatorBuilderIntegrationTests
     {
         Should.Throw<ArgumentNullException>(() =>
             new MediatorBuilder(null!));
+    }
+
+    /// <summary>
+    /// AddStreamBehavior registers a closed stream pipeline behavior
+    /// that wraps stream handler execution.
+    /// </summary>
+    [Fact]
+    public void AddStreamBehavior_ValidType_RegistersService()
+    {
+        var services = new ServiceCollection();
+        var builder = new MediatorBuilder(services);
+
+        builder.AddStreamBehavior<BuilderStreamBehavior>();
+
+        services.ShouldContain(d =>
+            d.ServiceType == typeof(IStreamPipelineBehavior<BuilderStreamPing, string>)
+            && d.ImplementationType == typeof(BuilderStreamBehavior));
+    }
+
+    /// <summary>
+    /// AddStreamBehavior rejects types that do not implement IStreamPipelineBehavior.
+    /// </summary>
+    [Fact]
+    public void AddStreamBehavior_InvalidType_ThrowsArgumentException()
+    {
+        var services = new ServiceCollection();
+        var builder = new MediatorBuilder(services);
+
+        Should.Throw<ArgumentException>(() =>
+            builder.AddStreamBehavior<BuilderPingHandler>());
+    }
+
+    /// <summary>
+    /// AddRequestExceptionHandler registers a closed exception handler.
+    /// </summary>
+    [Fact]
+    public void AddRequestExceptionHandler_ValidType_RegistersService()
+    {
+        var services = new ServiceCollection();
+        var builder = new MediatorBuilder(services);
+
+        builder.AddRequestExceptionHandler<BuilderExceptionHandler>();
+
+        services.ShouldContain(d =>
+            d.ServiceType == typeof(IRequestExceptionHandler<BuilderExcPing, string>)
+            && d.ImplementationType == typeof(BuilderExceptionHandler));
+    }
+
+    /// <summary>
+    /// AddRequestExceptionHandler rejects types that do not implement IRequestExceptionHandler.
+    /// </summary>
+    [Fact]
+    public void AddRequestExceptionHandler_InvalidType_ThrowsArgumentException()
+    {
+        var services = new ServiceCollection();
+        var builder = new MediatorBuilder(services);
+
+        Should.Throw<ArgumentException>(() =>
+            builder.AddRequestExceptionHandler<BuilderPingHandler>());
+    }
+
+    /// <summary>
+    /// AddRequestPreProcessor rejects types that do not implement IRequestPreProcessor.
+    /// </summary>
+    [Fact]
+    public void AddRequestPreProcessor_InvalidType_ThrowsArgumentException()
+    {
+        var services = new ServiceCollection();
+        var builder = new MediatorBuilder(services);
+
+        Should.Throw<ArgumentException>(() =>
+            builder.AddRequestPreProcessor<BuilderPingHandler>());
+    }
+
+    /// <summary>
+    /// AddRequestPostProcessor rejects types that do not implement IRequestPostProcessor.
+    /// </summary>
+    [Fact]
+    public void AddRequestPostProcessor_InvalidType_ThrowsArgumentException()
+    {
+        var services = new ServiceCollection();
+        var builder = new MediatorBuilder(services);
+
+        Should.Throw<ArgumentException>(() =>
+            builder.AddRequestPostProcessor<BuilderPingHandler>());
+    }
+
+    /// <summary>
+    /// AddOpenBehavior respects non-default ServiceLifetime.
+    /// </summary>
+    [Fact]
+    public void AddOpenBehavior_WithScopedLifetime_RegistersWithCorrectLifetime()
+    {
+        var services = new ServiceCollection();
+        var builder = new MediatorBuilder(services);
+
+        builder.AddOpenBehavior(typeof(BuilderTrackingBehavior<,>), ServiceLifetime.Scoped);
+
+        services.ShouldContain(d =>
+            d.ServiceType == typeof(IPipelineBehavior<,>)
+            && d.Lifetime == ServiceLifetime.Scoped);
     }
 }
