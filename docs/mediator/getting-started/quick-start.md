@@ -41,6 +41,16 @@ services.AddMediator(builder =>
 });
 ```
 
+> **No behaviors to register?** You still need the builder callback — pass an empty lambda:
+>
+> ```csharp
+> services.AddMediator(_ => { });
+> ```
+>
+> This registers handlers, precompiles pipelines, and freezes dispatch — all in one call.
+> Without the callback, `AddMediator()` only registers core services and you must complete
+> the setup manually (see step-by-step registration below).
+
 `AddMediator(configure)` is a single entry point that automatically:
 1. Registers core mediator services (`IMediator`, `ISender`, `IPublisher`)
 2. Discovers and registers all handlers across referenced projects
@@ -58,21 +68,32 @@ Available builder methods:
 | `AddRequestExceptionHandler<T>(ServiceLifetime)` | `IRequestExceptionHandler<T,R>` |
 | `AddParallelNotificationPublisher()` | Replace sequential with `Task.WhenAll` dispatch |
 
-### Alternative: Step-by-step registration
+### Alternative: Step-by-step registration (v1.1.x style)
+
+If you omit the builder callback, `AddMediator()` only registers core services (`IMediator`, `ISender`, `IPublisher`). You must chain the remaining steps yourself:
 
 ```csharp
 services
-    .AddMediator()
-    .RegisterMediatorHandlers();
+    .AddMediator()                    // Core services only
+    .RegisterMediatorHandlers();      // Discover and register all handlers
 
 // Register behaviors, processors, etc.
 services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
 
 services
-    .PrecompilePipelines()
+    .PrecompilePipelines()            // Build dispatch table and freeze
     .PrecompileNotifications()
     .PrecompileStreams();
 ```
+
+This pattern remains fully supported for advanced scenarios where you need to insert registrations between steps.
+
+> **Summary**
+>
+> | Pattern | Call | What it does |
+> |---|---|---|
+> | **Builder (recommended)** | `services.AddMediator(builder => { ... })` or `services.AddMediator(_ => { })` | Everything: core + handlers + builder config + precompile + freeze |
+> | **Manual (v1.1.x)** | `services.AddMediator().RegisterMediatorHandlers().PrecompilePipelines()` | User controls each step |
 
 > **Do not mix both approaches.** Using `AddMediator(configure)` together with `RegisterMediatorHandlers()` or `PrecompilePipelines()` causes redundant registrations. The compile-time diagnostic **DSOFT007** will warn you if mixed usage is detected. See [Registration Order](registration-order.md) for details.
 

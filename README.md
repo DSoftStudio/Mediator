@@ -178,12 +178,62 @@ public class PingHandler : IRequestHandler<Ping, int>
 }
 ```
 
+### Register at startup
+
+**Recommended — single-call registration (v1.2.0+)**
+
 ```csharp
 services.AddMediator(builder =>
 {
-    // optional: register behaviors, processors, etc.
+    // Register pipeline behaviors, processors, etc.
+    builder.AddOpenBehavior(typeof(LoggingBehavior<,>));
+    builder.AddRequestPreProcessor<ValidationPreProcessor>();
+    builder.AddParallelNotificationPublisher();
 });
 ```
+
+> **No behaviors to register?** You still need the builder callback — pass an empty lambda:
+>
+> ```csharp
+> services.AddMediator(_ => { });
+> ```
+>
+> This registers handlers, precompiles pipelines, and freezes dispatch — all in one call.
+
+**Manual registration (v1.1.x style)**
+
+If you omit the builder callback, `AddMediator()` only registers core services (`IMediator`, `ISender`, `IPublisher`). You must chain the remaining steps yourself:
+
+```csharp
+services.AddMediator()               // Core services only
+    .RegisterMediatorHandlers()       // Discover and register all handlers
+    .PrecompilePipelines();           // Build dispatch table and freeze
+```
+
+> This is the v1.1.x pattern and remains fully supported for advanced scenarios where you need to insert registrations between steps.
+
+### Multi-project setup (hexagonal / clean architecture)
+
+Install the full package **only** in the composition root (API / host). Application and domain layers reference only the abstractions:
+
+```shell
+# API / Host project (composition root) — source generator + DI registration
+dotnet add package DSoftStudio.Mediator
+
+# Application layer — contracts only (IRequest, IRequestHandler, IPipelineBehavior, etc.)
+dotnet add package DSoftStudio.Mediator.Abstractions
+```
+
+The source generator runs in the API project and automatically discovers handlers from referenced assemblies. Handlers must be `public` — internal handlers require `[InternalsVisibleTo]` (see [DSOFT005](https://docs.dsoftstudio.com/mediator/architecture/design-notes)).
+
+```
+Host / API           → DSoftStudio.Mediator              (AddMediator + source generator)
+Application          → DSoftStudio.Mediator.Abstractions  (handlers, requests, behaviors)
+Domain               → (no mediator dependency)
+Infrastructure       → (no mediator dependency)
+```
+
+### Send a request
 
 ```csharp
 var result = await mediator.Send(new Ping());
