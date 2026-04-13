@@ -20,3 +20,11 @@ DSOFT003 | DSoftStudio.Mediator | Warning | Duplicate stream handler registratio
 DSOFT004 | DSoftStudio.Mediator | Warning | Mocking library detected with interceptors enabled
 DSOFT005 | DSoftStudio.Mediator | Warning | Internal handler skipped in external assembly
 DSOFT006 | DSoftStudio.Mediator.Usage | Info | Consider using ICommand<T> or IQuery<T> instead of IRequest<T>
+
+## Release 1.2.0
+
+### New Rules
+
+Rule ID | Category | Severity | Notes
+--------|----------|----------|-------
+DSOFT007 | DSoftStudio.Mediator.Usage | Warning | Redundant mediator registration call

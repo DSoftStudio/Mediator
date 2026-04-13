@@ -15,7 +15,7 @@ description: "All notable changes to DSoftStudio.Mediator."
 
 # Changelog
 
-## [1.2.0-rc.1] — 2026-03-26
+## [1.2.0] — 2026-04-12
 
 ### Added
 
@@ -44,8 +44,8 @@ description: "All notable changes to DSoftStudio.Mediator."
 
 ### Changed
 
-- **Companion packages bumped to 1.0.8-rc.1** — `DSoftStudio.Mediator.FluentValidation`, `DSoftStudio.Mediator.HybridCache`, `DSoftStudio.Mediator.OpenTelemetry` updated to depend on `DSoftStudio.Mediator >= 1.2.0-rc.1`. All companion assemblies are now strong-named.
-- **Analyzer release tracking** — DSOFT007 added to `AnalyzerReleases.Unshipped.md` under Release 1.2.0-rc.1.
+- **Companion packages bumped to 1.0.8** — `DSoftStudio.Mediator.FluentValidation`, `DSoftStudio.Mediator.HybridCache`, `DSoftStudio.Mediator.OpenTelemetry` updated to depend on `DSoftStudio.Mediator >= 1.2.0`. All companion assemblies are now strong-named.
+- **Analyzer release tracking** — DSOFT007 shipped in `AnalyzerReleases.Shipped.md` under Release 1.2.0.
 
 ### Architecture Decisions Recorded
 
