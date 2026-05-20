@@ -78,6 +78,14 @@ Optional companion NuGet packages that plug into the pipeline with zero configur
 
 ---
 
+## IDE Tooling
+
+Commercial IDE extensions that visualize, navigate, and profile mediator pipelines in real time. Install the extension, open your solution, and see every handler, behavior, and notification fan-out — wired to source.
+
+- [Pipeline Explorer](pipeline-explorer/index.md) — Architectural and runtime observability for DSoftStudio.Mediator inside Visual Studio Code and Visual Studio.
+
+---
+
 ## Architecture
 
 Deep dive into the internal design. Understand how source generators build the dispatch pipeline at compile time and why every allocation is eliminated.
