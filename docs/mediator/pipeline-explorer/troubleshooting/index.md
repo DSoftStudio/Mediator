@@ -29,7 +29,7 @@ Quick links to the most common issues. Each page walks through likely causes in 
 
 ## Licensing
 
-- [License activation failed](activation-failed.md) — Your token was rejected, the activation server is unreachable, or the seat limit is exceeded.
+- [License activation failed](activation-failed.md) — Your license file was rejected, the seat limit was reached, or activation couldn't complete.
 
 ---
 
@@ -57,8 +57,6 @@ If you plan to open an issue at the [GitHub repository](https://github.com/DSoft
    uname -a              # macOS / Linux
    systeminfo | findstr "OS"   # Windows
    ```
-
-A minimal reproduction project that triggers the issue is the single most valuable piece of information you can attach.
 
 ---
 

@@ -17,27 +17,18 @@ description: "You started runtime profiling but no events appear. Causes and res
 
 ## Symptom
 
-You clicked **Start Profiling** and exercised your application, but the Runtime Profiler panel stays empty:
-
-```
-Handler            Calls   Avg   p50   p95   p99   Errors
-(no data)
-```
-
-…or only some handlers appear and others don't.
-
-When everything is wired correctly the detail panel of a selected handler shows live runtime statistics — calls, p50 / p95 / p99, max, and total — that update as new events arrive:
+You clicked **Start Profiling** and exercised your application, but the Runtime Profiler stays empty — no executions, no rows — or only some pipelines appear and others don't.
 
 <figure class="screenshot">
-  <img src="../assets/screenshots/handler-runtime-stats.png" alt="Handler detail panel with Runtime Statistics table showing 55 calls, 0 errors, percentiles, and last run timestamp">
-  <figcaption>What a working profiling session looks like — the Runtime Statistics table fills in for every handler that executed since the profiler attached.</figcaption>
+  <img src="../assets/screenshots/runtime-profiler-empty.png" alt="Runtime Profiler attached but empty: zero total executions and 'No executions yet' across per-pipeline statistics, request telemetry, recent invocations, and hot path">
+  <figcaption>The symptom — the Runtime Profiler is attached, but no executions have been captured.</figcaption>
 </figure>
 
-The pipeline graph below the detail also overlays per-component timing once data flows:
+When everything is wired correctly the profiler fills with live data — total executions, per-pipeline percentiles (p50 / p95 / p99), request telemetry, and a recent-invocations log — updating as new events arrive:
 
 <figure class="screenshot">
-  <img src="../assets/screenshots/graph-view-timing.png" alt="Pipeline graph with timing overlays showing handler 6.27 ms avg, publish 6.02 ms, and three nested handlers with their durations">
-  <figcaption>Graph view with timing overlays — each node carries its average duration and the dispatch offsets relative to the request start.</figcaption>
+  <img src="../assets/screenshots/runtime-profiler-active.png" alt="Runtime Profiler populated with executions, per-pipeline statistics, request telemetry, and a recent-invocations log">
+  <figcaption>A working profiling session — executions and per-pipeline statistics fill in as traffic flows.</figcaption>
 </figure>
 
 > **Important**: Pipeline Explorer wires `AddMediatorProfiling()` into your application **automatically** via C# 12 interceptors. You do NOT need to add any line to `Program.cs` — referencing the analyzer (which the extension auto-injects into your solution) is enough. If profiling isn't working, the wiring failed for one of the reasons below.
@@ -46,7 +37,7 @@ The pipeline graph below the detail also overlays per-component timing once data
 
 ## 1. The application isn't actually running
 
-The IDE button only **enables** profiling on the IDE side. Events flow only when your application is running and dispatching requests through the mediator. Clicking **Start** without running the application produces a `Profiling started — waiting for events…` state that never updates.
+The IDE button only **enables** profiling on the IDE side. Events flow only when your application is running and dispatching requests through the mediator. Clicking **Start** without running the application leaves the profiler attached but with zero events — the status shows profiling is on, but no executions ever arrive.
 
 **Check**
 
@@ -146,15 +137,15 @@ Resolve `IMediator` from the same DI container that received the `AddMediator(..
 
 ## 5. The buffer is full and dropping events
 
-Pipeline Explorer caps profiling events at `mediator.maxBufferedEvents` (default `2000`). When the buffer is full, oldest events are dropped FIFO. If you fire 10,000 requests in a few seconds with the default cap, you may see only the most recent ~2,000.
+Pipeline Explorer caps profiling events at `mediator.maxBufferedEvents` (default `2000`). When the buffer is full, the oldest events are dropped first (FIFO). If you fire many thousands of requests in a few seconds with the default cap, you may see only the most recent ones.
 
 **Check**
 
-The Profiler panel shows a buffer indicator (`1,847 / 2,000 events`). If it pegs at the max and earlier events are missing, the buffer is your bottleneck.
+The profiler shows the captured-event count. If it plateaus at the cap and earlier events are missing, the buffer is your bottleneck.
 
 **Fix**
 
-Raise the cap:
+Raise the cap (up to 50,000):
 
 ```jsonc
 // settings.json (VS Code)
@@ -163,9 +154,9 @@ Raise the cap:
 }
 ```
 
-…or open the gear panel in Visual Studio and bump the value there. The cap is per-session and resets to default on the next IDE restart. Buffer memory is proportional to the cap — `20000` events is on the order of 2 MB.
+…or open the settings panel in Visual Studio and bump the value there.
 
-For sustained high-volume traffic, use **Snapshot** to capture batches of data into named exports instead of relying on the live buffer.
+For sustained high-volume traffic, use **Snapshot** to capture batches instead of relying on the live buffer.
 
 ---
 
@@ -215,18 +206,6 @@ Either:
   ```
 
 For long-running services (APIs, workers, daemons), this is not an issue.
-
----
-
-## Still stuck?
-
-Open an issue at the [GitHub repository](https://github.com/DSoftStudio/Mediator.Enterprise/issues) with:
-
-- The output of `dotnet list package | findstr Mediator`
-- Your composition-root code (the part that calls `AddMediator`)
-- Whether `DSoftMediatorProfilingEnabled` appears anywhere in your `Directory.Build.props` or `.csproj` files
-- The Mediator output panel contents (last 50 lines)
-- The IDE version + extension version
 
 ---
 

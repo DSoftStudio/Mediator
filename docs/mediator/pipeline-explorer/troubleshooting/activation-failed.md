@@ -1,7 +1,7 @@
 ---
 layout: default
 title: "License activation failed - Pipeline Explorer"
-description: "Pipeline Explorer rejected your activation token. Causes and resolutions."
+description: "Loading your .dslic license file didn't activate Pipeline Explorer. Causes and resolutions."
 ---
 <p align="center">
   <picture>
@@ -17,149 +17,101 @@ description: "Pipeline Explorer rejected your activation token. Causes and resol
 
 ## Symptom
 
-You pasted your activation token in the License Status panel (VS Code) or activation flyout (Visual Studio) and saw one of the following:
+You loaded your `.dslic` license file — via **Mediator: License Status** in VS Code, or the activation screen in Visual Studio — but the device didn't activate. The commercial features stayed locked, or you saw a message that the license was rejected, the seat limit was reached, or the file wasn't a valid license.
 
-- `Activation failed: invalid token`
-- `Activation failed: could not reach license server`
-- `Activation failed: seat limit reached`
-- `Activation failed: hardware fingerprint mismatch`
-- `Trial expired — please activate a license`
-
-Each cause has a specific resolution.
+Work through the causes below in order.
 
 ---
 
-## 1. Invalid token (typo or paste truncation)
+## 1. The file isn't a valid `.dslic` license
 
-By far the most common cause. Tokens are long opaque strings; pasting from email or chat clients can silently strip whitespace or truncate the value.
+Activation expects the `.dslic` envelope DSoftStudio sends you after you subscribe (or start a trial). It rejects anything else — a plain token saved into a file, a renamed `.txt`, or a partial download.
 
 **Check**
 
-Compare the token in your settings against the one in the [pricing portal](https://mediator.dsoftstudio.com/pricing) account page. The token starts with a fixed prefix and ends with a checksum segment — both must be present.
+- The file you selected has the `.dslic` extension and is the one you received from DSoftStudio.
+- It downloaded completely (re-download it from the [customer portal](https://portal.dsoftstudio.com/login) if you're unsure).
 
 **Fix**
 
-1. Copy the token again from the portal, using the **Copy** button next to it (not a manual select + copy).
-2. Paste it into the activation flyout.
-3. Click **Activate** — do not press **Enter** mid-paste, which some IDEs interpret as a submit on a partial value.
-
-If the token still fails immediately (within a second of clicking **Activate**), it is almost certainly malformed. Re-copy from the portal.
+Load the original `.dslic` file. If you only have its contents in an email, save them to a file named `license.dslic` and load that. If activation still reports the file isn't a valid license, re-download it from the customer portal.
 
 ---
 
-## 2. Could not reach license server
+## 2. There's no subscription to activate yet
 
-The activation flow requires a one-time round trip to the license server. Subsequent IDE launches work offline using a cached proof.
+If you haven't subscribed, there is nothing to load. During the launch window the commercial features unlock automatically under the free access period; after that, a subscription is required.
 
 **Check**
 
-From the same machine:
-
-```shell
-curl -I https://license.dsoftstudio.com/api/v1/activate
-```
-
-A response of `HTTP/2 401` or `HTTP/2 405` is expected (the endpoint rejects an unauthenticated GET but proves the host is reachable). A timeout or `connection refused` means the network is blocked.
+The status shows a trial / free-access countdown, or reports that no license was found.
 
 **Fix**
 
-- Verify your machine has internet access.
-- If you are behind a corporate proxy, configure your IDE's HTTP proxy:
-  - **VS Code** — `http.proxy` setting.
-  - **Visual Studio** — proxy is inherited from Windows / Internet Explorer settings; see [Microsoft's proxy configuration guide](https://learn.microsoft.com/en-us/visualstudio/install/install-visual-studio-behind-a-firewall-or-proxy-server).
-- If your firewall blocks outbound HTTPS, ask your IT team to whitelist `license.dsoftstudio.com` on port 443.
-
-After fixing connectivity, click **Activate** again.
+- If you're still inside the free access period, the commercial features are already unlocked — no `.dslic` file is needed.
+- To subscribe — or to start the optional 14-day paid-subscription trial — open the [Pricing page](https://mediator.dsoftstudio.com/pricing). Checkout and trials are handled by our payment provider, Paddle; see the [Terms of Service](https://mediator.dsoftstudio.com/terms) for trial and billing details. After checkout you receive your `.dslic` file by email.
 
 ---
 
-## 3. Hardware fingerprint mismatch
+## 3. Seat limit reached
 
-Each activation binds the token to a hardware fingerprint derived from your machine. If you reimaged, moved drives, joined a new domain, or replaced the motherboard, the fingerprint changes and the cached proof becomes invalid.
+Each plan allows a fixed number of activated machines — one for Individual, more for Teams and Enterprise plans. Activating on more machines than your plan allows is rejected.
 
 **Check**
 
-The error message includes the literal text `hardware fingerprint mismatch` or `machine mismatch`.
+The message indicates the seat limit for your subscription has been reached.
 
 **Fix**
 
-You need a **hardware migration release** — a one-click operation in the customer portal that releases the previous binding so the same token can re-activate on the new fingerprint.
-
-1. Open <https://portal.dsoftstudio.com/login> and sign in.
-2. Navigate to **Subscriptions → Active seats**.
-3. Find the seat bound to your old machine and click **Release**.
-4. Return to your IDE and click **Activate** again.
-
-The release window is rate-limited (one release per 30 days per seat by default) to deter casual sharing. If you need an emergency release outside the window, contact licensing@dsoftstudio.com with your token ID.
+- Free up a seat: open the [customer portal](https://portal.dsoftstudio.com/login), find a machine you no longer use, and release it — then activate again.
+- Moving this license from another machine? Use **Move to another machine** in the portal (<https://portal.dsoftstudio.com/transfer>).
+- Or upgrade to a plan with more seats on the [Pricing page](https://mediator.dsoftstudio.com/pricing).
 
 ---
 
-## 4. Seat limit reached
+## 4. Activated on different hardware
 
-You purchased a single-seat or team-seat license and tried to activate on more machines than your plan allows.
+A seat is bound to the machine it was activated on. If you reimaged the machine, swapped major hardware, or moved the drive to a new computer, the binding no longer matches and activation is refused.
 
 **Check**
 
-The error message reads `seat limit reached (n/n)` where `n` is your plan's seat count.
+The message mentions a machine or hardware mismatch.
 
 **Fix**
 
-Three options:
-
-- **Release an unused seat** in the portal as described above.
-- **Upgrade your plan** to a higher seat count at <https://mediator.dsoftstudio.com/pricing>.
-- **Sign in to the portal** to see all active seats — if any of them are old / no longer in use, release them first.
+Release or transfer the previous binding in the [customer portal](https://portal.dsoftstudio.com/login) using **Move to another machine**, then activate again on the new machine.
 
 ---
 
-## 5. Trial expired
+## 5. Can't reach the activation service
 
-The free trial ran out of time and no production token has been activated.
+Activation may need a one-time online check. On a network that blocks outbound HTTPS — a corporate proxy or firewall — that check can't complete. Once the device is activated, the extension keeps working offline.
 
 **Check**
 
-The status panel reads `Trial expired — please activate a license`.
+Confirm the machine has general internet access.
 
 **Fix**
 
-- Purchase a license at <https://mediator.dsoftstudio.com/pricing>.
-- Paste the production token in the activation flyout.
-
-If you believe your trial should still be active and the IDE is showing this error in error, contact licensing@dsoftstudio.com — trials can be extended on a case-by-case basis for serious evaluation.
+- If you are behind a corporate proxy, configure your IDE's proxy:
+  - **VS Code** — the `http.proxy` setting.
+  - **Visual Studio** — inherits the Windows proxy settings.
+- If outbound HTTPS is blocked, ask your IT team to allow access to DSoftStudio's services.
+- Retry activation once connectivity is restored.
 
 ---
 
-## 6. Clock skew on the machine
+## 6. The system clock is wrong
 
-The activation protocol uses signed time-bound proofs. If your system clock is more than five minutes off from the license server, activation is rejected as a replay-protection measure.
+Activation is time-sensitive. If the system clock is significantly off, activation can be rejected.
 
-**Check**
+**Check & fix**
 
-On Windows:
+Enable automatic date & time, let the clock sync, then retry:
 
-```powershell
-w32tm /query /status
-```
-
-On macOS / Linux:
-
-```shell
-date -u
-```
-
-Compare against [time.is](https://time.is/) or any NTP source.
-
-**Fix**
-
-- **Windows** — `Settings → Time & language → Sync now`.
-- **macOS** — `System Settings → General → Date & Time → Set automatically`.
-- **Linux** — enable `timesyncd` or `chrony`:
-
-  ```shell
-  sudo timedatectl set-ntp true
-  ```
-
-After the clock is back in sync (within a minute or two), retry activation.
+- **Windows** — Settings → Time & language → Date & time → **Sync now**.
+- **macOS** — System Settings → General → Date & Time → **Set automatically**.
+- **Linux** — enable NTP: `sudo timedatectl set-ntp true`.
 
 ---
 
@@ -167,12 +119,11 @@ After the clock is back in sync (within a minute or two), retry activation.
 
 Email **licensing@dsoftstudio.com** with:
 
-- Your activation token (the last 8 characters only, for matching)
-- The exact error message displayed
-- Your IDE and version
-- Output of `curl -I https://license.dsoftstudio.com/api/v1/activate`
+- The exact message shown on the activation screen
+- Your IDE and extension version
+- Your subscription plan or order email, so we can match your seats
 
-Most activation issues are resolved within one business day.
+See the [Terms of Service](https://mediator.dsoftstudio.com/terms) for seat, trial, and transfer policies.
 
 ---
 

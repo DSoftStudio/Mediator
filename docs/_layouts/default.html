@@ -3,7 +3,9 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="icon" href="{{ '/assets/images/favicon.svg' | relative_url }}" type="image/svg+xml">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ '/assets/img/favicon-32x32.png' | relative_url }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ '/assets/img/favicon-16x16.png' | relative_url }}">
+    <link rel="icon" href="{{ '/assets/img/favicon.ico' | relative_url }}" sizes="any">
     <link rel="stylesheet" href="{{ '/assets/css/style.css?v=' | append: site.github.build_revision | relative_url }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -102,30 +104,123 @@
       /* Product screenshots — subtle frame + drop shadow + italic caption.
          Lets screenshots "lift" off the page and read as polished UI captures
          without baking the styling into the PNGs themselves. */
-      figure.screenshot { margin: 28px 0; padding: 0; }
+      figure.screenshot { margin: 32px 0; padding: 0; }
       figure.screenshot img {
         display: block;
         max-width: 100%;
+        /* Cap very tall captures (e.g. dropdown menus) so they don't dominate the
+           page; aspect ratio is preserved — wide screenshots are unaffected. */
+        max-height: 600px;
+        width: auto;
         height: auto;
         margin: 0 auto;
-        border-radius: 6px;
-        border: 1px solid rgba(0, 0, 0, 0.1);
-        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+        border-radius: 8px;
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        /* Layered shadow: a tight contact shadow + a soft ambient one so the
+           capture reads as a real, lifted UI panel rather than a flat paste. */
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 10px 34px rgba(0, 0, 0, 0.18);
+        transition: box-shadow 0.2s ease, transform 0.2s ease;
+      }
+      figure.screenshot img:hover {
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.10), 0 16px 44px rgba(0, 0, 0, 0.24);
+        transform: translateY(-2px);
       }
       figure.screenshot figcaption {
-        margin-top: 12px;
+        margin: 14px auto 0;
+        max-width: 70ch;
         font-size: 0.875rem;
         color: #6a737d;
         text-align: center;
         font-style: italic;
-        line-height: 1.5;
+        line-height: 1.55;
+      }
+      /* ── Level 2: section navigation (only on .has-sidebar pages) ──────── */
+      .wrapper.has-sidebar { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: 40px; max-width: 1200px; align-items: start; }
+      .docs-sidebar { position: sticky; top: 16px; align-self: start; font-size: 0.9rem; padding-top: 4px; }
+      .docs-sidebar .sidebar-title { font-weight: 600; font-size: 0.95rem; margin-bottom: 8px; }
+      .docs-sidebar .sidebar-title a { color: #24292e; text-decoration: none; }
+      .docs-nav-group { margin: 16px 0 4px; font-size: 0.7rem; letter-spacing: 0.05em; text-transform: uppercase; color: #8a929b; }
+      .docs-nav ul { list-style: none; margin: 0; padding: 0; }
+      .docs-nav li { margin: 1px 0; }
+      .docs-nav a { display: block; padding: 5px 10px; border-radius: 6px; color: #44525f; text-decoration: none; line-height: 1.35; }
+      .docs-nav a:hover { background: #f0f3f6; }
+      .docs-nav li.active > a { background: #ddf4ff; color: #0969da; font-weight: 600; }
+      .onthispage { margin-top: 22px; border-top: 1px solid #e8eaed; padding-top: 12px; }
+      .onthispage .otp-title { font-size: 0.7rem; letter-spacing: 0.05em; text-transform: uppercase; color: #8a929b; margin-bottom: 6px; }
+      .onthispage ul { list-style: none; margin: 0; padding: 0; }
+      .onthispage a { display: block; padding: 3px 10px; color: #6a737d; text-decoration: none; font-size: 0.84rem; line-height: 1.35; }
+      .onthispage a:hover { color: #0969da; }
+      .onthispage a.lvl-3 { padding-left: 22px; font-size: 0.8rem; }
+      .breadcrumbs { font-size: 0.8rem; color: #8a929b; margin: 0 0 20px; }
+      .breadcrumbs a { color: #6a737d; text-decoration: none; }
+      .breadcrumbs a:hover { text-decoration: underline; }
+      .breadcrumbs .sep { margin: 0 6px; color: #c2c8ce; }
+      .breadcrumbs .current { color: #44525f; }
+      .page-nav { display: flex; gap: 16px; margin: 52px 0 0; padding-top: 22px; border-top: 1px solid #e1e4e8; }
+      .page-nav a { color: #0969da; text-decoration: none; font-weight: 500; max-width: 48%; }
+      .page-nav a:hover { text-decoration: underline; }
+      .page-nav .pn-prev { margin-right: auto; }
+      .page-nav .pn-next { margin-left: auto; text-align: right; }
+      .page-nav .pn-label { display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: #8a929b; font-weight: 600; }
+      @media (max-width: 820px) {
+        .wrapper.has-sidebar { grid-template-columns: 1fr; gap: 0; }
+        .docs-sidebar { position: static; margin-bottom: 28px; padding-bottom: 16px; border-bottom: 1px solid #e8eaed; }
       }
     </style>
   </head>
   <body>
-    <div class="wrapper">
+    {%- assign in_pe = false -%}
+    {%- for it in site.data.pe_nav.items -%}
+      {%- if it.url == page.url -%}{%- assign in_pe = true -%}{%- endif -%}
+    {%- endfor -%}
+    <div class="wrapper{% if in_pe %} has-sidebar{% endif %}">
+      {%- if in_pe -%}
+      <aside class="docs-sidebar">
+        <div class="sidebar-title"><a href="{{ '/mediator/pipeline-explorer/' | relative_url }}">Pipeline Explorer</a></div>
+        <nav class="docs-nav">
+          {%- assign cur_group = '' -%}
+          {%- for it in site.data.pe_nav.items -%}
+            {%- if it.group != cur_group -%}
+              {%- unless forloop.first -%}</ul>{%- endunless -%}
+              <div class="docs-nav-group">{{ it.group }}</div>
+              <ul>
+              {%- assign cur_group = it.group -%}
+            {%- endif -%}
+            <li{% if it.url == page.url %} class="active"{% endif %}><a href="{{ it.url | relative_url }}">{{ it.title }}</a></li>
+            {%- if forloop.last -%}</ul>{%- endif -%}
+          {%- endfor -%}
+        </nav>
+      </aside>
+      {%- endif -%}
       <section>
+        {%- if in_pe -%}
+        <nav class="breadcrumbs">
+          <a href="{{ '/mediator/' | relative_url }}">Docs</a><span class="sep">›</span><a href="{{ '/mediator/pipeline-explorer/' | relative_url }}">Pipeline Explorer</a>
+          {%- for it in site.data.pe_nav.items -%}
+            {%- if it.url == page.url and it.url != '/mediator/pipeline-explorer/' -%}<span class="sep">›</span><span class="current">{{ it.title }}</span>{%- endif -%}
+          {%- endfor -%}
+        </nav>
+        {%- endif -%}
         {{ content }}
+        {%- if in_pe -%}
+          {%- assign prev = nil -%}
+          {%- assign next = nil -%}
+          {%- assign found = false -%}
+          {%- for it in site.data.pe_nav.items -%}
+            {%- if it.url == page.url -%}
+              {%- assign found = true -%}
+            {%- else -%}
+              {%- if found and next == nil -%}{%- assign next = it -%}{%- endif -%}
+              {%- unless found -%}{%- assign prev = it -%}{%- endunless -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {%- if prev or next -%}
+          <nav class="page-nav">
+            {%- if prev -%}<a class="pn-prev" href="{{ prev.url | relative_url }}"><span class="pn-label">Previous</span>← {{ prev.title }}</a>{%- endif -%}
+            {%- if next -%}<a class="pn-next" href="{{ next.url | relative_url }}"><span class="pn-label">Next</span>{{ next.title }} →</a>{%- endif -%}
+          </nav>
+          {%- endif -%}
+        {%- endif -%}
       </section>
     </div>
     {% if page.mermaid %}
@@ -141,5 +236,33 @@
       mermaid.initialize({ startOnLoad: true });
     </script>
     {% endif %}
+    <script>
+    (function () {
+      var section = document.querySelector('.wrapper section');
+      if (!section) { return; }
+      var heads = section.querySelectorAll('h2, h3');
+      if (heads.length < 3) { return; }
+      function slug(t) { return t.toLowerCase().trim().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-'); }
+      var used = {}, list = document.createElement('ul');
+      heads.forEach(function (h) {
+        if (!h.id) { var s = slug(h.textContent) || 'section'; if (used[s]) { s = s + '-' + used[s]++; } else { used[s] = 1; } h.id = s; }
+        var a = document.createElement('a');
+        a.href = '#' + h.id;
+        a.textContent = h.textContent;
+        if (h.tagName === 'H3') { a.className = 'lvl-3'; }
+        var li = document.createElement('li');
+        li.appendChild(a);
+        list.appendChild(li);
+      });
+      var box = document.createElement('div');
+      box.className = 'onthispage';
+      box.innerHTML = '<div class="otp-title">On this page</div>';
+      box.appendChild(list);
+      // The "On this page" TOC lives only in the Pipeline Explorer section sidebar.
+      // Other docs pages keep their original layout untouched.
+      var sidebar = document.querySelector('.docs-sidebar');
+      if (sidebar) { sidebar.appendChild(box); }
+    })();
+    </script>
   </body>
 </html>

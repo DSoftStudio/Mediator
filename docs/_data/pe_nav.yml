@@ -1,0 +1,33 @@
+# Navigation for the Pipeline Explorer documentation section.
+# Ordered list; `group` drives the sidebar grouping and the order drives prev/next.
+# `url` MUST match Jekyll's generated page.url exactly (index.md -> trailing slash).
+items:
+  - title: Overview
+    url: /mediator/pipeline-explorer/
+    group: Pipeline Explorer
+
+  - title: Installation
+    url: /mediator/pipeline-explorer/getting-started/installation.html
+    group: Getting Started
+  - title: Quick Start
+    url: /mediator/pipeline-explorer/getting-started/quick-start.html
+    group: Getting Started
+
+  - title: Troubleshooting hub
+    url: /mediator/pipeline-explorer/troubleshooting/
+    group: Troubleshooting
+  - title: Empty pipeline tree
+    url: /mediator/pipeline-explorer/troubleshooting/empty-tree.html
+    group: Troubleshooting
+  - title: Build errors after installing
+    url: /mediator/pipeline-explorer/troubleshooting/analyzer-errors.html
+    group: Troubleshooting
+  - title: Server startup failed
+    url: /mediator/pipeline-explorer/troubleshooting/server-startup-failed.html
+    group: Troubleshooting
+  - title: Profiler not attaching
+    url: /mediator/pipeline-explorer/troubleshooting/profiler-not-attaching.html
+    group: Troubleshooting
+  - title: License activation failed
+    url: /mediator/pipeline-explorer/troubleshooting/activation-failed.html
+    group: Troubleshooting

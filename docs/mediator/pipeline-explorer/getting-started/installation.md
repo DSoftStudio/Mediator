@@ -48,13 +48,13 @@ code --install-extension DSoftStudio.dsoftstudio-mediator
 If your environment can't reach the Marketplace, download the latest release from the [GitHub releases page](https://github.com/DSoftStudio/Mediator.Enterprise/releases) and install:
 
 ```shell
-code --install-extension dsoftstudio-mediator-0.1.0.vsix
+code --install-extension dsoftstudio-mediator-<version>.vsix
 ```
 
 ### First launch
 
 - A new **Mediator Pipelines** view appears in the Activity Bar.
-- The bundled server is published for `win-x64`, `linux-x64`, `osx-x64`, and `osx-arm64`, and starts automatically when you open a workspace containing a `.sln` file.
+- The bundled server starts automatically when you open a workspace containing a `.sln` file.
 - No manual server installation is required.
 
 ### Verify the install
@@ -106,32 +106,27 @@ If the tree is empty, click **Refresh** in the toolbar. See [Troubleshooting: em
 
 ## Activate your license
 
-Both editions are commercial software with a free trial. Until you activate, the extension runs in trial mode.
+Pipeline Explorer's commercial features — Visualizer, Analyzers, Profiling, and the Visual Studio integration — require a subscription. When they're locked, your code still compiles and runs on the MIT-licensed core.
 
-### From Visual Studio Code
+**During the launch window**, DSoftStudio offers a free access period (currently 90 days, no payment method required) that unlocks the commercial features automatically — you just agree to the [Terms of Service](https://mediator.dsoftstudio.com/terms).
 
-1. Open the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`).
-2. Run `Mediator: License Status`.
-3. Paste your activation token from the [pricing portal](https://mediator.dsoftstudio.com/pricing).
-4. Click **Activate**.
+**To continue afterwards**, choose a plan on the [Pricing page](https://mediator.dsoftstudio.com/pricing). Checkout — and the optional 14-day paid-subscription trial — is handled by our payment provider, Paddle, under the [Terms of Service](https://mediator.dsoftstudio.com/terms). Once subscribed, you receive a `.dslic` license file by email; it's also available in the [customer portal](https://portal.dsoftstudio.com/login).
 
-Alternatively, set the token directly in settings:
+### Load your license file
 
-```jsonc
-// settings.json
-{
-  "mediator.licenseKey": "<your-token-here>"
-}
-```
+When the activation screen prompts you to activate this device, load the `.dslic` file:
 
-### From Visual Studio
+<figure class="screenshot">
+  <img src="../assets/screenshots/license-activation.png" alt="License activation screen: 'Unlock the full pipeline', a list of what unlocks (Visualizer, Analyzers, Profiling, Visual Studio integration), the machine fingerprint, and buttons to Load license file (.dslic), open the Pricing page for a trial, or Buy">
+  <figcaption>The activation screen — load the <code>.dslic</code> license file you received, or open the Pricing page to start a subscription or trial. Each activation consumes one seat, bound to this machine.</figcaption>
+</figure>
 
-1. Open **View → Other Windows → Mediator Pipeline Explorer**.
-2. Click the **License** button in the toolbar (key icon).
-3. Paste your activation token in the flyout that appears.
-4. Click **Activate**.
+- **Visual Studio Code** — Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`) → **Mediator: License Status** → **Load license file (.dslic)…** → select your file.
+- **Visual Studio** — **View → Other Windows → Mediator Pipeline Explorer** → on the activation screen, **Load license file (.dslic)…** → select your file.
 
-The activation token persists across IDE restarts. See [Troubleshooting: activation failed](../troubleshooting/activation-failed.md) if activation does not complete.
+The activation screen also links to the Pricing page (to subscribe or start a trial) and the [customer portal](https://portal.dsoftstudio.com/login) (to manage seats or move a seat to another machine).
+
+Your license persists across IDE restarts. See [Troubleshooting: activation failed](../troubleshooting/activation-failed.md) if activation does not complete.
 
 ---
 

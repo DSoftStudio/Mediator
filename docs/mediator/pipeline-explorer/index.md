@@ -20,8 +20,8 @@ description: "Architectural and runtime observability for DSoftStudio.Mediator i
 Pipeline Explorer is a commercial IDE extension that scans your solution, discovers every `IRequestHandler`, `IStreamRequestHandler`, and `INotificationHandler`, and presents the full pipeline graph — handlers, behaviors, pre/post-processors, notification fan-out, nested mediator calls — alongside the runtime telemetry you need to make it fast.
 
 <figure class="screenshot">
-  <img src="assets/screenshots/dashboard.png" alt="Pipeline Explorer Dashboard showing handler counts, pipeline mode and lifetime distributions, and recent activity">
-  <figcaption>The Pipeline Explorer Dashboard — a glance summary of every handler, behavior, notification, and stream discovered in the open solution.</figcaption>
+  <img src="assets/screenshots/dashboard.png" alt="Pipeline Explorer with the discovered pipeline tree on the left and the Dashboard on the right showing handler counts, pipeline-mode and lifetime distributions, and recent activity">
+  <figcaption>Pipeline Explorer — the discovered pipeline tree on the left, the Dashboard on the right: live counts of handlers, behaviors, notifications, and streams, the pipeline-mode and DI-lifetime distributions, and a recent-activity feed.</figcaption>
 </figure>
 
 ---
@@ -46,8 +46,8 @@ Pipeline Explorer answers all of these in seconds, with one click to source.
 |---|---|
 | **Pipeline tree explorer** | Browse Commands, Queries, Notifications, and Streams grouped by kind, with at-a-glance badges and live counts. |
 | **Click-to-source navigation** | Click any node — handler, behavior, call site — and the IDE opens the file at the right line. |
-| **Interactive pipeline graph** | See pre-processors → behaviors → handler → post-processors visualized per pipeline, with notification fan-out and nested calls inline. |
-| **Runtime profiler** | Live handler / behavior timings with p50 / p95 / p99 percentiles, error rates, and tail-heavy detection. |
+| **Interactive pipeline graph** | See pre-processors → behaviors → handler → post-processors visualized per pipeline, with notification fan-out and nested calls inline. Detach it into its own window, and overlay per-node timing + health badges once profiling is on. |
+| **Runtime profiler** | Live handler / behavior timings with p50 / p95 / p99 percentiles, error rates, and tail-heavy detection — plus per-pipeline statistics, request telemetry, and a Hot Path / Flame breakdown of where each request spends its time. |
 | **CQRS-aware view** | Pipelines tagged automatically by `ICommand<>` / `IQuery<>` / `IRequest<>` with distinct icons and filters. |
 | **Search & filters** | Find any handler, behavior, or call site by type name; filter the tree by Commands / Queries / Notifications / Streams. |
 
@@ -58,8 +58,8 @@ Pipeline Explorer answers all of these in seconds, with one click to source.
 Every notification you publish gets its own detail panel — a single view that maps the exact-type dispatch model, lists every subscribed handler, and (once profiling is on) reports the per-handler runtime cost so you can see which subscriber is the slow one without grepping log files.
 
 <figure class="screenshot">
-  <img src="assets/screenshots/notification-detail.png" alt="Notification detail panel for UserRegisteredEvent showing exact-type dispatch model and a fan-out table with three handlers">
-  <figcaption>Notification fan-out detail — three handlers subscribed to <code>UserRegisteredEvent</code>, with the dispatch model called out so there are no hidden inheritance traversals.</figcaption>
+  <img src="assets/screenshots/notification-detail.png" alt="Notification detail for UserRegisteredEvent showing the exact-type dispatch model and a fan-out table of three handlers, with the publish-to-handlers fan-out graph below">
+  <figcaption>Notification fan-out detail — the exact-type dispatch model called out (no hidden inheritance traversals), the three handlers subscribed to <code>UserRegisteredEvent</code>, and the <code>Publish</code> → fan-out graph below.</figcaption>
 </figure>
 
 ---
@@ -98,9 +98,10 @@ A single license activates both editions.
 
 ## Licensing
 
-Pipeline Explorer is **commercial software**. A free trial is available so you can validate the workflow against your real codebase before purchasing. After the trial window, a valid activation token is required to continue using the extension.
+Pipeline Explorer is **commercial software**. During the launch window, a free access period lets you evaluate every commercial feature against your real codebase — no payment method required. After it ends, a subscription keeps the commercial features unlocked; either way, your code keeps compiling and running on the MIT-licensed core.
 
-- [Pricing & free trial](https://mediator.dsoftstudio.com/pricing)
+- [Pricing & plans](https://mediator.dsoftstudio.com/pricing)
+- [Terms of Service](https://mediator.dsoftstudio.com/terms)
 - Licensing inquiries: licensing@dsoftstudio.com
 
 ---

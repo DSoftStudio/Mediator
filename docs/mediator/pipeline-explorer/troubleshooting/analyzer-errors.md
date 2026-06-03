@@ -47,12 +47,12 @@ Look at the project that has the errors. If it does **not** reference `DSoftStud
 
 **Fix**
 
-Pipeline Explorer **0.1.0 and later** gates emission on reference presence. The generator detects that the consuming project doesn't reference the required types and emits nothing. Make sure you are on the latest extension:
+Current versions of Pipeline Explorer gate emission on reference presence — the generator detects that the consuming project doesn't reference the required types and emits nothing. Make sure you are on the latest extension:
 
 - **VS Code** — Extensions view → search `DSoftStudio Mediator` → click **Update** if available.
 - **Visual Studio** — `Extensions → Manage Extensions → Updates`.
 
-If you are already on the latest and still see the errors, [open an issue](https://github.com/DSoftStudio/Mediator.Enterprise/issues) with the project file (`*.csproj`) attached.
+If you are already on the latest and still see the errors, [open an issue](https://github.com/DSoftStudio/Mediator.Enterprise/issues) with the exact error text and the name of the project that has no `DSoftStudio.Mediator` reference — no source needed.
 
 > **Workaround for older versions**: scope the analyzer to specific projects by deleting the `<ItemGroup>` block at the solution root's `Directory.Build.props` and pasting it only into the projects that reference `DSoftStudio.Mediator`.
 
@@ -143,7 +143,7 @@ Build errors mention `CS8002: Referenced assembly does not have a strong name` o
 
 **Fix**
 
-Pipeline Explorer assemblies are signed with `PublicKeyToken=6c7e753832e8eb05`. If your project pins a different token, exclude the Pipeline Explorer assemblies from the strong-name validation list, or use a binding redirect.
+Pipeline Explorer's assemblies are strong-named. If your project enforces a specific public key, exclude the Pipeline Explorer assemblies from strong-name validation, or use a binding redirect.
 
 For most users this is not a real issue — strong-name conflicts only matter in tightly-controlled enterprise environments.
 
@@ -158,19 +158,6 @@ dotnet build -p:DSoftMediatorDiagnosticsEnabled=false
 ```
 
 This produces a clean build but disables the analyzer and the source generator for that invocation. The IDE tree will not populate until you re-enable diagnostics.
-
----
-
-## Still stuck?
-
-Open an issue at the [GitHub repository](https://github.com/DSoftStudio/Mediator.Enterprise/issues) with:
-
-- The full error output from `dotnet build`
-- Your `Directory.Build.props` (root and any nested copies)
-- The `.csproj` of the affected project
-- Your IDE and extension version
-
-Include `obj/Debug/.../DSoftStudio.Mediator.Profiling/*.g.cs` for the affected project if the errors point at a generated file — it helps us reproduce.
 
 ---
 

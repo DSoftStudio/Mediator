@@ -17,15 +17,12 @@ description: "The Pipeline Explorer tree is empty after opening a solution. Caus
 
 ## Symptom
 
-You opened a solution but the Pipeline Explorer view shows:
+You opened a solution but the Pipeline Explorer shows **No pipeline data found** — empty Request Pipelines, Notifications, and Streams — even though your project contains mediator handlers.
 
-```
-Request Pipelines (0)
-Notifications (0)
-Streams (0)
-```
-
-…even though your project contains mediator handlers.
+<figure class="screenshot">
+  <img src="../assets/screenshots/empty-pipeline.png" alt="Pipeline Explorer empty state: 'No pipeline data found' with Refresh, Build Solution and Open .sln buttons and a 'Things to check' checklist">
+  <figcaption>The empty state — when discovery finds nothing, the panel offers <strong>Refresh</strong> / <strong>Build Solution</strong> / <strong>Open .sln</strong> plus a built-in checklist that mirrors the causes below.</figcaption>
+</figure>
 
 This page walks through the five most common causes in order of likelihood.
 
@@ -118,7 +115,7 @@ Pipeline Explorer talks to a bundled background server that performs the actual 
 
 **Check**
 
-- VS Code: open the **Output** panel (`Ctrl+Shift+U`) and select **Mediator** from the dropdown. Look for `Server started` followed by a port number. If you see startup errors, see [server startup failed](server-startup-failed.md).
+- VS Code: open the **Output** panel (`Ctrl+Shift+U`) and select **Mediator** from the dropdown. Look for a line confirming the server started. If you see startup errors, see [server startup failed](server-startup-failed.md).
 - Visual Studio: open **View → Output** and select **Mediator** in the **Show output from** dropdown.
 
 **Fix**
@@ -126,17 +123,6 @@ Pipeline Explorer talks to a bundled background server that performs the actual 
 Restart the server: run `Mediator: Stop Server` from the Command Palette (VS Code) or close and reopen the tool window (Visual Studio). The server respawns automatically on the next refresh.
 
 If the restart does not help, see [server startup failed](server-startup-failed.md).
-
----
-
-## Still stuck?
-
-Open an issue at the [GitHub repository](https://github.com/DSoftStudio/Mediator.Enterprise/issues) with:
-
-- Your IDE and version (VS Code 1.95, Visual Studio 17.13, etc.)
-- The output of `dotnet list package | findstr Mediator`
-- The Mediator output panel contents (last 20 lines)
-- A minimal reproduction project, if possible
 
 ---
 

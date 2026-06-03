@@ -38,7 +38,7 @@ description: "All notable changes to DSoftStudio.Mediator."
   });
   ```
 
-- **Strong naming** — All 5 assemblies (`DSoftStudio.Mediator`, `DSoftStudio.Mediator.Abstractions`, `DSoftStudio.Mediator.FluentValidation`, `DSoftStudio.Mediator.HybridCache`, `DSoftStudio.Mediator.OpenTelemetry`) are now signed with `PublicKeyToken=6c7e753832e8eb05`. Enables installation in GAC, use from other strong-named assemblies, and tamper detection. Key file: `DSoftStudio.Mediator.snk` with `InternalsVisibleTo` attributes updated across all projects. See [ADR-0003](docs/mediator/adr/0003-strong-naming.md).
+- **Strong naming** — All 5 assemblies (`DSoftStudio.Mediator`, `DSoftStudio.Mediator.Abstractions`, `DSoftStudio.Mediator.FluentValidation`, `DSoftStudio.Mediator.HybridCache`, `DSoftStudio.Mediator.OpenTelemetry`) are now signed with `PublicKeyToken=6c7e753832e8eb05`. Enables installation in GAC, use from other strong-named assemblies, and tamper detection. Key file: `DSoftStudio.Mediator.snk` with `InternalsVisibleTo` attributes updated across all projects. See [ADR-0003](adr/0003-strong-naming.md).
 - **DSOFT007: Mixed registration API detection** — New compile-time diagnostic (Warning) that detects when `RegisterMediatorHandlers()` or `PrecompilePipelines()` are called alongside `AddMediator(Action<MediatorBuilder>)`. The builder overload already performs these operations internally — calling them separately causes redundant registrations. The diagnostic identifies the specific redundant call and explains what the builder handles automatically.
 - **Runtime idempotency guards** — Source-generated `RegisterMediatorHandlers()` and `RegisterPipelineChains()` now detect duplicate invocations via a per-`IServiceCollection` sentinel pattern (private `__Sentinel` / `__PipelineSentinel` marker types registered as singletons). If the sentinel is already present, the method returns immediately — preventing double handler/pipeline registration when `AddMediator(configure)` is used alongside legacy calls. The sentinel approach was chosen over `static bool` guards to preserve test isolation across parallel test classes with independent `ServiceCollection` instances.
 
@@ -49,7 +49,7 @@ description: "All notable changes to DSoftStudio.Mediator."
 
 ### Architecture Decisions Recorded
 
-- **ADR-0003: Strong Naming** — Accepted. All published assemblies signed with a committed `.snk` key for enterprise compatibility, GAC installation, and `InternalsVisibleTo` with public key verification. See [`docs/mediator/adr/0003-strong-naming.md`](docs/mediator/adr/0003-strong-naming.md).
+- **ADR-0003: Strong Naming** — Accepted. All published assemblies signed with a committed `.snk` key for enterprise compatibility, GAC installation, and `InternalsVisibleTo` with public key verification. See [`docs/mediator/adr/0003-strong-naming.md`](adr/0003-strong-naming.md).
 
 ---
 
@@ -62,7 +62,7 @@ description: "All notable changes to DSoftStudio.Mediator."
 - **Nullable response type support** — Source generators now emit fully nullable-qualified type names (`NullableFullyQualifiedFormat`) for all handler registrations, interceptors, and typed extensions. Types like `IRequest<string?>`, `IRequest<List<int?>?>`, and `IRequest<(string? Name, int? Age)?>` are correctly propagated through the entire pipeline.
 - **Diagnostic integration tests** — Comprehensive Roslyn in-memory test suites for all compile-time diagnostics: `DependencyInjectionDiagnosticTests` (12 tests covering DSOFT001/002/003), `ReferencedAssemblyDiagnosticTests` (6 tests covering DSOFT001/005 with 3-assembly pattern), `CqrsSemanticAnalyzerTests` (10 tests for DSOFT006).
 - **Nullable integration tests** — 14 same-assembly tests (`NullableResponseTests`) and 4 cross-assembly tests (`NullableCrossAssemblyTests`) validating nullable type propagation through handlers, interceptors, and cross-project discovery.
-- **Enterprise integration tests** — 48 tests across 14 test classes covering multi-project discovery, DI lifetime validation, deep pipeline (6 behaviors), 2000-parallel concurrency, Native AOT precompilation, expression tree safety, complex generics, runtime vs compile-time dispatch, background service patterns, stress testing (5000 sequential + 100 parallel streams), failure injection with retry, allocation regression, timeout/deadlock detection, and chaos testing. See [Production Validation](docs/mediator/architecture/production-validation.md).
+- **Enterprise integration tests** — 48 tests across 14 test classes covering multi-project discovery, DI lifetime validation, deep pipeline (6 behaviors), 2000-parallel concurrency, Native AOT precompilation, expression tree safety, complex generics, runtime vs compile-time dispatch, background service patterns, stress testing (5000 sequential + 100 parallel streams), failure injection with retry, allocation regression, timeout/deadlock detection, and chaos testing. See [Production Validation](architecture/production-validation.md).
 - **Production validation documentation** — New `docs/mediator/architecture/production-validation.md` page documenting all 48 enterprise integration tests organized by category with direct links to source.
 - **`NullableCrossAssemblyDiscoveryTests`** — 2 Roslyn in-memory regression tests covering both cross-assembly discovery paths: Phase 1 (attribute-based, where `typeof()` strips nullable — the bug path) and Phase 2 (type-based, where `AllInterfaces` preserves nullable from PE metadata). Both verify generated DI registrations contain the correct `global::User?>` annotation.
 
@@ -271,7 +271,7 @@ description: "All notable changes to DSoftStudio.Mediator."
   Zero impact on the existing `Send<TRequest, TResponse>()` hot path — completely
   separate dispatch table and code path.
 
-  See [ADR-0004](docs/mediator/adr/0004-runtime-typed-send.md) for design rationale.
+  See [ADR-0004](adr/0004-runtime-typed-send.md) for design rationale.
 
 - **`DSoftStudio.Mediator.OpenTelemetry` package** — New companion NuGet package providing
   automatic distributed tracing and metrics for all mediator operations via standard
@@ -299,7 +299,7 @@ description: "All notable changes to DSoftStudio.Mediator."
   (suppress health checks), enrichment (custom tags), and independent tracing/metrics
   toggles.
 
-  See [ADR-0005](docs/mediator/adr/0005-opentelemetry-instrumentation.md) for design rationale.
+  See [ADR-0005](adr/0005-opentelemetry-instrumentation.md) for design rationale.
 
 - **`DSoftStudio.Mediator.FluentValidation` package** — New companion NuGet package
   providing automatic request validation via FluentValidation. Registers a single
@@ -339,12 +339,12 @@ description: "All notable changes to DSoftStudio.Mediator."
   `FrozenDictionary` dispatch table. Extension method design is required because
   `ISender.Send<TRequest, TResponse>` has two generic type parameters that cannot be
   inferred — an instance `Send(object)` would shadow all generated typed extensions
-  due to C# overload resolution rules. See [`docs/mediator/adr/0004-runtime-typed-send.md`](docs/mediator/adr/0004-runtime-typed-send.md).
+  due to C# overload resolution rules. See [`docs/mediator/adr/0004-runtime-typed-send.md`](adr/0004-runtime-typed-send.md).
 
 - **ADR-0005: OpenTelemetry Instrumentation Package** — Accepted. Separate NuGet
   package (`DSoftStudio.Mediator.OpenTelemetry`) providing automatic distributed
   tracing and metrics via standard pipeline behaviors, with zero impact on the core
-  mediator library. See [`docs/mediator/adr/0005-opentelemetry-instrumentation.md`](docs/mediator/adr/0005-opentelemetry-instrumentation.md).
+  mediator library. See [`docs/mediator/adr/0005-opentelemetry-instrumentation.md`](adr/0005-opentelemetry-instrumentation.md).
 
 ---
 

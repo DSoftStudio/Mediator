@@ -20,6 +20,7 @@ plugins:
   - jekyll-remote-theme
   - jekyll-seo-tag
   - jekyll-sitemap
+  - jekyll-relative-links
 
 # Hide the default header/title — each page has its own
 show_downloads: false
