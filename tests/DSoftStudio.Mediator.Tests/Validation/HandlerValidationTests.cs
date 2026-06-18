@@ -51,7 +51,9 @@ public class HandlerValidationTests
     {
         // Arrange — mediator registered but NO handlers
         var services = new ServiceCollection();
+#pragma warning disable DSOFT008 // deliberate: tests that the runtime validator catches missing handlers
         services.AddMediator();
+#pragma warning restore DSOFT008
         // Deliberately NOT calling RegisterMediatorHandlers()
 
         using var provider = services.BuildServiceProvider();
@@ -66,7 +68,9 @@ public class HandlerValidationTests
     {
         // Arrange — mediator registered but NO handlers
         var services = new ServiceCollection();
+#pragma warning disable DSOFT008 // deliberate: tests that the runtime validator catches missing handlers
         services.AddMediator();
+#pragma warning restore DSOFT008
 
         using var provider = services.BuildServiceProvider();
 

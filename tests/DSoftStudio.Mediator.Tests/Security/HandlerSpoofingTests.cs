@@ -14,7 +14,10 @@ public class HandlerSpoofingTests : IDisposable
     public HandlerSpoofingTests()
     {
         var services = new ServiceCollection();
+        // Intentional: verifies Send throws when no handler is registered.
+#pragma warning disable DSOFT008 // deliberate: no handler registration in this test
         services.AddMediator();
+#pragma warning restore DSOFT008
 
         // No handler or chain registered for FakePing.
 
