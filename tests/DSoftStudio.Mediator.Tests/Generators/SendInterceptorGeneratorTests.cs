@@ -131,4 +131,34 @@ public class SendInterceptorGeneratorTests
             .Where(l => l.Contains("InterceptsLocation"))
             .ShouldBeEmpty("Send inside an expression-tree lambda must not be intercepted");
     }
+
+    [Fact]
+    public void Ignores_Open_Generic_Send_Call_Site()
+    {
+        // A generic forwarding method — sender.Send<TRequest, TResponse>(request) with OPEN type parameters —
+        // cannot be intercepted: the single syntactic call site is instantiated for every TRequest/TResponse,
+        // so no concrete interceptor can represent it. The generator must skip it; the call dispatches through
+        // Mediator.Send at runtime. Regression: it used to emit an interceptor referencing the unbound type
+        // parameters, breaking the consumer's build with CS0246.
+        const string openGeneric = """
+            using System.Threading.Tasks;
+            using DSoftStudio.Mediator.Abstractions;
+
+            namespace TestApp;
+
+            public static class Dispatcher
+            {
+                public static ValueTask<TResponse> Send<TRequest, TResponse>(ISender sender, TRequest request)
+                    where TRequest : IRequest<TResponse>
+                    => sender.Send<TRequest, TResponse>(request);
+            }
+            """;
+
+        var (result, output) = GeneratorTestHarness.Run<SendInterceptorGenerator>(openGeneric, interceptors: true);
+
+        result.AllSource().ShouldNotContain("InterceptsLocation",
+            customMessage: "an open-generic Send call site must not be intercepted");
+        output.GetDiagnostics().Where(d => d.Id == "CS0246").ShouldBeEmpty(
+            "the generated interceptor must not reference unbound type parameters");
+    }
 }

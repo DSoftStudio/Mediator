@@ -126,4 +126,32 @@ public class PublishInterceptorGeneratorTests
             .Where(line => line.Contains("InterceptsLocation"))
             .ShouldBeEmpty("Publish(object) must not be intercepted");
     }
+
+    [Fact]
+    public void Ignores_Open_Generic_Publish_Call_Site()
+    {
+        // A generic forwarding method — publisher.Publish<TNotification>(notification) with an OPEN type
+        // parameter — cannot be intercepted; the call dispatches through Mediator.Publish at runtime. The
+        // generator must skip it. Regression: it used to emit an interceptor referencing TNotification → CS0246.
+        const string openGeneric = """
+            using System.Threading.Tasks;
+            using DSoftStudio.Mediator.Abstractions;
+
+            namespace TestApp;
+
+            public static class Dispatcher
+            {
+                public static Task Publish<TNotification>(IPublisher publisher, TNotification notification)
+                    where TNotification : INotification
+                    => publisher.Publish(notification);
+            }
+            """;
+
+        var (result, output) = GeneratorTestHarness.Run<PublishInterceptorGenerator>(openGeneric, interceptors: true);
+
+        result.AllSource().ShouldNotContain("InterceptsLocation",
+            customMessage: "an open-generic Publish call site must not be intercepted");
+        output.GetDiagnostics().Where(d => d.Id == "CS0246").ShouldBeEmpty(
+            "the generated interceptor must not reference unbound type parameters");
+    }
 }

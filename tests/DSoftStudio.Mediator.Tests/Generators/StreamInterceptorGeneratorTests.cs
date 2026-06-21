@@ -140,4 +140,32 @@ public class StreamInterceptorGeneratorTests
             .Where(line => line.Contains("InterceptsLocation"))
             .ShouldBeEmpty("no CreateStream call site → no interceptor methods");
     }
+
+    [Fact]
+    public void Ignores_Open_Generic_CreateStream_Call_Site()
+    {
+        // A generic forwarding method — mediator.CreateStream<TRequest, TResponse>(request) with OPEN type
+        // parameters — cannot be intercepted; the call dispatches through Mediator.CreateStream at runtime. The
+        // generator must skip it. Regression: it used to emit an interceptor referencing TRequest/TResponse → CS0246.
+        const string openGeneric = """
+            using System.Collections.Generic;
+            using DSoftStudio.Mediator.Abstractions;
+
+            namespace TestApp;
+
+            public static class Dispatcher
+            {
+                public static IAsyncEnumerable<TResponse> CreateStream<TRequest, TResponse>(IMediator mediator, TRequest request)
+                    where TRequest : IStreamRequest<TResponse>
+                    => mediator.CreateStream<TRequest, TResponse>(request);
+            }
+            """;
+
+        var (result, output) = GeneratorTestHarness.Run<StreamInterceptorGenerator>(openGeneric, interceptors: true);
+
+        result.AllSource().ShouldNotContain("InterceptsLocation",
+            customMessage: "an open-generic CreateStream call site must not be intercepted");
+        output.GetDiagnostics().Where(d => d.Id == "CS0246").ShouldBeEmpty(
+            "the generated interceptor must not reference unbound type parameters");
+    }
 }

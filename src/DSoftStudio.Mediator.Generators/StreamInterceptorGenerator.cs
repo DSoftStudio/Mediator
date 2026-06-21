@@ -104,6 +104,12 @@ public sealed class StreamInterceptorGenerator : IIncrementalGenerator
         if (method.TypeArguments.Length == 2)
         {
             // Explicit generic: mediator.CreateStream<PingStream, int>(request)
+            // Skip open-generic call sites: no concrete interceptor can represent them — they dispatch
+            // through Mediator.CreateStream at runtime.
+            if (InterceptorHelpers.ContainsTypeParameter(method.TypeArguments[0])
+                || InterceptorHelpers.ContainsTypeParameter(method.TypeArguments[1]))
+                return null;
+
             requestType = method.TypeArguments[0]
                 .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
             responseType = method.TypeArguments[1]
@@ -149,12 +155,17 @@ public sealed class StreamInterceptorGenerator : IIncrementalGenerator
         if (requestParam is null)
             return false;
 
-        requestType = requestParam.Type
-            .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
-
         // Return type is IAsyncEnumerable<TResponse> — extract TResponse
         if (method.ReturnType is not INamedTypeSymbol { TypeArguments.Length: 1 } returnType)
             return false;
+
+        // Skip open-generic call sites: an interceptor cannot reference unbound type parameters.
+        if (InterceptorHelpers.ContainsTypeParameter(requestParam.Type)
+            || InterceptorHelpers.ContainsTypeParameter(returnType.TypeArguments[0]))
+            return false;
+
+        requestType = requestParam.Type
+            .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
 
         responseType = returnType.TypeArguments[0]
             .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
