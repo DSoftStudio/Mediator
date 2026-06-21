@@ -33,4 +33,10 @@
 	  <ProjectReference Include="..\DSoftStudio.Mediator.Abstractions\DSoftStudio.Mediator.Abstractions.csproj" />
 	</ItemGroup>
 
+	<!-- Expose internal generator helpers (EquatableArray, HandlerDiscovery, the *Info structs) to the
+	     unit tests so they can be covered directly. Key matches the shared strong-name (Directory.Build.props). -->
+	<ItemGroup>
+	  <InternalsVisibleTo Include="DSoftStudio.Mediator.Tests" Key="$(PublicKey)" />
+	</ItemGroup>
+
 </Project>
