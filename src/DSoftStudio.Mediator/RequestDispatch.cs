@@ -8,13 +8,13 @@ using System.Runtime.CompilerServices;
 namespace DSoftStudio.Mediator
 {
     /// <summary>
-    /// Write-once static dispatch table for a specific <c>&lt;TRequest, TResponse&gt;</c> pair.
+    /// Static dispatch metadata for a specific <c>&lt;TRequest, TResponse&gt;</c> pair.
     /// The CLR creates one specialization per closed generic type, giving O(1) lookup
     /// without any dictionary or concurrent collection.
     /// <para>
-    /// Populated once at startup by source-generated code. After initialization,
-    /// the pipeline cannot be overwritten — <see cref="TryInitialize"/> uses
-    /// <see cref="Interlocked.CompareExchange{T}"/> to enforce write-once semantics.
+    /// The flags are set once at startup by source-generated code and read on the hot path
+    /// (by the Send interceptor and <c>Mediator.Send</c>) to choose between the pipeline-chain
+    /// and direct-handler dispatch paths with a single static-field read.
     /// </para>
     /// <para><b>Infrastructure type — not intended for direct use by application code.</b></para>
     /// </summary>
@@ -22,19 +22,8 @@ namespace DSoftStudio.Mediator
     public static class RequestDispatch<TRequest, TResponse>
         where TRequest : IRequest<TResponse>
     {
-        private static Func<TRequest, IServiceProvider, CancellationToken, ValueTask<TResponse>>? _pipeline;
         private static bool _hasPipelineChain;
         private static bool _isPipelineChainCacheable;
-
-        /// <summary>
-        /// The cached pipeline dispatch delegate. <see langword="null"/> until initialized.
-        /// Hot-path read — inlined by the JIT to a single static field load.
-        /// </summary>
-        public static Func<TRequest, IServiceProvider, CancellationToken, ValueTask<TResponse>>? Pipeline
-        {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => _pipeline;
-        }
 
         /// <summary>
         /// <see langword="true"/> when a <see cref="PipelineChainHandler{TRequest, TResponse}"/>
@@ -56,19 +45,6 @@ namespace DSoftStudio.Mediator
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => Volatile.Read(ref _isPipelineChainCacheable);
-        }
-
-        /// <summary>
-        /// Atomically sets the pipeline if not yet initialized. Returns <see langword="true"/>
-        /// if this call performed the initialization; <see langword="false"/> if already set.
-        /// Thread-safe, lock-free, zero-cost on the read path.
-        /// </summary>
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        public static bool TryInitialize(
-            Func<TRequest, IServiceProvider, CancellationToken, ValueTask<TResponse>> pipeline)
-        {
-            ArgumentNullException.ThrowIfNull(pipeline);
-            return Interlocked.CompareExchange(ref _pipeline, pipeline, null) == null;
         }
 
         /// <summary>

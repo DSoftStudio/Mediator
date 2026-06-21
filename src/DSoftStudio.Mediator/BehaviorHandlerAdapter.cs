@@ -9,8 +9,8 @@ namespace DSoftStudio.Mediator
 {
     /// <summary>
     /// Adapts an <see cref="IPipelineBehavior{TRequest, TResponse}"/> + next handler
-    /// into an <see cref="IRequestHandler{TRequest, TResponse}"/>.
-    /// Used by the reentrant fallback path and by <see cref="PipelineBuilder"/>.
+    /// into an <see cref="IRequestHandler{TRequest, TResponse}"/>. Used by
+    /// <see cref="PipelineChainHandler{TRequest, TResponse}"/> to pre-link the behavior chain.
     /// </summary>
     internal sealed class BehaviorHandlerAdapter<TRequest, TResponse>(
         IPipelineBehavior<TRequest, TResponse> behavior,

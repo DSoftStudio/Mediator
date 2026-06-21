@@ -82,23 +82,8 @@ public sealed class MediatorBuilder
     /// </exception>
     public MediatorBuilder AddStreamBehavior<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.Interfaces)] T>(ServiceLifetime lifetime = ServiceLifetime.Transient)
         where T : class
-    {
-        var type = typeof(T);
-        var target = typeof(IStreamPipelineBehavior<,>);
-
-        foreach (var iface in type.GetInterfaces())
-        {
-            if (iface.IsGenericType && iface.GetGenericTypeDefinition() == target)
-            {
-                Services.Add(new ServiceDescriptor(iface, type, lifetime));
-                return this;
-            }
-        }
-
-        throw new ArgumentException(
-            $"Type '{type.Name}' does not implement IStreamPipelineBehavior<TRequest, TResponse>.",
-            nameof(T));
-    }
+        => RegisterByOpenInterface(typeof(T), typeof(IStreamPipelineBehavior<,>), lifetime,
+            nameof(T), "IStreamPipelineBehavior<TRequest, TResponse>");
 
     /// <summary>
     /// Registers a request pre-processor.
@@ -112,23 +97,8 @@ public sealed class MediatorBuilder
     /// </exception>
     public MediatorBuilder AddRequestPreProcessor<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.Interfaces)] T>(ServiceLifetime lifetime = ServiceLifetime.Transient)
         where T : class
-    {
-        var type = typeof(T);
-        var target = typeof(IRequestPreProcessor<>);
-
-        foreach (var iface in type.GetInterfaces())
-        {
-            if (iface.IsGenericType && iface.GetGenericTypeDefinition() == target)
-            {
-                Services.Add(new ServiceDescriptor(iface, type, lifetime));
-                return this;
-            }
-        }
-
-        throw new ArgumentException(
-            $"Type '{type.Name}' does not implement IRequestPreProcessor<TRequest>.",
-            nameof(T));
-    }
+        => RegisterByOpenInterface(typeof(T), typeof(IRequestPreProcessor<>), lifetime,
+            nameof(T), "IRequestPreProcessor<TRequest>");
 
     /// <summary>
     /// Registers a request post-processor.
@@ -142,23 +112,8 @@ public sealed class MediatorBuilder
     /// </exception>
     public MediatorBuilder AddRequestPostProcessor<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.Interfaces)] T>(ServiceLifetime lifetime = ServiceLifetime.Transient)
         where T : class
-    {
-        var type = typeof(T);
-        var target = typeof(IRequestPostProcessor<,>);
-
-        foreach (var iface in type.GetInterfaces())
-        {
-            if (iface.IsGenericType && iface.GetGenericTypeDefinition() == target)
-            {
-                Services.Add(new ServiceDescriptor(iface, type, lifetime));
-                return this;
-            }
-        }
-
-        throw new ArgumentException(
-            $"Type '{type.Name}' does not implement IRequestPostProcessor<TRequest, TResponse>.",
-            nameof(T));
-    }
+        => RegisterByOpenInterface(typeof(T), typeof(IRequestPostProcessor<,>), lifetime,
+            nameof(T), "IRequestPostProcessor<TRequest, TResponse>");
 
     /// <summary>
     /// Registers a request exception handler.
@@ -172,23 +127,8 @@ public sealed class MediatorBuilder
     /// </exception>
     public MediatorBuilder AddRequestExceptionHandler<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.Interfaces)] T>(ServiceLifetime lifetime = ServiceLifetime.Transient)
         where T : class
-    {
-        var type = typeof(T);
-        var target = typeof(IRequestExceptionHandler<,>);
-
-        foreach (var iface in type.GetInterfaces())
-        {
-            if (iface.IsGenericType && iface.GetGenericTypeDefinition() == target)
-            {
-                Services.Add(new ServiceDescriptor(iface, type, lifetime));
-                return this;
-            }
-        }
-
-        throw new ArgumentException(
-            $"Type '{type.Name}' does not implement IRequestExceptionHandler<TRequest, TResponse>.",
-            nameof(T));
-    }
+        => RegisterByOpenInterface(typeof(T), typeof(IRequestExceptionHandler<,>), lifetime,
+            nameof(T), "IRequestExceptionHandler<TRequest, TResponse>");
 
     /// <summary>
     /// Replaces the default sequential notification publisher with a parallel implementation
@@ -199,5 +139,31 @@ public sealed class MediatorBuilder
     {
         Services.AddSingleton<INotificationPublisher, ParallelNotificationPublisher>();
         return this;
+    }
+
+    /// <summary>
+    /// Registers <paramref name="implementationType"/> against the closed
+    /// <paramref name="openInterface"/> it implements, throwing when it implements none.
+    /// Shared by the stream-behavior / pre-processor / post-processor / exception-handler registrations.
+    /// </summary>
+    private MediatorBuilder RegisterByOpenInterface(
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.Interfaces)] Type implementationType,
+        Type openInterface,
+        ServiceLifetime lifetime,
+        string parameterName,
+        string interfaceDisplayName)
+    {
+        foreach (var iface in implementationType.GetInterfaces())
+        {
+            if (iface.IsGenericType && iface.GetGenericTypeDefinition() == openInterface)
+            {
+                Services.Add(new ServiceDescriptor(iface, implementationType, lifetime));
+                return this;
+            }
+        }
+
+        throw new ArgumentException(
+            $"Type '{implementationType.Name}' does not implement {interfaceDisplayName}.",
+            parameterName);
     }
 }

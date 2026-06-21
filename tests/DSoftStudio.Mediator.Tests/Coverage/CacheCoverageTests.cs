@@ -12,10 +12,9 @@ public record CovCachePing : IRequest<int>;
 public record CovCacheStream : IStreamRequest<int>;
 public record CovCacheBehaviorStream : IStreamRequest<int>;
 
-// ── Dedicated types for write-once TryInitialize tests ──
-// These types must NEVER be used anywhere else to guarantee
-// they are uninitialized when the test runs (regardless of test order).
-public record WriteOncePing : IRequest<int>;
+// ── Dedicated type for the write-once TryInitializeHandler test ──
+// Must NEVER be used anywhere else, so it is guaranteed uninitialized
+// when the test runs (regardless of test order).
 public record WriteOnceStream : IStreamRequest<int>;
 
 // ── Handlers ──
@@ -138,21 +137,6 @@ public class CacheCoverageTests
     }
 
     [Fact]
-    public void RequestDispatch_TryInitialize_WriteOnce_FirstTrueSecondFalse()
-    {
-        // WriteOncePing is dedicated to this test — guaranteed uninitialized.
-        // First call performs the initialization → true.
-        var first = RequestDispatch<WriteOncePing, int>.TryInitialize(
-            static (req, sp, ct) => new ValueTask<int>(0));
-        first.ShouldBeTrue();
-
-        // Second call: already set → false (write-once semantics).
-        var second = RequestDispatch<WriteOncePing, int>.TryInitialize(
-            static (req, sp, ct) => new ValueTask<int>(1));
-        second.ShouldBeFalse();
-    }
-
-    [Fact]
     public void StreamDispatch_TryInitializeHandler_WriteOnce_FirstTrueSecondFalse()
     {
         // WriteOnceStream is dedicated to this test — guaranteed uninitialized.
@@ -163,13 +147,6 @@ public class CacheCoverageTests
         var second = StreamDispatch<WriteOnceStream, int>.TryInitializeHandler(
             static sp => null!);
         second.ShouldBeFalse();
-    }
-
-    [Fact]
-    public void RequestDispatch_TryInitialize_NullPipeline_Throws()
-    {
-        Should.Throw<ArgumentNullException>(
-            () => RequestDispatch<CovCachePing, int>.TryInitialize(null!));
     }
 
     [Fact]

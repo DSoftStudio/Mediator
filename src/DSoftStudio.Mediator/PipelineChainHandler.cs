@@ -6,30 +6,23 @@ using DSoftStudio.Mediator.Abstractions;
 namespace DSoftStudio.Mediator
 {
     /// <summary>
-    /// Zero-allocation pipeline executor using interface dispatch and index-based chain traversal.
+    /// Zero-allocation pipeline executor. Pre-links the behavior chain once at construction
+    /// (per DI scope) into an immutable chain of <see cref="BehaviorHandlerAdapter{TRequest, TResponse}"/>
+    /// ending at the terminal handler, so the hot path carries zero mutable state.
     /// <para>
-    /// <b>Architecture:</b> This class implements <see cref="IRequestHandler{TRequest, TResponse}"/>
-    /// so it can pass <c>this</c> as the <c>next</c> parameter to each behavior.
-    /// Behaviors call <c>next.Handle(request, ct)</c> which routes back to <see cref="InvokeNext"/>
-    /// via interface dispatch (virtual call) — no delegates, no closures.
+    /// <b>Dispatch mode</b> is computed once in the constructor (see <c>ComputePipelineMode</c>):
+    /// <list type="bullet">
+    /// <item><description><b>PassThrough</b> (no components): calls the handler directly.</description></item>
+    /// <item><description><b>BehaviorsOnly</b>: invokes the pre-linked behavior chain.</description></item>
+    /// <item><description><b>Full</b>: pre-processors, post-processors and exception handlers around the chain.</description></item>
+    /// </list>
+    /// Each behavior receives the next link as an <see cref="IRequestHandler{TRequest, TResponse}"/>, so
+    /// <c>next.Handle(request, ct)</c> is a virtual call (~0.5 ns) rather than a delegate invocation (~2 ns).
+    /// Because the chain is immutable and stateless, nested / reentrant <c>Send()</c> calls are inherently safe.
     /// </para>
     /// <para>
-    /// <b>How it works:</b> <c>Handle()</c> stores the per-request state (<c>request</c>,
-    /// <c>cancellationToken</c>) in fields and resets <c>_behaviorIndex</c> to 0.
-    /// <c>InvokeNext()</c> advances the index and calls the next behavior or handler.
-    /// Each behavior receives <c>this</c> as an <see cref="IRequestHandler{TRequest, TResponse}"/>,
-    /// and calling <c>next.Handle(request, ct)</c> is a virtual call (~0.5 ns) instead of
-    /// a delegate invocation (~2 ns).
-    /// </para>
-    /// <para>
-    /// <b>Reentrancy:</b> If a behavior or handler triggers a nested <c>Send()</c> of the
-    /// same request type on the same scope, the <c>_active</c> flag detects it and falls
-    /// back to a closure-based chain (correct but allocating).
-    /// </para>
-    /// <para>
-    /// <b>Sync fast path:</b> When the entire chain completes synchronously
-    /// (common for in-memory handlers), the <c>IsCompletedSuccessfully</c> check
-    /// avoids the async state machine allocation entirely.
+    /// <b>Sync fast path:</b> when the chain completes synchronously (common for in-memory handlers),
+    /// the <c>IsCompletedSuccessfully</c> checks avoid the async state-machine allocation entirely.
     /// </para>
     /// </summary>
     public sealed class PipelineChainHandler<TRequest, TResponse>
@@ -249,6 +242,5 @@ namespace DSoftStudio.Mediator
         ValueTask<TResponse> IRequestHandler<TRequest, TResponse>.Handle(
             TRequest request, CancellationToken cancellationToken)
             => Handle(request, cancellationToken);
-
-            }
-        }
+    }
+}
