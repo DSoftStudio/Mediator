@@ -43,44 +43,18 @@ jobs:
       - name: Build
         run: dotnet build DSoftStudio.Mediator.slnx -c Release --no-restore
 
+      # Run EVERY test project in the solution in one shot. `dotnet test` on the
+      # solution discovers all test projects (and skips non-test ones), so a newly
+      # added test project is covered automatically — no need to edit this workflow
+      # (the old hand-listed steps silently skipped ModularMonolith.Tests). Coverage
+      # is collected per project and MERGED below into a single accurate report.
       - name: Test
         run: >
-          dotnet test tests/DSoftStudio.Mediator.Tests/DSoftStudio.Mediator.Tests.csproj
+          dotnet test DSoftStudio.Mediator.slnx
           -c Release
           --no-build
-          --logger "trx;LogFileName=test-results.trx"
+          --logger "trx"
           --collect:"XPlat Code Coverage"
-
-      - name: Test OpenTelemetry
-        run: >
-          dotnet test tests/DSoftStudio.Mediator.OpenTelemetry.Tests/DSoftStudio.Mediator.OpenTelemetry.Tests.csproj
-          -c Release
-          --no-build
-          --logger "trx;LogFileName=test-results-otel.trx"
-          --collect:"XPlat Code Coverage"
-
-      - name: Test FluentValidation
-        run: >
-          dotnet test tests/DSoftStudio.Mediator.FluentValidation.Tests/DSoftStudio.Mediator.FluentValidation.Tests.csproj
-          -c Release
-          --no-build
-          --logger "trx;LogFileName=test-results-fv.trx"
-          --collect:"XPlat Code Coverage"
-
-      - name: Test HybridCache
-        run: >
-          dotnet test tests/DSoftStudio.Mediator.HybridCache.Tests/DSoftStudio.Mediator.HybridCache.Tests.csproj
-          -c Release
-          --no-build
-          --logger "trx;LogFileName=test-results-hc.trx"
-          --collect:"XPlat Code Coverage"
-
-      - name: Test InternalsVisibleTo
-        run: >
-          dotnet test tests/DSoftStudio.Mediator.InternalsVisibleTo.Tests/DSoftStudio.Mediator.InternalsVisibleTo.Tests.csproj
-          -c Release
-          --no-build
-          --logger "trx;LogFileName=test-results-ivt.trx"
 
       # ── Artifacts (always uploaded, even on failure) ──
       - name: Upload test results
@@ -97,22 +71,25 @@ jobs:
           name: coverage
           path: tests/**/TestResults/**/coverage.cobertura.xml
 
-      # Post coverage summary as a PR comment
-      - name: Coverage report
+      # MERGE all per-project coverage files into ONE report before summarizing.
+      # Each test project emits its own coverage.cobertura.xml covering the SAME
+      # assemblies only in the slice it exercises; feeding the raw glob to a summary
+      # lists each assembly N times with different numbers (the misleading "34%").
+      # ReportGenerator unions them, so every assembly shows its real combined
+      # coverage exactly once.
+      - name: Merge coverage reports
         if: github.event_name == 'pull_request'
-        uses: irongut/CodeCoverageSummary@51cc3a756ddcd398d447c044c02cb6aa83fdae95 # v1.3.0
+        uses: danielpalme/ReportGenerator-GitHub-Action@049f7ec958c672fd31d5cc1cb01622dc8d2e23ab # v5.5.10
         with:
-          filename: tests/**/TestResults/**/coverage.cobertura.xml
-          badge: true
-          format: markdown
-          output: both
-          thresholds: '70 85'
+          reports: 'tests/**/TestResults/**/coverage.cobertura.xml'
+          targetdir: 'coverage'
+          reporttypes: 'Cobertura;MarkdownSummaryGithub'
 
       - name: Add coverage to PR
         if: github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@773744901bac0e8cbb5a0dc842800d45e9b2b405 # v2
         with:
-          path: code-coverage-results.md
+          path: coverage/SummaryGithub.md
 
       # ── Pack (only on main/tag, and only if all tests passed) ──
       - name: Pack NuGet packages
