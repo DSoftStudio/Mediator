@@ -49,6 +49,23 @@ public class StreamTracingBehaviorTests
     }
 
     [Fact]
+    public async Task Stream_span_tags_concrete_handler_type()
+    {
+        // ADR-0049 — the stream span must carry the concrete handler type (parity with the request span), so an
+        // imported stream trace maps to its handler source instead of leaving the Handler column empty.
+        using var collector = new ActivityCollector();
+        var options = new MediatorInstrumentationOptions();
+        var behavior = new MediatorStreamTracingBehavior<TestStreamRequest, int>(options);
+        var handler = new TestStreamHandler();
+
+        await foreach (var _ in behavior.Handle(new TestStreamRequest(1), handler, TestContext.Current.CancellationToken))
+        { }
+
+        var activity = collector.Activities.ShouldHaveSingleItem();
+        activity.GetTagItem("mediator.handler.type")!.ShouldBe(typeof(TestStreamHandler).FullName);
+    }
+
+    [Fact]
     public async Task Stream_span_covers_full_enumeration()
     {
         using var collector = new ActivityCollector();

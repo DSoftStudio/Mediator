@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Threading;
@@ -12,7 +13,9 @@ using Microsoft.CodeAnalysis.Operations;
 namespace DSoftStudio.Mediator.Generators;
 
 /// <summary>
-/// Validates how the mediator registration APIs are used, per registration scope (method body).
+/// Validates how the mediator registration APIs are used. DSOFT007 (mixing APIs) is checked per
+/// registration scope (method body); DSOFT008 (handlers never registered) is checked across the whole
+/// compilation, since the registration that backs <c>AddMediator()</c> often lives in another method.
 /// <para>
 /// <c>AddMediator(Action&lt;MediatorBuilder&gt;)</c> is a single entry point that registers core
 /// services, handlers, and precompiled pipelines in one call. Calling
@@ -26,10 +29,10 @@ namespace DSoftStudio.Mediator.Generators;
 /// <list type="bullet">
 ///   <item><c>DSOFT007</c> — the builder overload is used together with the individual registration
 ///   methods in the same scope (redundant / double registration).</item>
-///   <item><c>DSOFT008</c> — the parameterless <c>AddMediator()</c> is used in a scope that never
-///   registers handlers (no builder overload, no <c>RegisterMediatorHandlers()</c>, and no manual
-///   <c>AddTransient&lt;IRequestHandler&lt;,&gt;,…&gt;()</c>), while handlers exist in the
-///   compilation — the handlers are left unregistered.</item>
+///   <item><c>DSOFT008</c> — the parameterless <c>AddMediator()</c> is used while NOTHING in the whole
+///   compilation registers handlers (no builder overload, no <c>RegisterMediatorHandlers()</c>, and no
+///   manual <c>AddTransient&lt;IRequestHandler&lt;,&gt;,…&gt;()</c>), yet handlers exist — they are left
+///   unregistered. Compilation-wide so a split across methods is not a false positive.</item>
 /// </list>
 /// </para>
 /// <para>
@@ -85,16 +88,25 @@ public sealed class MixedRegistrationApiAnalyzer : DiagnosticAnalyzer
                 compilation, requestHandler, notificationHandler, streamHandler,
                 compilationStart.CancellationToken);
 
+            // ── DSOFT008 is a COMPILATION-WIDE property ───────────────────────────────────────────────
+            // "Are the handlers registered anywhere in startup?" can only be answered for the whole
+            // compilation: AddMediator() and the registration that backs it (RegisterMediatorHandlers(),
+            // the builder overload, or manual AddTransient<IRequestHandler<,>>) routinely live in different
+            // methods/files. A per-scope check false-positives that split — and DSOFT008 is a Warning, so a
+            // false positive breaks builds under TreatWarningsAsErrors. We therefore accumulate the parameterless
+            // AddMediator() sites and a single "registers handlers somewhere" flag across the whole compilation
+            // (block actions run concurrently → thread-safe state), then decide in RegisterCompilationEndAction
+            // once every method has been seen. DSOFT007 (mixing APIs) stays per-scope: mixing is by definition
+            // within one registration block.
+            var unregisteredAddMediatorSites = new ConcurrentBag<Location>();
+            int registersHandlersSomewhere = 0; // set-once via Interlocked from concurrent block actions
+
             compilationStart.RegisterOperationBlockStartAction(blockStart =>
             {
-                // Per-scope (method body) state. Each operation-block-start scope gets its own
-                // closure instance, so this is isolated per method.
+                // Per-scope (method body) state — DSOFT007 only. Each block gets its own closure instance.
                 var gate = new object();
-                var parameterlessAddMediator = new List<Location>();
                 var redundantCalls = new List<(Location Location, string Method, string Action)>();
                 bool hasBuilderOverload = false;
-                bool hasRegisterHandlers = false;
-                bool hasManualHandlerRegistration = false;
 
                 blockStart.RegisterOperationAction(opContext =>
                 {
@@ -105,10 +117,10 @@ public sealed class MixedRegistrationApiAnalyzer : DiagnosticAnalyzer
 
                     // Manual handler registration — e.g. services.AddTransient<IRequestHandler<X,Y>, H>()
                     // or services.AddSingleton<INotificationHandler<N>>(instance) — means handlers ARE
-                    // registered in this scope, so DSOFT008 must not fire.
+                    // registered (somewhere in the compilation), so DSOFT008 must not fire.
                     if (IsManualHandlerRegistration(method, requestHandler, notificationHandler, streamHandler))
                     {
-                        lock (gate) { hasManualHandlerRegistration = true; }
+                        Interlocked.Exchange(ref registersHandlersSomewhere, 1);
                         return;
                     }
 
@@ -124,17 +136,20 @@ public sealed class MixedRegistrationApiAnalyzer : DiagnosticAnalyzer
                     {
                         case "AddMediator":
                             if (HasMediatorBuilderParameter(method))
-                                lock (gate) { hasBuilderOverload = true; }
+                            {
+                                lock (gate) { hasBuilderOverload = true; }            // DSOFT007 (per-scope)
+                                Interlocked.Exchange(ref registersHandlersSomewhere, 1); // registers handlers
+                            }
                             else
-                                lock (gate) { parameterlessAddMediator.Add(location); }
+                            {
+                                unregisteredAddMediatorSites.Add(location);          // DSOFT008 (compilation-wide)
+                            }
                             break;
 
                         case "RegisterMediatorHandlers":
+                            Interlocked.Exchange(ref registersHandlersSomewhere, 1);  // registers handlers
                             lock (gate)
-                            {
-                                hasRegisterHandlers = true;
                                 redundantCalls.Add((location, "RegisterMediatorHandlers()", "registers handlers"));
-                            }
                             break;
 
                         case "PrecompilePipelines":
@@ -144,29 +159,29 @@ public sealed class MixedRegistrationApiAnalyzer : DiagnosticAnalyzer
                     }
                 }, OperationKind.Invocation);
 
+                // ── DSOFT007: redundant individual call alongside the builder overload (same scope) ──
                 blockStart.RegisterOperationBlockEndAction(blockEnd =>
                 {
-                    // ── DSOFT007: redundant individual call alongside the builder overload ──
                     if (hasBuilderOverload)
                     {
                         foreach (var (location, method, action) in redundantCalls)
                             blockEnd.ReportDiagnostic(Diagnostic.Create(
                                 DiagnosticDescriptors.MixedRegistrationApi, location, method, action));
                     }
-
-                    // ── DSOFT008: parameterless AddMediator() leaves handlers unregistered ──
-                    // Only when this scope never registers handlers by any means, and there are
-                    // handlers in the compilation that would otherwise be registered.
-                    if (!hasBuilderOverload
-                        && !hasRegisterHandlers
-                        && !hasManualHandlerRegistration
-                        && hasHandlers)
-                    {
-                        foreach (var location in parameterlessAddMediator)
-                            blockEnd.ReportDiagnostic(Diagnostic.Create(
-                                DiagnosticDescriptors.MissingHandlerRegistration, location));
-                    }
                 });
+            });
+
+            // ── DSOFT008: decided once the whole compilation has been analyzed ──
+            // Fire only when handlers exist AND nothing anywhere registers them — every parameterless
+            // AddMediator() site is then genuinely leaving handlers unregistered.
+            compilationStart.RegisterCompilationEndAction(compilationEnd =>
+            {
+                if (!hasHandlers || Volatile.Read(ref registersHandlersSomewhere) != 0)
+                    return;
+
+                foreach (var location in unregisteredAddMediatorSites)
+                    compilationEnd.ReportDiagnostic(Diagnostic.Create(
+                        DiagnosticDescriptors.MissingHandlerRegistration, location));
             });
         });
     }

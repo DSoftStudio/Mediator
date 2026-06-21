@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] — Unreleased (pre-release `1.3.0-rc.1`)
+
+> Companions: `OpenTelemetry` 1.1.0-rc.1 · `HybridCache` 1.0.9-rc.1 · `FluentValidation` 1.0.9-rc.1.
+> Soaking as a release candidate before promotion to the stable `1.3.0`.
+
+### Added
+
+- **`IPipelineHandlerTypeAccessor` (Abstractions)** — exposes the concrete request/stream handler type at the tail of the pipeline chain to an outermost pipeline behavior, without resolving or instantiating it. A behavior is open-generic and may serve many handlers; the correct one for a given request is only knowable by walking the chain it was handed as `next`. The internal chain adapters (`BehaviorHandlerAdapter`, `StreamBehaviorHandlerAdapter`) implement the interface; a behavior reads the terminal handler via `next is IPipelineHandlerTypeAccessor`. Enables tracing/diagnostics to tag the concrete handler.
+- **DSOFT008 — missing handler registration** — new compile-time diagnostic (Warning) that flags a parameterless `AddMediator()` when handlers exist in the compilation but nothing anywhere registers them (no builder overload, no `RegisterMediatorHandlers()`, no manual `AddTransient<IRequestHandler<,>>`). Detection is **compilation-wide** (reported from a `CompilationEndAction`), so splitting `AddMediator()` and the handler registration across different methods is not a false positive.
+- **OpenTelemetry: `mediator.handler.type` on request and stream spans** — the bridge now tags the concrete handler type on request-send and stream spans (it already did so for notification-handler spans), so an imported OTLP/Jaeger trace maps each span to its handler source and renders HTTP/DB child spans as dependencies under it. The handler type is read through the new `IPipelineHandlerTypeAccessor` — it is never resolved or instantiated.
+
+### Changed
+
+- **DSOFT007 converted to a `DiagnosticAnalyzer`** — runs after source generators, so it correctly sees the generated `RegisterMediatorHandlers()` / builder-overload registrations that the prior generator-based diagnostic could not (DSOFT007 was silently inert; DSOFT008 false-positived).
+- **DSOFT006 location widened** to the full type header so the IDE offers the ConvertToCqrs lightbulb when hovering the offending `IRequest<T>` base type, not just the type name (Info severity unchanged).
+- **Dependency bumps** — `Microsoft.Extensions.DependencyInjection.Abstractions` → 10.0.9 and `Microsoft.Bcl.AsyncInterfaces` → 10.0.9 (core/abstractions, .NET 10 servicing band); companion `OpenTelemetry` → 1.16.0; companion `Microsoft.Extensions.Caching.Hybrid` → 10.7.0. `Microsoft.CodeAnalysis.CSharp` is intentionally kept at 4.12.0 — the generator's referenced Roslyn version is the minimum compiler-host a consumer needs, so raising it would break consumers on older SDK/VS.
+
+### Security
+
+- **Scriban 7.0.3 → 7.2.4** in the benchmarks project (dev-only, not shipped) — resolves [GHSA-24c8-4792-22hx](https://github.com/advisories/GHSA-24c8-4792-22hx) (high severity).
+
 ## [1.2.0] — 2026-04-12
 
 ### Added

@@ -198,6 +198,36 @@ public class MixedRegistrationApiIntegrationTests
     }
 
     [Fact]
+    public void Does_Not_Emit_DSOFT008_When_Registration_Is_Split_Across_Methods()
+    {
+        // The cross-method false positive the per-scope check produced: AddMediator() in one method and the
+        // handler registration in ANOTHER. DSOFT008 is now compilation-wide, so it must NOT fire here — the
+        // handlers ARE registered, just not in the same method as AddMediator(). DSOFT008 is a Warning, so a
+        // false positive would break the client's build under TreatWarningsAsErrors.
+        const string startup = """
+            using DSoftStudio.Mediator;
+            using Microsoft.Extensions.DependencyInjection;
+
+            public class Startup
+            {
+                public void AddCore(IServiceCollection services)
+                {
+                    services.AddMediator();
+                }
+
+                public void AddHandlers(IServiceCollection services)
+                {
+                    services.RegisterMediatorHandlers();
+                }
+            }
+            """;
+
+        var diagnostics = Analyze(startup);
+
+        diagnostics.ShouldNotContain(d => d.Id == "DSOFT008");
+    }
+
+    [Fact]
     public void Emits_DSOFT008_When_Parameterless_AddMediator_Without_Registration()
     {
         const string startup = """

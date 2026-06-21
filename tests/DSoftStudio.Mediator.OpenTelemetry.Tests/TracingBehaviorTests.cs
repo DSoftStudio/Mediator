@@ -76,6 +76,27 @@ public class TracingBehaviorTests
     }
 
     [Fact]
+    public async Task Span_tags_concrete_handler_type()
+    {
+        // ADR-0049 — the request span must carry the concrete handler type so an imported trace can map it to
+        // its handler source (and anchor HTTP/DB child spans as dependencies under it). Here the behavior is the
+        // innermost link (next IS the handler), so the runtime type is used.
+        using var collector = new ActivityCollector();
+        var options = new MediatorInstrumentationOptions();
+        var behavior = new MediatorTracingBehavior<TestCommand, string>(options);
+        var handler = new TestCommandHandler();
+
+        await behavior.Handle(new TestCommand("test"), handler, TestContext.Current.CancellationToken);
+
+        var activity = collector.Activities.ShouldHaveSingleItem();
+        activity.GetTagItem("mediator.handler.type")!.ShouldBe(typeof(TestCommandHandler).FullName);
+        // NOTE: the chain case (next is a multi-link adapter that resolves the terminal handler via
+        // IPipelineHandlerTypeAccessor) is proven in the core suite — HandlerTypeAccessorTests — because the real
+        // BehaviorHandlerAdapter is internal to DSoftStudio.Mediator and any IRequestHandler stub here would be
+        // swept up by the mediator's handler source-generator as a duplicate registration.
+    }
+
+    [Fact]
     public async Task Exception_sets_error_status_and_records_exception_event()
     {
         using var collector = new ActivityCollector();

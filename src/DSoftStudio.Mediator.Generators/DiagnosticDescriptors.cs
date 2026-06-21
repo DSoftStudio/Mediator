@@ -108,6 +108,10 @@ namespace DSoftStudio.Mediator.Generators
                         + "assemblies) but neither AddMediator(Action<MediatorBuilder>) nor "
                         + "RegisterMediatorHandlers() is called, those handlers are never added to DI and the "
                         + "first dispatch fails at runtime. Use the builder overload (single entry point) or "
-                        + "call RegisterMediatorHandlers() explicitly.");
+                        + "call RegisterMediatorHandlers() explicitly.",
+            // Registration can live in a different method than AddMediator(), so the analyzer can only decide
+            // this once the WHOLE compilation has been seen — it reports from a CompilationEndAction. The tag
+            // tells the host to schedule it as a full-compilation diagnostic (not a live per-keystroke one).
+            customTags: WellKnownDiagnosticTags.CompilationEnd);
     }
 }
