@@ -105,6 +105,11 @@ public sealed class PublishInterceptorGenerator : IIncrementalGenerator
         if (method.TypeArguments.Length == 1)
         {
             // Explicit generic: publisher.Publish<PingNotification>(notification)
+            // Skip open-generic call sites: no concrete interceptor can represent them — they dispatch
+            // through Mediator.Publish at runtime.
+            if (InterceptorHelpers.ContainsTypeParameter(method.TypeArguments[0]))
+                return null;
+
             notificationType = method.TypeArguments[0]
                 .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
         }
@@ -151,6 +156,10 @@ public sealed class PublishInterceptorGenerator : IIncrementalGenerator
 
         // Verify the parameter type implements INotification (excludes Publish(object) overload)
         if (paramType is not INamedTypeSymbol namedParamType)
+            return false;
+
+        // Skip open-generic call sites: an interceptor cannot reference unbound type parameters.
+        if (InterceptorHelpers.ContainsTypeParameter(namedParamType))
             return false;
 
         if (!InterceptorHelpers.ImplementsInterface(namedParamType, compilation, "DSoftStudio.Mediator.Abstractions.INotification"))

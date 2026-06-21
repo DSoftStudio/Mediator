@@ -1,9 +1,11 @@
 // Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
+using System.Collections.Immutable;
 using DSoftStudio.Mediator.Generators;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace DSoftStudio.Mediator.Tests.Analyzers;
 
@@ -11,6 +13,7 @@ namespace DSoftStudio.Mediator.Tests.Analyzers;
 /// Verifies that <see cref="MixedRegistrationApiAnalyzer"/> emits the correct diagnostics:
 /// <list type="bullet">
 ///   <item>DSOFT007 — mixed registration API usage (AddMediator(configure) + RegisterMediatorHandlers/PrecompilePipelines)</item>
+///   <item>DSOFT008 — parameterless AddMediator() with handlers present but no RegisterMediatorHandlers()/builder call</item>
 /// </list>
 /// </summary>
 public class MixedRegistrationApiAnalyzerTests
@@ -46,7 +49,7 @@ public class MixedRegistrationApiAnalyzerTests
             public static class ServiceCollectionExtensions
             {
                 public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddMediator(
-                    Microsoft.Extensions.DependencyInjection.IServiceCollection services) => services;
+                    this Microsoft.Extensions.DependencyInjection.IServiceCollection services) => services;
             }
         }
 
@@ -70,7 +73,7 @@ public class MixedRegistrationApiAnalyzerTests
         }
         """;
 
-    private static GeneratorRunResult RunAnalyzer(string userSource)
+    private static ImmutableArray<Diagnostic> RunAnalyzer(string userSource)
     {
         var syntaxTrees = new[]
         {
@@ -89,14 +92,12 @@ public class MixedRegistrationApiAnalyzerTests
             references,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
-        var analyzer = new MixedRegistrationApiAnalyzer();
+        // Run as a DiagnosticAnalyzer (not a generator): this mirrors the real build, where
+        // the analyzer runs after all source generators on the final compilation.
+        var withAnalyzers = compilation.WithAnalyzers(
+            ImmutableArray.Create<DiagnosticAnalyzer>(new MixedRegistrationApiAnalyzer()));
 
-        GeneratorDriver driver = CSharpGeneratorDriver.Create(
-            generators: new IIncrementalGenerator[] { analyzer }
-                .Select(GeneratorExtensions.AsSourceGenerator));
-
-        driver = driver.RunGenerators(compilation);
-        return driver.GetRunResult().Results.Single();
+        return withAnalyzers.GetAnalyzerDiagnosticsAsync().GetAwaiter().GetResult();
     }
 
     // ── DSOFT007: Mixed registration API ──────────────────────────
@@ -119,8 +120,8 @@ public class MixedRegistrationApiAnalyzerTests
 
         var result = RunAnalyzer(source);
 
-        result.Diagnostics.ShouldContain(d => d.Id == "DSOFT007");
-        var diag = result.Diagnostics.First(d => d.Id == "DSOFT007");
+        result.ShouldContain(d => d.Id == "DSOFT007");
+        var diag = result.First(d => d.Id == "DSOFT007");
         diag.GetMessage().ShouldContain("RegisterMediatorHandlers()");
         diag.GetMessage().ShouldContain("registers handlers");
     }
@@ -143,8 +144,8 @@ public class MixedRegistrationApiAnalyzerTests
 
         var result = RunAnalyzer(source);
 
-        result.Diagnostics.ShouldContain(d => d.Id == "DSOFT007");
-        var diag = result.Diagnostics.First(d => d.Id == "DSOFT007");
+        result.ShouldContain(d => d.Id == "DSOFT007");
+        var diag = result.First(d => d.Id == "DSOFT007");
         diag.GetMessage().ShouldContain("PrecompilePipelines()");
         diag.GetMessage().ShouldContain("precompiles pipelines");
     }
@@ -168,7 +169,7 @@ public class MixedRegistrationApiAnalyzerTests
 
         var result = RunAnalyzer(source);
 
-        var dsoft007 = result.Diagnostics.Where(d => d.Id == "DSOFT007").ToList();
+        var dsoft007 = result.Where(d => d.Id == "DSOFT007").ToList();
         dsoft007.Count.ShouldBe(2);
         dsoft007.ShouldContain(d => d.GetMessage().Contains("RegisterMediatorHandlers()"));
         dsoft007.ShouldContain(d => d.GetMessage().Contains("PrecompilePipelines()"));
@@ -191,7 +192,7 @@ public class MixedRegistrationApiAnalyzerTests
 
         var result = RunAnalyzer(source);
 
-        result.Diagnostics.ShouldNotContain(d => d.Id == "DSOFT007");
+        result.ShouldNotContain(d => d.Id == "DSOFT007");
     }
 
     [Fact]
@@ -213,7 +214,7 @@ public class MixedRegistrationApiAnalyzerTests
 
         var result = RunAnalyzer(source);
 
-        result.Diagnostics.ShouldNotContain(d => d.Id == "DSOFT007");
+        result.ShouldNotContain(d => d.Id == "DSOFT007");
     }
 
     [Fact]
@@ -228,6 +229,144 @@ public class MixedRegistrationApiAnalyzerTests
 
         var result = RunAnalyzer(source);
 
-        result.Diagnostics.ShouldNotContain(d => d.Id == "DSOFT007");
+        result.ShouldNotContain(d => d.Id == "DSOFT007");
+    }
+
+    // ── DSOFT008: parameterless AddMediator() leaves handlers unregistered ──
+
+    [Fact]
+    public void Emits_DSOFT008_When_Parameterless_AddMediator_And_Handler_Without_RegisterHandlers()
+    {
+        const string source = """
+            using DSoftStudio.Mediator;
+
+            public sealed record Ping : DSoftStudio.Mediator.Abstractions.IRequest<string> { }
+
+            public sealed class PingHandler
+                : DSoftStudio.Mediator.Abstractions.IRequestHandler<Ping, string>
+            {
+                public System.Threading.Tasks.ValueTask<string> Handle(
+                    Ping request, System.Threading.CancellationToken ct) => default;
+            }
+
+            public class Startup
+            {
+                public void Configure(Microsoft.Extensions.DependencyInjection.IServiceCollection services)
+                {
+                    services.AddMediator();
+                }
+            }
+            """;
+
+        var result = RunAnalyzer(source);
+
+        result.ShouldContain(d => d.Id == "DSOFT008");
+        var diag = result.First(d => d.Id == "DSOFT008");
+        diag.GetMessage().ShouldContain("RegisterMediatorHandlers()");
+    }
+
+    [Fact]
+    public void Emits_DSOFT008_For_SelfHandling_Request_Without_RegisterHandlers()
+    {
+        const string source = """
+            using DSoftStudio.Mediator;
+
+            public sealed record Greet(string Name) : DSoftStudio.Mediator.Abstractions.IRequest<string>
+            {
+                public static string Execute(Greet request) => request.Name;
+            }
+
+            public class Startup
+            {
+                public void Configure(Microsoft.Extensions.DependencyInjection.IServiceCollection services)
+                {
+                    services.AddMediator();
+                }
+            }
+            """;
+
+        var result = RunAnalyzer(source);
+
+        result.ShouldContain(d => d.Id == "DSOFT008");
+    }
+
+    [Fact]
+    public void Does_Not_Emit_DSOFT008_When_RegisterMediatorHandlers_Is_Called()
+    {
+        const string source = """
+            using DSoftStudio.Mediator;
+            using DSoftStudio.Mediator.Generated.TestAssembly;
+
+            public sealed record Ping : DSoftStudio.Mediator.Abstractions.IRequest<string> { }
+
+            public sealed class PingHandler
+                : DSoftStudio.Mediator.Abstractions.IRequestHandler<Ping, string>
+            {
+                public System.Threading.Tasks.ValueTask<string> Handle(
+                    Ping request, System.Threading.CancellationToken ct) => default;
+            }
+
+            public class Startup
+            {
+                public void Configure(Microsoft.Extensions.DependencyInjection.IServiceCollection services)
+                {
+                    services.AddMediator();
+                    services.RegisterMediatorHandlers();
+                }
+            }
+            """;
+
+        var result = RunAnalyzer(source);
+
+        result.ShouldNotContain(d => d.Id == "DSOFT008");
+    }
+
+    [Fact]
+    public void Does_Not_Emit_DSOFT008_When_Builder_Overload_Is_Used()
+    {
+        const string source = """
+            using DSoftStudio.Mediator.Generated.TestAssembly;
+
+            public sealed record Ping : DSoftStudio.Mediator.Abstractions.IRequest<string> { }
+
+            public sealed class PingHandler
+                : DSoftStudio.Mediator.Abstractions.IRequestHandler<Ping, string>
+            {
+                public System.Threading.Tasks.ValueTask<string> Handle(
+                    Ping request, System.Threading.CancellationToken ct) => default;
+            }
+
+            public class Startup
+            {
+                public void Configure(Microsoft.Extensions.DependencyInjection.IServiceCollection services)
+                {
+                    services.AddMediator(builder => { });
+                }
+            }
+            """;
+
+        var result = RunAnalyzer(source);
+
+        result.ShouldNotContain(d => d.Id == "DSOFT008");
+    }
+
+    [Fact]
+    public void Does_Not_Emit_DSOFT008_When_No_Handlers_Exist()
+    {
+        const string source = """
+            using DSoftStudio.Mediator;
+
+            public class Startup
+            {
+                public void Configure(Microsoft.Extensions.DependencyInjection.IServiceCollection services)
+                {
+                    services.AddMediator();
+                }
+            }
+            """;
+
+        var result = RunAnalyzer(source);
+
+        result.ShouldNotContain(d => d.Id == "DSOFT008");
     }
 }

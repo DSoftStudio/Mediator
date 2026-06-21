@@ -234,8 +234,10 @@ public class AddMediatorNullTests
     public void AddMediator_NullServices_Throws()
     {
         IServiceCollection? services = null;
+#pragma warning disable DSOFT008 // deliberate: tests the null-services guard, not handler registration
         Should.Throw<ArgumentNullException>(
             () => services!.AddMediator());
+#pragma warning restore DSOFT008
     }
 }
 

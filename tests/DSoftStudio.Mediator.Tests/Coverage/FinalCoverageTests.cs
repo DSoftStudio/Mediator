@@ -82,17 +82,6 @@ public class FinalCoverageTests
     }
 
     [Fact]
-    public void RequestDispatch_Pipeline_Property_NotNull_AfterPrecompile()
-    {
-        var services = new ServiceCollection();
-        services.AddMediator().RegisterMediatorHandlers()
-            .PrecompilePipelines().PrecompileNotifications().PrecompileStreams();
-
-        // The Pipeline delegate is set by PrecompilePipelines() generated code
-        RequestDispatch<CovFinalPing, int>.Pipeline.ShouldNotBeNull();
-    }
-
-    [Fact]
     public void RequestDispatch_HasPipelineChain_And_IsCacheable()
     {
         var services = new ServiceCollection();

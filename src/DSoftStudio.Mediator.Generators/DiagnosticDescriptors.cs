@@ -92,5 +92,26 @@ namespace DSoftStudio.Mediator.Generators
                         + "when using the builder overload causes double registration. "
                         + "Use either the builder overload (recommended) or the individual methods, "
                         + "but not both.");
+
+        public static readonly DiagnosticDescriptor MissingHandlerRegistration = new(
+            id: "DSOFT008",
+            title: "AddMediator() registers core services but no handlers",
+            messageFormat: "'AddMediator()' registers only the core services and leaves handlers unregistered. "
+                         + "Use 'AddMediator(builder => { })' (recommended) or chain '.RegisterMediatorHandlers()'. "
+                         + "Otherwise handler resolution throws at runtime (\"No service for type IRequestHandler<...>\").",
+            category: "DSoftStudio.Mediator.Usage",
+            defaultSeverity: DiagnosticSeverity.Warning,
+            isEnabledByDefault: true,
+            description: "The parameterless AddMediator() overload registers only the core mediator services "
+                        + "(IMediator / ISender / IPublisher). It does not register request, notification, or "
+                        + "stream handlers. When handlers exist in the compilation (locally or in referenced "
+                        + "assemblies) but neither AddMediator(Action<MediatorBuilder>) nor "
+                        + "RegisterMediatorHandlers() is called, those handlers are never added to DI and the "
+                        + "first dispatch fails at runtime. Use the builder overload (single entry point) or "
+                        + "call RegisterMediatorHandlers() explicitly.",
+            // Registration can live in a different method than AddMediator(), so the analyzer can only decide
+            // this once the WHOLE compilation has been seen — it reports from a CompilationEndAction. The tag
+            // tells the host to schedule it as a full-compilation diagnostic (not a live per-keystroke one).
+            customTags: WellKnownDiagnosticTags.CompilationEnd);
     }
 }

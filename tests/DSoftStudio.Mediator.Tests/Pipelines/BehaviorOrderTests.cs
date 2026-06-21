@@ -24,13 +24,14 @@ public class BehaviorOrderTests
         services.AddTransient<IPipelineBehavior<Ping, int>>(sp =>
             new TrackingBehavior<Ping, int>(sp.GetRequiredService<List<string>>(), "Third"));
 
-        // PipelineChainHandler must be registered for PipelineBuilder.Build to detect behaviors.
+        // Resolve the pre-wired chain directly — PipelineChainHandler pre-links the behaviors
+        // in registration order (outer → inner), which is exactly what the live Send path runs.
         services.AddTransient<PipelineChainHandler<Ping, int>>();
 
         using var sp = services.BuildServiceProvider();
 
-        var pipeline = PipelineBuilder.Build<Ping, int>();
-        await pipeline(new Ping(), sp, TestContext.Current.CancellationToken);
+        var chain = sp.GetRequiredService<PipelineChainHandler<Ping, int>>();
+        await chain.Handle(new Ping(), TestContext.Current.CancellationToken);
 
         log.ShouldBe(new[] {
             "First:before",
@@ -60,8 +61,8 @@ public class BehaviorOrderTests
 
         using var sp = services.BuildServiceProvider();
 
-        var pipeline = PipelineBuilder.Build<Ping, int>();
-        var result = await pipeline(new Ping(), sp, TestContext.Current.CancellationToken);
+        var chain = sp.GetRequiredService<PipelineChainHandler<Ping, int>>();
+        var result = await chain.Handle(new Ping(), TestContext.Current.CancellationToken);
 
         result.ShouldBe(42);
         log.Where(e => e.EndsWith(":before")).Count().ShouldBe(5);

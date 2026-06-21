@@ -7,8 +7,9 @@ namespace DSoftStudio.Mediator
 {
     /// <summary>
     /// Invokes all notification handlers in parallel using <see cref="Task.WhenAll"/>.
-    /// All handlers start concurrently — if any handler throws,
-    /// an <see cref="AggregateException"/> is thrown after all have completed.
+    /// All handlers start concurrently; awaiting the returned task surfaces the first faulting
+    /// handler's exception (the remaining failures are available on the task's
+    /// <see cref="Task.Exception"/> aggregate) once every handler has completed.
     /// </summary>
     public sealed class ParallelNotificationPublisher : INotificationPublisher
     {

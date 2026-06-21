@@ -129,6 +129,19 @@ internal sealed class InstrumentedNotificationPublisher(INotificationPublisher i
 
             using var activity = Source.StartActivity(spanName, ActivityKind.Internal);
 
+            // ADR-0047 P3 — tag the per-handler span so an imported trace can recognize it as a mediator
+            // NOTIFICATION HANDLER (not an unattributed Internal span) and map it to its handler source:
+            //   • request.kind/type identify the published notification (so the importer pairs this child span
+            //     with its NotificationPublished parent — the flame's nested-handler breakdown);
+            //   • handler.type is the concrete subscriber, so the row jumps to the handler's own declaration
+            //     and any HTTP/DB child span renders as a dependency UNDER this handler (ADR-0049).
+            if (activity is { IsAllDataRequested: true })
+            {
+                activity.SetTag("mediator.request.kind", MediatorNotificationMetadata<TNotification>.RequestKind);
+                activity.SetTag("mediator.request.type", MediatorNotificationMetadata<TNotification>.RequestType);
+                activity.SetTag("mediator.handler.type", inner.GetType().FullName);
+            }
+
             try
             {
                 await inner.Handle(notification, cancellationToken);

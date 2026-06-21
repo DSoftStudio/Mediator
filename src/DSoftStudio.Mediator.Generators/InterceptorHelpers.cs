@@ -159,6 +159,29 @@ internal static class InterceptorHelpers
     }
 
     /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="type"/> is — or transitively contains — a
+    /// type parameter (an open / not-fully-constructed type).
+    /// <para>
+    /// An interceptor must reference fully-constructed, concrete types: the
+    /// <c>[InterceptsLocation]</c> mechanism rewrites a single syntactic call site, but an open-generic
+    /// call site (e.g. <c>mediator.Send&lt;TRequest, TResponse&gt;(request)</c> inside a generic forwarding
+    /// method) is instantiated for every set of type arguments the enclosing method is called with —
+    /// no single concrete interceptor can represent all of them. Emitting one anyway produces a method
+    /// that references the bare type-parameter names out of scope (CS0246). Such call sites must be
+    /// skipped so they dispatch through the real <c>Mediator.Send/Publish/CreateStream</c> at runtime.
+    /// </para>
+    /// </summary>
+    public static bool ContainsTypeParameter(ITypeSymbol? type) => type switch
+    {
+        null => false,
+        ITypeParameterSymbol => true,
+        IArrayTypeSymbol array => ContainsTypeParameter(array.ElementType),
+        IPointerTypeSymbol pointer => ContainsTypeParameter(pointer.PointedAtType),
+        INamedTypeSymbol named => named.TypeArguments.Any(ContainsTypeParameter),
+        _ => false,
+    };
+
+    /// <summary>
     /// Returns <see langword="true"/> when <paramref name="containingType"/> is or implements
     /// the interface identified by <paramref name="interfaceMetadataName"/>.
     /// </summary>

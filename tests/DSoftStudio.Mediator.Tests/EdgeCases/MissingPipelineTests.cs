@@ -18,8 +18,11 @@ public class MissingPipelineTests : IDisposable
     public MissingPipelineTests()
     {
         var services = new ServiceCollection();
+        // Intentional: no handlers registered so Send/CreateStream must fail (tested below).
+#pragma warning disable DSOFT008 // deliberate: no handler registration in this test
         services.AddMediator();
-        // No handlers or chains registered — Send must fail.
+#pragma warning restore DSOFT008
+        // No handlers or chains registered ï¿½ Send must fail.
         // NeverCompiledStream has no generated handler, so StreamDispatch is null by default.
         _provider = services.BuildServiceProvider();
         _mediator = _provider.GetRequiredService<IMediator>();

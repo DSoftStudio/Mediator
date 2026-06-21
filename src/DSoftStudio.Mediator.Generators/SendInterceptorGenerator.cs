@@ -105,6 +105,12 @@ public sealed class SendInterceptorGenerator : IIncrementalGenerator
         if (method.TypeArguments.Length == 2)
         {
             // Explicit generic: sender.Send<Ping, int>(request)
+            // Skip open-generic call sites (e.g. inside a generic forwarding method): no concrete
+            // interceptor can represent them — they dispatch through Mediator.Send at runtime.
+            if (InterceptorHelpers.ContainsTypeParameter(method.TypeArguments[0])
+                || InterceptorHelpers.ContainsTypeParameter(method.TypeArguments[1]))
+                return null;
+
             requestType = method.TypeArguments[0]
                 .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
             responseType = method.TypeArguments[1]
@@ -155,12 +161,17 @@ public sealed class SendInterceptorGenerator : IIncrementalGenerator
         if (requestParam is null)
             return false;
 
-        requestType = requestParam.Type
-            .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
-
         // Return type is ValueTask<TResponse> — extract TResponse
         if (method.ReturnType is not INamedTypeSymbol { TypeArguments.Length: 1 } returnType)
             return false;
+
+        // Skip open-generic call sites: an interceptor cannot reference unbound type parameters.
+        if (InterceptorHelpers.ContainsTypeParameter(requestParam.Type)
+            || InterceptorHelpers.ContainsTypeParameter(returnType.TypeArguments[0]))
+            return false;
+
+        requestType = requestParam.Type
+            .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
 
         responseType = returnType.TypeArguments[0]
             .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);

@@ -44,6 +44,9 @@ public sealed class MediatorStreamTracingBehavior<TRequest, TResponse>(MediatorI
             activity.SetTag("mediator.request.type", MediatorStreamMetadata<TRequest, TResponse>.RequestType);
             activity.SetTag("mediator.response.type", MediatorStreamMetadata<TRequest, TResponse>.ResponseType);
             activity.SetTag("mediator.request.kind", MediatorStreamMetadata<TRequest, TResponse>.RequestKind);
+            // ADR-0049 — the concrete stream handler behind this request (resolved through the chain, never
+            // instantiated), so an imported trace maps the stream span to its handler source. See MediatorTracingBehavior.
+            activity.SetTag("mediator.handler.type", ResolveHandlerType(next).FullName);
 
             options.EnrichActivity?.Invoke(activity, request);
         }
@@ -62,4 +65,11 @@ public sealed class MediatorStreamTracingBehavior<TRequest, TResponse>(MediatorI
             activity?.SetStatus(success ? ActivityStatusCode.Ok : ActivityStatusCode.Error);
         }
     }
+
+    /// <summary>
+    /// The concrete stream handler type at the end of the chain — via <see cref="IPipelineHandlerTypeAccessor"/>
+    /// when <paramref name="next"/> is a chain adapter, or its runtime type when this behavior is the innermost link.
+    /// </summary>
+    private static Type ResolveHandlerType(IStreamRequestHandler<TRequest, TResponse> next)
+        => next is IPipelineHandlerTypeAccessor accessor ? accessor.HandlerType : next.GetType();
 }

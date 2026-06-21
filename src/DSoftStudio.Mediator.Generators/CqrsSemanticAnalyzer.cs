@@ -72,11 +72,22 @@ public sealed class CqrsSemanticAnalyzer : IIncrementalGenerator
                     if (!implementsRequest || hasCqrsMarker)
                         return default;
 
+                    // Span the whole type header — identifier through base list —
+                    // so the IDE offers the ConvertToCqrs fix when hovering the
+                    // offending `IRequest<T>` base type too, not just the type
+                    // name. DSOFT006 is Info severity: VS renders suggestion dots
+                    // only at the span start, so the wider span adds lightbulb
+                    // reach without squiggle noise. Mirrors the Enterprise
+                    // CqrsSemanticAnalyzerEnterprise (DiagnosticLocations.TypeHeader).
+                    var headerSpan = typeDecl.BaseList is { } baseList
+                        ? TextSpan.FromBounds(typeDecl.Identifier.SpanStart, baseList.Span.End)
+                        : typeDecl.Identifier.Span;
+
                     return new CqrsCandidate(
                         symbol.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat),
                         responseType ?? "TResponse",
                         typeDecl.SyntaxTree.FilePath,
-                        typeDecl.Identifier.Span);
+                        headerSpan);
                 })
             .Where(static c => c.FilePath is not null);
 

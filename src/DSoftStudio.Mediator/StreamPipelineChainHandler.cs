@@ -50,10 +50,18 @@ namespace DSoftStudio.Mediator
 
     internal sealed class StreamBehaviorHandlerAdapter<TRequest, TResponse>(
         IStreamPipelineBehavior<TRequest, TResponse> behavior,
-        IStreamRequestHandler<TRequest, TResponse> next) : IStreamRequestHandler<TRequest, TResponse>
+        IStreamRequestHandler<TRequest, TResponse> next)
+        : IStreamRequestHandler<TRequest, TResponse>, IPipelineHandlerTypeAccessor
         where TRequest : IStreamRequest<TResponse>
     {
         public IAsyncEnumerable<TResponse> Handle(TRequest request, CancellationToken cancellationToken)
             => behavior.Handle(request, next, cancellationToken);
+
+        /// <summary>
+        /// Walks the chain to the terminal stream handler so an outermost stream behavior can tag the concrete
+        /// handler type without resolving it (<see cref="IPipelineHandlerTypeAccessor"/>).
+        /// </summary>
+        public System.Type HandlerType
+            => next is IPipelineHandlerTypeAccessor inner ? inner.HandlerType : next.GetType();
     }
 }
