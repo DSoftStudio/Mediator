@@ -49,4 +49,32 @@ public sealed class HandlerTypeAccessorTests
         var accessor = chain.ShouldBeAssignableTo<IPipelineHandlerTypeAccessor>();
         accessor.HandlerType.ShouldBe(typeof(AccReqHandler));
     }
+
+    // ── Stream side: StreamBehaviorHandlerAdapter exposes the same accessor (was 0% branch) ───────
+
+    public record AccStreamReq : IStreamRequest<int>;
+
+    public sealed class AccStreamHandler : IStreamRequestHandler<AccStreamReq, int>
+    {
+        public System.Collections.Generic.IAsyncEnumerable<int> Handle(AccStreamReq request, CancellationToken ct) => null!;
+    }
+
+    public sealed class PassThroughStreamBehavior : IStreamPipelineBehavior<AccStreamReq, int>
+    {
+        public System.Collections.Generic.IAsyncEnumerable<int> Handle(
+            AccStreamReq request, IStreamRequestHandler<AccStreamReq, int> next, CancellationToken ct)
+            => next.Handle(request, ct);
+    }
+
+    [Fact]
+    public void Stream_adapter_walks_the_chain_to_the_terminal_handler()
+    {
+        var handler = new AccStreamHandler();
+        IStreamRequestHandler<AccStreamReq, int> chain = handler;
+        for (int i = 0; i < 3; i++)
+            chain = new StreamBehaviorHandlerAdapter<AccStreamReq, int>(new PassThroughStreamBehavior(), chain);
+
+        var accessor = chain.ShouldBeAssignableTo<IPipelineHandlerTypeAccessor>();
+        accessor.HandlerType.ShouldBe(typeof(AccStreamHandler));
+    }
 }
