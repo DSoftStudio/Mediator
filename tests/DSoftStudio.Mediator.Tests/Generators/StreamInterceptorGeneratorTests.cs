@@ -47,6 +47,81 @@ public class StreamInterceptorGeneratorTests
     }
 
     [Fact]
+    public void Intercepts_CreateStream_On_Release_Build()
+    {
+        // Release flips OptimizationLevel → exercises the Release emit branch of the interceptor generator.
+        var (result, output) = GeneratorTestHarness.Run<StreamInterceptorGenerator>(
+            CreateStreamCallSite, interceptors: true, release: true);
+
+        result.GeneratedSources.ShouldNotBeEmpty();
+        result.AllSource().ShouldContain("InterceptsLocation");
+        output.GetDiagnostics().Where(d => d.Id == "CS9137").ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Intercepts_Type_Inferred_CreateStream_Via_Generated_Extension()
+    {
+        // `mediator.CreateStream(request)` (no <Ticker,int>) only BINDS once MediatorExtensionsGenerator has
+        // emitted the typed `CreateStream(this IMediator, Ticker)` extension (TResponse can't be inferred from
+        // the open IMediator.CreateStream<TRequest,TResponse> alone). Running both generators in sequence, the
+        // inferred call binds and is intercepted — exercising the inferred type-resolution path. This is the real
+        // two-generator build scenario; a single-generator run would never reach it.
+        const string inferred = """
+            using System.Collections.Generic;
+            using System.Threading;
+            using DSoftStudio.Mediator.Abstractions;
+
+            namespace TestApp;
+
+            public record Ticker(int N) : IStreamRequest<int>;
+
+            public sealed class TickerHandler : IStreamRequestHandler<Ticker, int>
+            {
+                public IAsyncEnumerable<int> Handle(Ticker request, CancellationToken ct) => null!;
+            }
+
+            public static class Consumer
+            {
+                public static IAsyncEnumerable<int> Run(IMediator mediator) => mediator.CreateStream(new Ticker(3));
+            }
+            """;
+
+        var (result, _) = GeneratorTestHarness.RunChain<MediatorExtensionsGenerator, StreamInterceptorGenerator>(
+            inferred, interceptors: true);
+
+        result.AllSource().ShouldContain("InterceptsLocation");
+    }
+
+    [Fact]
+    public void Ignores_CreateStream_On_Non_Mediator_Type()
+    {
+        // A CreateStream<,> method on a type that is NOT IMediator must not be intercepted (the generator
+        // verifies the receiver implements IMediator). Covers the receiver-type exclusion branch.
+        const string nonMediator = """
+            using System.Collections.Generic;
+
+            namespace TestApp;
+
+            public sealed class Faker
+            {
+                public IAsyncEnumerable<int> CreateStream<TRequest, TResponse>(TRequest r) => null!;
+            }
+
+            public static class Consumer
+            {
+                public static IAsyncEnumerable<int> Run(Faker f) => f.CreateStream<int, int>(0);
+            }
+            """;
+
+        var (result, _) = GeneratorTestHarness.Run<StreamInterceptorGenerator>(nonMediator, interceptors: true);
+
+        result.GeneratedSources
+            .SelectMany(s => s.SourceText.ToString().Split('\n'))
+            .Where(l => l.Contains("InterceptsLocation"))
+            .ShouldBeEmpty("CreateStream on a non-IMediator type must not be intercepted");
+    }
+
+    [Fact]
     public void Does_Not_Emit_When_No_CreateStream_CallSite()
     {
         // A stream request type with no CreateStream() invocation → nothing to intercept.

@@ -43,6 +43,65 @@ public class PublishInterceptorGeneratorTests
     }
 
     [Fact]
+    public void Intercepts_Explicit_Generic_Publish_On_Release_Build()
+    {
+        // Explicit Publish<OrderPlaced>(...) (vs the inferred form above) on a Release build — covers the
+        // explicit type-argument path and the Release emit branch.
+        const string explicitPublish = """
+            using System.Threading.Tasks;
+            using DSoftStudio.Mediator.Abstractions;
+
+            namespace TestApp;
+
+            public record OrderPlaced(int Id) : INotification;
+
+            public static class Consumer
+            {
+                public static Task Run(IPublisher publisher)
+                    => publisher.Publish<OrderPlaced>(new OrderPlaced(1));
+            }
+            """;
+
+        var (result, output) = GeneratorTestHarness.Run<PublishInterceptorGenerator>(
+            explicitPublish, interceptors: true, release: true);
+
+        result.GeneratedSources.ShouldNotBeEmpty();
+        result.AllSource().ShouldContain("InterceptsLocation");
+        output.GetDiagnostics().Where(d => d.Id == "CS9137").ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Ignores_Publish_On_Non_Publisher_Type()
+    {
+        // Publish<T>() on a type that is NOT IPublisher must not be intercepted. Covers the receiver exclusion.
+        const string nonPublisher = """
+            using System.Threading.Tasks;
+            using DSoftStudio.Mediator.Abstractions;
+
+            namespace TestApp;
+
+            public record OrderPlaced(int Id) : INotification;
+
+            public sealed class Faker
+            {
+                public Task Publish<TNotification>(TNotification n) => Task.CompletedTask;
+            }
+
+            public static class Consumer
+            {
+                public static Task Run(Faker f) => f.Publish(new OrderPlaced(1));
+            }
+            """;
+
+        var (result, _) = GeneratorTestHarness.Run<PublishInterceptorGenerator>(nonPublisher, interceptors: true);
+
+        result.GeneratedSources
+            .SelectMany(s => s.SourceText.ToString().Split('\n'))
+            .Where(l => l.Contains("InterceptsLocation"))
+            .ShouldBeEmpty("Publish on a non-IPublisher type must not be intercepted");
+    }
+
+    [Fact]
     public void Does_Not_Intercept_Publish_Object_Overload()
     {
         // Publish(object) — the argument does NOT implement INotification, so the generator must skip it

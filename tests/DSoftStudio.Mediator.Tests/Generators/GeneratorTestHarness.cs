@@ -62,8 +62,36 @@ internal static class GeneratorTestHarness
     /// <c>InterceptorsNamespaces</c> feature flag or the compiler rejects the generated code with CS9137.
     /// </summary>
     public static (GeneratorRunResult Result, Compilation Output) Run<TGenerator>(
-        string source, bool interceptors = false)
+        string source, bool interceptors = false, bool release = false)
         where TGenerator : IIncrementalGenerator, new()
+    {
+        var (parse, compilation) = Build(source, interceptors, release);
+        var driver = DriverFor(new TGenerator(), parse)
+            .RunGeneratorsAndUpdateCompilation(compilation, out var output, out _);
+        return (driver.GetRunResult().Results.Single(), output);
+    }
+
+    /// <summary>
+    /// Runs <typeparamref name="TFirst"/> then <typeparamref name="TSecond"/> in sequence, with the second
+    /// generator seeing the first's emitted source. This mirrors a real build where one generator's output is a
+    /// prerequisite for another — e.g. <c>MediatorExtensionsGenerator</c> emits the typed
+    /// <c>CreateStream(this IMediator, T)</c> / <c>Send(this ISender, T)</c> extension that makes a
+    /// type-inferred call bind, which the interceptor generator then intercepts.
+    /// </summary>
+    public static (GeneratorRunResult Result, Compilation Output) RunChain<TFirst, TSecond>(
+        string source, bool interceptors = false, bool release = false)
+        where TFirst : IIncrementalGenerator, new()
+        where TSecond : IIncrementalGenerator, new()
+    {
+        var (parse, compilation) = Build(source, interceptors, release);
+        DriverFor(new TFirst(), parse).RunGeneratorsAndUpdateCompilation(compilation, out var afterFirst, out _);
+        var driver = DriverFor(new TSecond(), parse)
+            .RunGeneratorsAndUpdateCompilation(afterFirst, out var output, out _);
+        return (driver.GetRunResult().Results.Single(), output);
+    }
+
+    private static (CSharpParseOptions Parse, CSharpCompilation Compilation) Build(
+        string source, bool interceptors, bool release)
     {
         var features = new Dictionary<string, string>();
         if (interceptors)
@@ -72,23 +100,27 @@ internal static class GeneratorTestHarness
             features["InterceptorsPreviewNamespaces"] = "DSoftStudio.Mediator.Generated";
         }
 
-        var parseOptions = CSharpParseOptions.Default
+        var parse = CSharpParseOptions.Default
             .WithLanguageVersion(LanguageVersion.Preview)
             .WithFeatures(features);
 
         var compilation = CSharpCompilation.Create(
             "TestAssembly",
-            [CSharpSyntaxTree.ParseText(source, parseOptions, path: "Test.cs")],
+            [CSharpSyntaxTree.ParseText(source, parse, path: "Test.cs")],
             References,
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+            new CSharpCompilationOptions(
+                OutputKind.DynamicallyLinkedLibrary,
+                // Release flips OptimizationLevel — the interceptor generators emit slightly different code
+                // (e.g. [MethodImpl(AggressiveInlining)]) on the Release path, exercised by passing release: true.
+                optimizationLevel: release ? OptimizationLevel.Release : OptimizationLevel.Debug));
 
-        GeneratorDriver driver = CSharpGeneratorDriver.Create(
-            generators: new IIncrementalGenerator[] { new TGenerator() }.Select(GeneratorExtensions.AsSourceGenerator),
-            parseOptions: parseOptions);
-
-        driver = driver.RunGeneratorsAndUpdateCompilation(compilation, out var output, out _);
-        return (driver.GetRunResult().Results.Single(), output);
+        return (parse, compilation);
     }
+
+    private static GeneratorDriver DriverFor(IIncrementalGenerator generator, CSharpParseOptions parse)
+        => CSharpGeneratorDriver.Create(
+            generators: new[] { generator.AsSourceGenerator() },
+            parseOptions: parse);
 
     /// <summary>All documents this generator emitted, concatenated — for substring assertions.</summary>
     public static string AllSource(this GeneratorRunResult result)
