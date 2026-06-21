@@ -32,6 +32,14 @@ description: "All notable changes to DSoftStudio.Mediator."
 - **DSOFT006 location widened** to the full type header so the IDE offers the ConvertToCqrs lightbulb when hovering the offending `IRequest<T>` base type, not just the type name (Info severity unchanged).
 - **Dependency bumps** — `Microsoft.Extensions.DependencyInjection.Abstractions` → 10.0.9 and `Microsoft.Bcl.AsyncInterfaces` → 10.0.9 (core/abstractions, .NET 10 servicing band); companion `OpenTelemetry` → 1.16.0; companion `Microsoft.Extensions.Caching.Hybrid` → 10.7.0. `Microsoft.CodeAnalysis.CSharp` is intentionally kept at 4.12.0 — the generator's referenced Roslyn version is the minimum compiler-host a consumer needs, so raising it would break consumers on older SDK/VS.
 
+### Removed
+
+- **`PipelineBuilder` and `RequestDispatch<,>.Pipeline` / `TryInitialize`** — vestigial dead dispatch state. The generator populated a per-request-type pipeline delegate that nothing ever invoked: `Send`, the interceptors and `Send(object)` all dispatch through `RequestDispatch.HasPipelineChain` + the ThreadStatic `PipelineChainCache` / `HandlerCache` (the stream side still uses `StreamDispatch.Pipeline`; the request side left it vestigial). `RequestDispatch<,>` is `[EditorBrowsable(Never)]` infrastructure, and `PipelineBuilder` was public but only ever intended for generated code that no longer uses it. Removal saves one delegate allocation per request type at startup with no behavior or hot-path change. (If you referenced `PipelineBuilder.Build<,>()` directly — unsupported — resolve `PipelineChainHandler<,>` from DI instead.)
+
+### Fixed
+
+- **Open-generic dispatch call sites no longer break the build** — the `Send` / `Publish` / `CreateStream` interceptor generators attempted to intercept call sites whose type arguments are open type parameters (e.g. a generic dispatch wrapper `Dispatch<TReq, TResp>(req) => sender.Send<TReq, TResp>(req)`) and emitted code referencing the unbound parameters → `CS0246`. A single `[InterceptsLocation]` cannot stand in for a call site instantiated across many type arguments, so such sites are now skipped and dispatch through the runtime `Mediator.Send` / `Publish` / `CreateStream`.
+
 ### Security
 
 - **Scriban 7.0.3 → 7.2.4** in the benchmarks project (dev-only, not shipped) — resolves [GHSA-24c8-4792-22hx](https://github.com/advisories/GHSA-24c8-4792-22hx) (high severity).
