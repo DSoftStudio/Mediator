@@ -11,7 +11,7 @@ namespace DSoftStudio.Mediator.OpenTelemetry;
 /// Decorator that wraps an <see cref="INotificationPublisher"/> with distributed tracing
 /// and metrics. Creates a parent span for the publish operation and per-handler child spans.
 /// </summary>
-internal sealed class InstrumentedNotificationPublisher(INotificationPublisher inner, MediatorInstrumentationOptions options) : INotificationPublisher
+internal sealed class InstrumentedNotificationPublisher(INotificationPublisher inner, MediatorInstrumentationOptions options, MediatorMetrics? metrics) : INotificationPublisher
 {
     private static readonly ActivitySource Source = MediatorInstrumentation.ActivitySource;
     private static readonly ConcurrentDictionary<Type, string> HandlerSpanNames = new();
@@ -23,7 +23,7 @@ internal sealed class InstrumentedNotificationPublisher(INotificationPublisher i
         where TNotification : INotification
     {
         bool tracingActive = options.EnableTracing && Source.HasListeners();
-        bool metricsActive = options.EnableMetrics && MediatorInstrumentation.RequestDuration.Enabled;
+        bool metricsActive = options.EnableMetrics && metrics is not null && metrics.RequestDuration.Enabled;
 
         if (!tracingActive && !metricsActive)
         {
@@ -65,7 +65,7 @@ internal sealed class InstrumentedNotificationPublisher(INotificationPublisher i
                 { "mediator.request.kind", MediatorNotificationMetadata<TNotification>.RequestKind }
             };
 
-            MediatorInstrumentation.RequestActive.Add(1, metricTags);
+            metrics!.RequestActive.Add(1, metricTags);
             startTimestamp = Stopwatch.GetTimestamp();
         }
 
@@ -96,7 +96,7 @@ internal sealed class InstrumentedNotificationPublisher(INotificationPublisher i
                     { "error.type", ex.GetType().FullName! }
                 };
 
-                MediatorInstrumentation.RequestErrors.Add(1, errorTags);
+                metrics!.RequestErrors.Add(1, errorTags);
             }
 
             throw;
@@ -108,8 +108,8 @@ internal sealed class InstrumentedNotificationPublisher(INotificationPublisher i
             if (metricsActive)
             {
                 var elapsed = Stopwatch.GetElapsedTime(startTimestamp);
-                MediatorInstrumentation.RequestDuration.Record(elapsed.TotalSeconds, metricTags);
-                MediatorInstrumentation.RequestActive.Add(-1, metricTags);
+                metrics!.RequestDuration.Record(elapsed.TotalSeconds, metricTags);
+                metrics!.RequestActive.Add(-1, metricTags);
             }
         }
     }

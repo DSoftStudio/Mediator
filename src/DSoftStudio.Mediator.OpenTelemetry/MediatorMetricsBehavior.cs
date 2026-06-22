@@ -9,7 +9,7 @@ namespace DSoftStudio.Mediator.OpenTelemetry;
 /// <summary>
 /// Pipeline behavior that records metrics (duration, active count, errors) for mediator requests.
 /// </summary>
-public sealed class MediatorMetricsBehavior<TRequest, TResponse>(MediatorInstrumentationOptions options) : IPipelineBehavior<TRequest, TResponse>
+public sealed class MediatorMetricsBehavior<TRequest, TResponse>(MediatorInstrumentationOptions options, MediatorMetrics metrics) : IPipelineBehavior<TRequest, TResponse>
     where TRequest : IRequest<TResponse>
 {
 
@@ -18,7 +18,7 @@ public sealed class MediatorMetricsBehavior<TRequest, TResponse>(MediatorInstrum
         IRequestHandler<TRequest, TResponse> next,
         CancellationToken cancellationToken)
     {
-        if (!options.EnableMetrics || !MediatorInstrumentation.RequestDuration.Enabled)
+        if (!options.EnableMetrics || !metrics.RequestDuration.Enabled)
             return await next.Handle(request, cancellationToken);
 
         if (options.Filter is not null && !options.Filter(typeof(TRequest)))
@@ -30,7 +30,7 @@ public sealed class MediatorMetricsBehavior<TRequest, TResponse>(MediatorInstrum
             { "mediator.request.kind", MediatorTelemetryMetadata<TRequest, TResponse>.RequestKind }
         };
 
-        MediatorInstrumentation.RequestActive.Add(1, tags);
+        metrics.RequestActive.Add(1, tags);
         var startTimestamp = Stopwatch.GetTimestamp();
 
         try
@@ -46,14 +46,14 @@ public sealed class MediatorMetricsBehavior<TRequest, TResponse>(MediatorInstrum
                 { "error.type", ex.GetType().FullName! }
             };
 
-            MediatorInstrumentation.RequestErrors.Add(1, errorTags);
+            metrics.RequestErrors.Add(1, errorTags);
             throw;
         }
         finally
         {
             var elapsed = Stopwatch.GetElapsedTime(startTimestamp);
-            MediatorInstrumentation.RequestDuration.Record(elapsed.TotalSeconds, tags);
-            MediatorInstrumentation.RequestActive.Add(-1, tags);
+            metrics.RequestDuration.Record(elapsed.TotalSeconds, tags);
+            metrics.RequestActive.Add(-1, tags);
         }
     }
 }

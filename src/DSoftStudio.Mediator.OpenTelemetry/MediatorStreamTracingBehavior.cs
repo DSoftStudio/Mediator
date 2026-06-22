@@ -52,16 +52,35 @@ public sealed class MediatorStreamTracingBehavior<TRequest, TResponse>(MediatorI
         }
 
         bool success = false;
+        // Per-item production metrics — measured here (the span already wraps the full enumeration) so an imported
+        // trace can populate the profiler's STREAM TELEMETRY *production* block (items / TTFI / throughput), not
+        // just lifecycle + duration. Stopwatch.GetTimestamp() math keeps this allocation-free and TFM-agnostic.
+        long itemCount = 0;
+        long startTimestamp = Stopwatch.GetTimestamp();
+        long firstItemTimestamp = 0;
         try
         {
             await foreach (var item in next.Handle(request, cancellationToken).WithCancellation(cancellationToken))
             {
+                if (itemCount == 0)
+                    firstItemTimestamp = Stopwatch.GetTimestamp();
+                itemCount++;
                 yield return item;
             }
             success = true;
         }
         finally
         {
+            if (activity is { IsAllDataRequested: true })
+            {
+                double freq            = Stopwatch.Frequency;
+                double elapsedMs       = (Stopwatch.GetTimestamp() - startTimestamp) * 1000.0 / freq;
+                double firstItemMs     = firstItemTimestamp > 0 ? (firstItemTimestamp - startTimestamp) * 1000.0 / freq : 0.0;
+                double throughputPerSec = elapsedMs > 0 ? itemCount * 1000.0 / elapsedMs : 0.0;
+                activity.SetTag("mediator.stream.item_count", itemCount);
+                activity.SetTag("mediator.stream.first_item_ms", firstItemMs);
+                activity.SetTag("mediator.stream.throughput_per_sec", throughputPerSec);
+            }
             activity?.SetStatus(success ? ActivityStatusCode.Ok : ActivityStatusCode.Error);
         }
     }

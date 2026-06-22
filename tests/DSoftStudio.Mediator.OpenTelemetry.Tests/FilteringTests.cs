@@ -12,6 +12,7 @@ namespace DSoftStudio.Mediator.OpenTelemetry.Tests;
 public class FilteringTests : IDisposable
 {
     private readonly MeterListener _meterListener;
+    private readonly TestMetrics _metrics = new();
     private readonly List<(string Name, double Value, KeyValuePair<string, object?>[] Tags)> _measurements = [];
     private readonly List<(string Name, long Value, KeyValuePair<string, object?>[] Tags)> _counterMeasurements = [];
 
@@ -39,6 +40,7 @@ public class FilteringTests : IDisposable
     public void Dispose()
     {
         _meterListener.Dispose();
+        _metrics.Dispose();
         GC.SuppressFinalize(this);
     }
 
@@ -82,7 +84,7 @@ public class FilteringTests : IDisposable
         {
             Filter = type => !type.Name.StartsWith("HealthCheck")
         };
-        var behavior = new MediatorMetricsBehavior<HealthCheckQuery, string>(options);
+        var behavior = new MediatorMetricsBehavior<HealthCheckQuery, string>(options, _metrics.Metrics);
         var handler = new HealthCheckHandler();
 
         await behavior.Handle(new HealthCheckQuery(), handler, TestContext.Current.CancellationToken);
@@ -116,7 +118,7 @@ public class FilteringTests : IDisposable
         {
             Filter = type => !type.Name.StartsWith("HealthCheck")
         };
-        var behavior = new MediatorStreamMetricsBehavior<HealthCheckStreamRequest, int>(options);
+        var behavior = new MediatorStreamMetricsBehavior<HealthCheckStreamRequest, int>(options, _metrics.Metrics);
         var handler = new HealthCheckStreamHandler();
 
         await foreach (var _ in behavior.Handle(new HealthCheckStreamRequest(), handler, TestContext.Current.CancellationToken))
@@ -137,7 +139,7 @@ public class FilteringTests : IDisposable
             Filter = type => !type.Name.StartsWith("HealthCheck")
         };
         var inner = new SequentialNotificationPublisher();
-        var publisher = new InstrumentedNotificationPublisher(inner, options);
+        var publisher = new InstrumentedNotificationPublisher(inner, options, _metrics.Metrics);
 
         var handlers = new INotificationHandler<HealthCheckNotification>[]
         {

@@ -10,6 +10,7 @@ namespace DSoftStudio.Mediator.OpenTelemetry.Tests;
 public class StreamMetricsBehaviorTests : IDisposable
 {
     private readonly MeterListener _listener;
+    private readonly TestMetrics _metrics = new();
     private readonly List<(string Name, double Value, KeyValuePair<string, object?>[] Tags)> _measurements = [];
     private readonly List<(string Name, long Value, KeyValuePair<string, object?>[] Tags)> _counterMeasurements = [];
 
@@ -37,6 +38,7 @@ public class StreamMetricsBehaviorTests : IDisposable
     public void Dispose()
     {
         _listener.Dispose();
+        _metrics.Dispose();
         GC.SuppressFinalize(this);
     }
 
@@ -44,7 +46,7 @@ public class StreamMetricsBehaviorTests : IDisposable
     public async Task Records_duration_covering_full_enumeration()
     {
         var options = new MediatorInstrumentationOptions();
-        var behavior = new MediatorStreamMetricsBehavior<TestStreamRequest, int>(options);
+        var behavior = new MediatorStreamMetricsBehavior<TestStreamRequest, int>(options, _metrics.Metrics);
         var handler = new TestStreamHandler();
 
         await foreach (var _ in behavior.Handle(new TestStreamRequest(3), handler, TestContext.Current.CancellationToken))
@@ -65,7 +67,7 @@ public class StreamMetricsBehaviorTests : IDisposable
     public async Task Records_active_count_for_stream()
     {
         var options = new MediatorInstrumentationOptions();
-        var behavior = new MediatorStreamMetricsBehavior<TestStreamRequest, int>(options);
+        var behavior = new MediatorStreamMetricsBehavior<TestStreamRequest, int>(options, _metrics.Metrics);
         var handler = new TestStreamHandler();
 
         await foreach (var _ in behavior.Handle(new TestStreamRequest(1), handler, TestContext.Current.CancellationToken))
@@ -83,7 +85,7 @@ public class StreamMetricsBehaviorTests : IDisposable
     public async Task Records_duration_even_on_stream_error()
     {
         var options = new MediatorInstrumentationOptions();
-        var behavior = new MediatorStreamMetricsBehavior<FailingStreamRequest, int>(options);
+        var behavior = new MediatorStreamMetricsBehavior<FailingStreamRequest, int>(options, _metrics.Metrics);
         var handler = new FailingStreamHandler();
 
         await Should.ThrowAsync<InvalidOperationException>(async () =>
@@ -104,7 +106,7 @@ public class StreamMetricsBehaviorTests : IDisposable
     public async Task No_metrics_when_disabled()
     {
         var options = new MediatorInstrumentationOptions { EnableMetrics = false };
-        var behavior = new MediatorStreamMetricsBehavior<TestStreamRequest, int>(options);
+        var behavior = new MediatorStreamMetricsBehavior<TestStreamRequest, int>(options, _metrics.Metrics);
         var handler = new TestStreamHandler();
 
         await foreach (var _ in behavior.Handle(new TestStreamRequest(1), handler, TestContext.Current.CancellationToken))

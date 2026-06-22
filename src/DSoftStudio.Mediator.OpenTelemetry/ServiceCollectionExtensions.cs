@@ -35,6 +35,12 @@ public static class OpenTelemetryServiceCollectionExtensions
 
         if (options.EnableMetrics)
         {
+            // The instruments are created from the DI IMeterFactory (Microsoft's prescribed pattern for a
+            // DI-aware library — a static Meter cannot be isolated per service collection). AddMetrics() is
+            // idempotent and registers the default IMeterFactory when the host has not already done so.
+            services.AddMetrics();
+            services.TryAddSingleton<MediatorMetrics>();
+
             services.AddTransient(typeof(IPipelineBehavior<,>), typeof(MediatorMetricsBehavior<,>));
             services.AddTransient(typeof(IStreamPipelineBehavior<,>), typeof(MediatorStreamMetricsBehavior<,>));
         }
@@ -50,7 +56,11 @@ public static class OpenTelemetryServiceCollectionExtensions
             services.AddSingleton<INotificationPublisher>(sp =>
             {
                 var inner = ResolveInnerPublisher(sp, existingDescriptor);
-                return new InstrumentedNotificationPublisher(inner, sp.GetRequiredService<MediatorInstrumentationOptions>());
+                // MediatorMetrics is only registered when metrics are enabled — null here means tracing-only.
+                return new InstrumentedNotificationPublisher(
+                    inner,
+                    sp.GetRequiredService<MediatorInstrumentationOptions>(),
+                    sp.GetService<MediatorMetrics>());
             });
         }
 

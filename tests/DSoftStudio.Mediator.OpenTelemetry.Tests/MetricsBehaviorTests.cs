@@ -11,6 +11,7 @@ namespace DSoftStudio.Mediator.OpenTelemetry.Tests;
 public class MetricsBehaviorTests : IDisposable
 {
     private readonly MeterListener _listener;
+    private readonly TestMetrics _metrics = new();
     private readonly List<(string Name, double Value, KeyValuePair<string, object?>[] Tags)> _measurements = [];
     private readonly List<(string Name, long Value, KeyValuePair<string, object?>[] Tags)> _counterMeasurements = [];
 
@@ -38,6 +39,7 @@ public class MetricsBehaviorTests : IDisposable
     public void Dispose()
     {
         _listener.Dispose();
+        _metrics.Dispose();
         GC.SuppressFinalize(this);
     }
 
@@ -45,7 +47,7 @@ public class MetricsBehaviorTests : IDisposable
     public async Task Records_duration_on_success()
     {
         var options = new MediatorInstrumentationOptions();
-        var behavior = new MediatorMetricsBehavior<TestCommand, string>(options);
+        var behavior = new MediatorMetricsBehavior<TestCommand, string>(options, _metrics.Metrics);
         var handler = new TestCommandHandler();
 
         await behavior.Handle(new TestCommand("test"), handler, TestContext.Current.CancellationToken);
@@ -64,7 +66,7 @@ public class MetricsBehaviorTests : IDisposable
     public async Task Records_active_count_increment_and_decrement()
     {
         var options = new MediatorInstrumentationOptions();
-        var behavior = new MediatorMetricsBehavior<TestCommand, string>(options);
+        var behavior = new MediatorMetricsBehavior<TestCommand, string>(options, _metrics.Metrics);
         var handler = new TestCommandHandler();
 
         await behavior.Handle(new TestCommand("test"), handler, TestContext.Current.CancellationToken);
@@ -80,7 +82,7 @@ public class MetricsBehaviorTests : IDisposable
     public async Task Records_error_count_on_exception()
     {
         var options = new MediatorInstrumentationOptions();
-        var behavior = new MediatorMetricsBehavior<FailingCommand, string>(options);
+        var behavior = new MediatorMetricsBehavior<FailingCommand, string>(options, _metrics.Metrics);
         var handler = new FailingCommandHandler();
 
         await Should.ThrowAsync<InvalidOperationException>(async () =>
@@ -97,7 +99,7 @@ public class MetricsBehaviorTests : IDisposable
     public async Task No_metrics_when_disabled()
     {
         var options = new MediatorInstrumentationOptions { EnableMetrics = false };
-        var behavior = new MediatorMetricsBehavior<TestCommand, string>(options);
+        var behavior = new MediatorMetricsBehavior<TestCommand, string>(options, _metrics.Metrics);
         var handler = new TestCommandHandler();
 
         await behavior.Handle(new TestCommand("test"), handler, TestContext.Current.CancellationToken);
