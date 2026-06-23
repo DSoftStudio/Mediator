@@ -13,6 +13,10 @@ items:
     url: /mediator/pipeline-explorer/getting-started/quick-start.html
     group: Getting Started
 
+  - title: OpenTelemetry bridge
+    url: /mediator/pipeline-explorer/opentelemetry-bridge.html
+    group: Integrations
+
   - title: Troubleshooting hub
     url: /mediator/pipeline-explorer/troubleshooting/
     group: Troubleshooting
