@@ -13,13 +13,24 @@ namespace OpenTelemetry.Trace
     public static class MediatorTracerProviderBuilderExtensions
     {
         /// <summary>
-        /// Subscribes to the mediator <see cref="System.Diagnostics.ActivitySource"/>.
-        /// Convenience method — equivalent to <c>AddSource("DSoftStudio.Mediator")</c>.
+        /// Subscribes to the mediator <see cref="System.Diagnostics.ActivitySource"/> and installs the
+        /// database span enricher.
         /// </summary>
+        /// <remarks>
+        /// In addition to <c>AddSource("DSoftStudio.Mediator")</c>, this registers
+        /// <see cref="DatabaseSpanEnrichmentProcessor"/> so that any database client span flowing through
+        /// the same provider is automatically tagged with a redaction-safe <c>db.operation.name</c> /
+        /// <c>db.sql.table</c> when the underlying instrumentation only emitted a raw <c>db.statement</c>.
+        /// That lets the Pipeline Explorer show each query (e.g. a <c>SELECT</c> vs an <c>INSERT</c>) as a
+        /// distinct dependency instead of one aggregated row — with zero configuration. Call this before
+        /// the exporter so the enrichment is applied prior to export.
+        /// </remarks>
         public static TracerProviderBuilder AddMediatorInstrumentation(this TracerProviderBuilder builder)
         {
             ArgumentNullException.ThrowIfNull(builder);
-            return builder.AddSource(MediatorInstrumentation.SourceName);
+            return builder
+                .AddSource(MediatorInstrumentation.SourceName)
+                .AddProcessor(new DatabaseSpanEnrichmentProcessor());
         }
     }
 }

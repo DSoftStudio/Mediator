@@ -11,7 +11,7 @@ namespace DSoftStudio.Mediator.OpenTelemetry;
 /// Stream pipeline behavior that records metrics for streamed requests.
 /// Duration covers the entire enumeration lifetime.
 /// </summary>
-public sealed class MediatorStreamMetricsBehavior<TRequest, TResponse>(MediatorInstrumentationOptions options) : IStreamPipelineBehavior<TRequest, TResponse>
+public sealed class MediatorStreamMetricsBehavior<TRequest, TResponse>(MediatorInstrumentationOptions options, MediatorMetrics metrics) : IStreamPipelineBehavior<TRequest, TResponse>
     where TRequest : IStreamRequest<TResponse>
 {
 
@@ -20,7 +20,7 @@ public sealed class MediatorStreamMetricsBehavior<TRequest, TResponse>(MediatorI
         IStreamRequestHandler<TRequest, TResponse> next,
         CancellationToken cancellationToken)
     {
-        if (!options.EnableMetrics || !MediatorInstrumentation.RequestDuration.Enabled)
+        if (!options.EnableMetrics || !metrics.RequestDuration.Enabled)
             return next.Handle(request, cancellationToken);
 
         if (options.Filter is not null && !options.Filter(typeof(TRequest)))
@@ -29,7 +29,7 @@ public sealed class MediatorStreamMetricsBehavior<TRequest, TResponse>(MediatorI
         return Instrumented(request, next, cancellationToken);
     }
 
-    private static async IAsyncEnumerable<TResponse> Instrumented(
+    private async IAsyncEnumerable<TResponse> Instrumented(
         TRequest request,
         IStreamRequestHandler<TRequest, TResponse> next,
         [EnumeratorCancellation] CancellationToken cancellationToken)
@@ -40,7 +40,7 @@ public sealed class MediatorStreamMetricsBehavior<TRequest, TResponse>(MediatorI
             { "mediator.request.kind", MediatorStreamMetadata<TRequest, TResponse>.RequestKind }
         };
 
-        MediatorInstrumentation.RequestActive.Add(1, tags);
+        metrics.RequestActive.Add(1, tags);
         var startTimestamp = Stopwatch.GetTimestamp();
 
         try
@@ -53,8 +53,8 @@ public sealed class MediatorStreamMetricsBehavior<TRequest, TResponse>(MediatorI
         finally
         {
             var elapsed = Stopwatch.GetElapsedTime(startTimestamp);
-            MediatorInstrumentation.RequestDuration.Record(elapsed.TotalSeconds, tags);
-            MediatorInstrumentation.RequestActive.Add(-1, tags);
+            metrics.RequestDuration.Record(elapsed.TotalSeconds, tags);
+            metrics.RequestActive.Add(-1, tags);
         }
     }
 }

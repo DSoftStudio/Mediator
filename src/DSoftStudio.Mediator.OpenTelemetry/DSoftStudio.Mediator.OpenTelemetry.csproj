@@ -9,7 +9,7 @@
 
 		<!-- NuGet -->
 		<PackageId>DSoftStudio.Mediator.OpenTelemetry</PackageId>
-		<Version>1.1.0-rc.1</Version>
+		<Version>1.1.0-rc.2</Version>
 
 		<Authors>DSoftStudio</Authors>
 		<Company>DSoftStudio</Company>
@@ -66,6 +66,9 @@
 
 	<ItemGroup>
 		<PackageReference Include="OpenTelemetry" Version="1.16.0" />
+		<!-- IMeterFactory + AddMetrics(): create metric instruments from DI rather than a static Meter
+		     (Microsoft's prescribed pattern for a DI-aware instrumentation library). -->
+		<PackageReference Include="Microsoft.Extensions.Diagnostics" Version="9.0.0" />
 	</ItemGroup>
 
 	<ItemGroup>

@@ -17,7 +17,7 @@ description: "Design of the OpenTelemetry companion package: automatic distribut
 
 ## Status
 
-**Released in v1.0.0**
+**Released in v1.0.0** — amended in v1.1.0-rc.2 (see [Amendment](#amendment--v110-rc2-database-enrichment--factory-based-metrics) below).
 
 ## Context
 
@@ -537,9 +537,36 @@ added if there is demand, but the default is full-enumeration spans.
 
 ---
 
+## Amendment — v1.1.0-rc.2 (database enrichment + factory-based metrics)
+
+Three capabilities were added after the original release. All are additive: `AddMediatorInstrumentation()` is unchanged at the call site, so existing consumers get them with no code change.
+
+### A1. Automatic database-span enrichment
+
+**Decision.** `AddMediatorInstrumentation()` on the `TracerProviderBuilder` now also registers a `BaseProcessor<Activity>` (`DatabaseSpanEnrichmentProcessor`). For any database client span (one carrying `db.system`) flowing through the same provider, it derives a redaction-safe `db.operation.name`, `db.sql.table` and `db.stored_procedure.name` from `db.statement` / `db.query.text` — but only when the underlying driver emitted just the raw statement (e.g. an older Npgsql).
+
+**Why.** Without those structured attributes, every query on a connection collapses into one `"{system} → {host}"` dependency in the Pipeline Explorer flame. Parsing happens **in-process** — where the application owns its own SQL — via `SqlStatementParser`, and only the verb plus a single bare identifier are surfaced; the raw statement, parameters and row values are never copied onto the span. This lets the trace consumer (the Pipeline Explorer importer) keep its "never read `db.statement`" boundary while still attributing time per operation (`SELECT` vs `INSERT` vs a stored procedure by name).
+
+**Properties.** Strictly additive — an attribute already supplied by native instrumentation is never overwritten. Gated on a cheap `db.system` check, so non-DB spans are untouched. AOT/trim-safe (no reflection). New files: `DatabaseSpanEnrichmentProcessor.cs`, `SqlStatementParser.cs`.
+
+### A2. Metrics created from `IMeterFactory` (replaces §3.2's static `Meter`)
+
+**Decision.** The three instruments (§3.2) are now created from the DI `IMeterFactory` via a singleton `MediatorMetrics`, registered by `AddMediatorInstrumentation()` — which also calls `services.AddMetrics()` so the factory is present even outside a Generic Host. The meter name is unchanged (`"DSoftStudio.Mediator"`), so `AddMeter("DSoftStudio.Mediator")` still subscribes. The `ActivitySource` stays static + named (the .NET convention — there is no per-DI ActivitySource factory).
+
+**Why.** Microsoft prescribes `IMeterFactory` for DI-aware libraries; a static `Meter` is an anti-pattern because it cannot be isolated per service collection, which cross-contaminates parallel tests and multiple hosts in one process. Adds a `Microsoft.Extensions.Diagnostics` package reference for `AddMetrics()`. New file: `MediatorMetrics.cs`.
+
+### A3. Histogram bucket advice
+
+**Decision.** `mediator.request.duration` carries explicit sub-second `InstrumentAdvice<double>` bucket boundaries (`0.0005 … 5 s`).
+
+**Why.** The OpenTelemetry default histogram buckets (`[0, 5, 10, 25, …] s`) collapse every sub-5-second request into the first bucket, making p95/p99 meaningless for millisecond-scale mediator requests. The advice is honoured by the OpenTelemetry .NET SDK (≥ 1.10) as the default boundaries.
+
+---
+
 ## Document History
 
 | Date       | Version | Changes |
 |------------|---------|---------|
 | —          | Draft   | Initial ADR with instrumentation design |
 | 2026-03-15 | v1.0.0  | Released as DSoftStudio.Mediator.OpenTelemetry companion package |
+| 2026-06-22 | v1.1.0-rc.2 | Amendment: automatic database-span enrichment, `IMeterFactory`-based metrics, sub-second histogram bucket advice |

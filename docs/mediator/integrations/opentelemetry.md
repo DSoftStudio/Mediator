@@ -47,7 +47,8 @@ builder.Services.AddOpenTelemetry()
 | Signal | Details |
 |---|---|
 | **Tracing** | One span per `Send()`, `Publish()`, `CreateStream()` with CQRS-aware naming (`CreateUser command`, `GetUsers query`). Per-handler child spans for notifications. |
-| **Metrics** | `mediator.request.duration` (histogram), `mediator.request.active` (up-down counter), `mediator.request.errors` (counter with `error.type` tag). |
+| **Metrics** | `mediator.request.duration` (histogram, **seconds**, with sub-second bucket boundaries), `mediator.request.active` (up-down counter), `mediator.request.errors` (counter with `error.type` tag). Instruments are created from the DI `IMeterFactory`. |
+| **Database enrichment** | Calling `AddMediatorInstrumentation()` on the `TracerProviderBuilder` also tags database spans with a redaction-safe `db.operation.name` / `db.sql.table` / `db.stored_procedure.name`, so each query (`SELECT`, `INSERT`, `CALL`…) is a distinct dependency instead of one aggregated row. No configuration. |
 | **Zero-cost when unused** | `HasListeners()` short-circuit adds ~1 ns when no exporter is configured. |
 
 ## Configuration

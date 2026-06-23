@@ -12,6 +12,7 @@ namespace DSoftStudio.Mediator.OpenTelemetry.Tests;
 public class NotificationPublisherTests : IDisposable
 {
     private readonly MeterListener _meterListener;
+    private readonly TestMetrics _metrics = new();
     private readonly List<(string Name, double Value, KeyValuePair<string, object?>[] Tags)> _measurements = [];
     private readonly List<(string Name, long Value, KeyValuePair<string, object?>[] Tags)> _counterMeasurements = [];
 
@@ -39,6 +40,7 @@ public class NotificationPublisherTests : IDisposable
     public void Dispose()
     {
         _meterListener.Dispose();
+        _metrics.Dispose();
         GC.SuppressFinalize(this);
     }
 
@@ -48,7 +50,7 @@ public class NotificationPublisherTests : IDisposable
         using var collector = new ActivityCollector();
         var options = new MediatorInstrumentationOptions();
         var inner = new SequentialNotificationPublisher();
-        var publisher = new InstrumentedNotificationPublisher(inner, options);
+        var publisher = new InstrumentedNotificationPublisher(inner, options, _metrics.Metrics);
 
         var handler1 = new TestNotificationHandler1();
         var handler2 = new TestNotificationHandler2();
@@ -87,7 +89,7 @@ public class NotificationPublisherTests : IDisposable
         using var collector = new ActivityCollector();
         var options = new MediatorInstrumentationOptions();
         var inner = new SequentialNotificationPublisher();
-        var publisher = new InstrumentedNotificationPublisher(inner, options);
+        var publisher = new InstrumentedNotificationPublisher(inner, options, _metrics.Metrics);
 
         var handlers = new INotificationHandler<TestNotification>[]
         {
@@ -112,7 +114,7 @@ public class NotificationPublisherTests : IDisposable
         using var collector = new ActivityCollector();
         var options = new MediatorInstrumentationOptions();
         var inner = new SequentialNotificationPublisher();
-        var publisher = new InstrumentedNotificationPublisher(inner, options);
+        var publisher = new InstrumentedNotificationPublisher(inner, options, _metrics.Metrics);
 
         var handlers = new INotificationHandler<TestNotification>[]
         {
@@ -137,7 +139,7 @@ public class NotificationPublisherTests : IDisposable
     {
         var options = new MediatorInstrumentationOptions();
         var inner = new SequentialNotificationPublisher();
-        var publisher = new InstrumentedNotificationPublisher(inner, options);
+        var publisher = new InstrumentedNotificationPublisher(inner, options, _metrics.Metrics);
 
         var handlers = new INotificationHandler<TestNotification>[]
         {
@@ -162,7 +164,7 @@ public class NotificationPublisherTests : IDisposable
     {
         var options = new MediatorInstrumentationOptions();
         var inner = new SequentialNotificationPublisher();
-        var publisher = new InstrumentedNotificationPublisher(inner, options);
+        var publisher = new InstrumentedNotificationPublisher(inner, options, _metrics.Metrics);
 
         var handlers = new INotificationHandler<TestNotification>[]
         {
@@ -186,7 +188,7 @@ public class NotificationPublisherTests : IDisposable
         using var noMetrics = new MeterListener(); // empty, won't subscribe
         var options = new MediatorInstrumentationOptions();
         var inner = new SequentialNotificationPublisher();
-        var publisher = new InstrumentedNotificationPublisher(inner, options);
+        var publisher = new InstrumentedNotificationPublisher(inner, options, _metrics.Metrics);
 
         var handler = new TestNotificationHandler1();
         var handlers = new INotificationHandler<TestNotification>[] { handler };
@@ -209,7 +211,7 @@ public class NotificationPublisherTests : IDisposable
             }
         };
         var inner = new SequentialNotificationPublisher();
-        var publisher = new InstrumentedNotificationPublisher(inner, options);
+        var publisher = new InstrumentedNotificationPublisher(inner, options, _metrics.Metrics);
 
         var handlers = new INotificationHandler<TestNotification>[]
         {
