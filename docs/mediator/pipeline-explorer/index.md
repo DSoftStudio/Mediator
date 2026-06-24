@@ -17,6 +17,8 @@ description: "Architectural and runtime observability for DSoftStudio.Mediator i
 
 **Architectural and runtime observability for DSoftStudio.Mediator** — directly inside Visual Studio Code and Visual Studio.
 
+**Find bottlenecks faster. Understand mediator pipelines in minutes. Turn traces into actionable insights.**
+
 Pipeline Explorer is a commercial IDE extension that scans your solution, discovers every `IRequestHandler`, `IStreamRequestHandler`, and `INotificationHandler`, and presents the full pipeline graph — handlers, behaviors, pre/post-processors, notification fan-out, nested mediator calls — alongside the runtime telemetry you need to make it fast.
 
 <figure class="screenshot">
@@ -67,7 +69,13 @@ Every notification you publish gets its own detail panel — a single view that 
 ## Get started
 
 - [Installation](getting-started/installation.md) — Install on Visual Studio Code and Visual Studio, activate your license.
-- [Quick Start](getting-started/quick-start.md) — Your first solution scan, profiling session, and source navigation in five minutes.
+- [Quick Start](getting-started/quick-start.md) — Your first solution scan, profiling session, and source navigation.
+
+---
+
+## Integrations
+
+- [OpenTelemetry bridge](opentelemetry-bridge.md) — feed the flame with enriched, source-mapped dependency spans (PostgreSQL, HTTP) from `DSoftStudio.Mediator.OpenTelemetry`, imported from a production trace or captured live.
 
 ---
 

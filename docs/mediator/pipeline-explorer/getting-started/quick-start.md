@@ -1,7 +1,7 @@
 ---
 layout: default
 title: "Quick Start - Pipeline Explorer"
-description: "Your first solution scan, profiling session, and source navigation in five minutes."
+description: "Your first solution scan, profiling session, and source navigation."
 ---
 <p align="center">
   <picture>
