@@ -134,6 +134,32 @@ public sealed class BuilderStreamBehavior : IStreamPipelineBehavior<BuilderStrea
     }
 }
 
+public sealed record BuilderObserverPing() : IRequest<string>;
+
+public sealed class BuilderObserverPingHandler : IRequestHandler<BuilderObserverPing, string>
+{
+    public ValueTask<string> Handle(BuilderObserverPing request, CancellationToken ct)
+        => new("observed-ok");
+}
+
+public sealed class BuilderDispatchObserver(List<string> log) : IMediatorDispatchObserver
+{
+    public bool IsActive => true;
+
+    public IMediatorDispatchScope? BeginDispatch<TRequest, TResponse>(TRequest request, IRequestHandler<TRequest, TResponse> handler)
+        where TRequest : IRequest<TResponse>
+    {
+        log.Add("begin");
+        return new Scope(log);
+    }
+
+    private sealed class Scope(List<string> log) : IMediatorDispatchScope
+    {
+        public void OnError(Exception exception) => log.Add("error");
+        public void Dispose() => log.Add("dispose");
+    }
+}
+
 public sealed record BuilderExcPing() : IRequest<string>;
 
 public sealed class BuilderExcPingHandler : IRequestHandler<BuilderExcPing, string>
@@ -228,6 +254,47 @@ public class MediatorBuilderIntegrationTests
 
         result.ShouldBe("preproc-ok");
         log.ShouldContain("pre");
+    }
+
+    /// <summary>
+    /// AddMediator(configure) + AddDispatchObserver&lt;T&gt; registers a dispatch observer that wraps the whole
+    /// dispatch — even a handler-only request with no behaviors/processors (the builder + generator force a
+    /// pipeline chain so the observer is not bypassed).
+    /// </summary>
+    [Fact]
+    public async Task AddMediator_WithDispatchObserverType_WrapsTheDispatch()
+    {
+        var log = new List<string>();
+        var services = new ServiceCollection();
+        services.AddSingleton(log);
+        services.AddMediator(builder => builder.AddDispatchObserver<BuilderDispatchObserver>());
+
+        await using var sp = services.BuildServiceProvider();
+        var sender = sp.GetRequiredService<ISender>();
+
+        var result = await sender.Send(new BuilderObserverPing(), TestContext.Current.CancellationToken);
+
+        result.ShouldBe("observed-ok");
+        log.ShouldBe(new[] { "begin", "dispose" });
+    }
+
+    /// <summary>
+    /// AddMediator(configure) + AddDispatchObserver(instance) registers a pre-configured observer instance.
+    /// </summary>
+    [Fact]
+    public async Task AddMediator_WithDispatchObserverInstance_WrapsTheDispatch()
+    {
+        var log = new List<string>();
+        var services = new ServiceCollection();
+        services.AddMediator(builder => builder.AddDispatchObserver(new BuilderDispatchObserver(log)));
+
+        await using var sp = services.BuildServiceProvider();
+        var sender = sp.GetRequiredService<ISender>();
+
+        var result = await sender.Send(new BuilderObserverPing(), TestContext.Current.CancellationToken);
+
+        result.ShouldBe("observed-ok");
+        log.ShouldBe(new[] { "begin", "dispose" });
     }
 
     /// <summary>

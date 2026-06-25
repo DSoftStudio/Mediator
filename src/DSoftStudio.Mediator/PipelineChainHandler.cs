@@ -36,14 +36,26 @@ namespace DSoftStudio.Mediator
         private readonly IRequestExceptionHandler<TRequest, TResponse>[] _exceptionHandlers;
         private readonly byte _pipelineMode; // 0=PassThrough, 1=BehaviorsOnly, 2=Full
         private readonly IRequestHandler<TRequest, TResponse> _prelinkedChain;
+        // Optional dispatch-observation port (Ports & Adapters). Null when no adapter is registered (the
+        // common case) → the hot path never touches it. See IMediatorDispatchObserver.
+        private readonly IMediatorDispatchObserver? _observer;
 
         public PipelineChainHandler(
             IEnumerable<IPipelineBehavior<TRequest, TResponse>> behaviors,
             IRequestHandler<TRequest, TResponse> handler,
             IEnumerable<IRequestPreProcessor<TRequest>> preProcessors,
             IEnumerable<IRequestPostProcessor<TRequest, TResponse>> postProcessors,
-            IEnumerable<IRequestExceptionHandler<TRequest, TResponse>> exceptionHandlers)
+            IEnumerable<IRequestExceptionHandler<TRequest, TResponse>> exceptionHandlers,
+            // Resolved by DI to an EMPTY sequence when no adapter is registered (non-OTel apps) — so the
+            // mediator carries no tracing dependency and _observer stays null.
+            IEnumerable<IMediatorDispatchObserver> observers)
         {
+            // First registered observer wins (one tracing adapter in practice). foreach+break avoids a LINQ
+            // allocation; constructed once per scope, not on the hot path.
+            IMediatorDispatchObserver? firstObserver = null;
+            foreach (var obs in observers) { firstObserver = obs; break; }
+            _observer = firstObserver;
+
             _behaviors = behaviors is IPipelineBehavior<TRequest, TResponse>[] bArray
                 ? bArray
                 : [.. behaviors];
@@ -92,12 +104,72 @@ namespace DSoftStudio.Mediator
         /// </summary>
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         public ValueTask<TResponse> Handle(TRequest request, CancellationToken cancellationToken)
+        {
+            // HOT path: the only cost the dispatch port adds to a non-OTel app is this single field-null check.
+            // `_observer` is null → straight to HandleCore, whose switch the JIT inlines right here (both this
+            // method and HandleCore are AggressiveInlining), so the dispatch stays as tight as the pre-observer
+            // version. The `IsActive` interface call lives in the COLD HandleWithObserver, never in this method.
+            return (_observer is null) ? HandleCore(request, cancellationToken) : HandleWithObserver(request, cancellationToken);
+        }
+
+        /// <summary>
+        /// Cold path taken only when a dispatch observer is registered. Splits idle (registered but nothing
+        /// listening → run the dispatch unobserved) from active (wrap the dispatch in an observation scope).
+        /// <para>
+        /// <see cref="MethodImplOptions.NoInlining"/> keeps the <c>IsActive</c> interface call and its branches
+        /// OUT of <see cref="Handle"/>, so the hot path stays a single null check that inlines cleanly into the
+        /// cached dispatch. (The measured difference vs. inlining IsActive into Handle is within benchmark
+        /// noise; keeping it out is simply the cheaper-to-reason-about, robust-across-JITs default.)
+        /// </para>
+        /// </summary>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private ValueTask<TResponse> HandleWithObserver(TRequest request, CancellationToken cancellationToken)
+            => _observer!.IsActive
+                ? HandleObserved(request, cancellationToken)
+                : HandleCore(request, cancellationToken);
+
+        /// <summary>
+        /// The single 3-way dispatch switch, shared by the hot path (<see cref="Handle"/> delegates here) and
+        /// the cold observer paths. <see cref="MethodImplOptions.AggressiveInlining"/> lets the JIT inline the
+        /// switch into <see cref="Handle"/>, so the delegation costs nothing on the non-observed fast path.
+        /// </summary>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        private ValueTask<TResponse> HandleCore(TRequest request, CancellationToken cancellationToken)
             => _pipelineMode switch
             {
                 0 => _handler.Handle(request, cancellationToken),
                 1 => HandleBehaviorsOnly(request, cancellationToken),
                 _ => HandleFull(request, cancellationToken),
             };
+
+        /// <summary>
+        /// Opens the dispatch-observation scope (e.g. an OpenTelemetry span) around the ENTIRE pipeline so
+        /// pre-/post-processors — which run outside the behavior chain — nest under it and attribute to THIS
+        /// dispatch (concurrency-safe per-dispatch identity). Taken only when an adapter is active, so it
+        /// never touches the non-observed hot path.
+        /// </summary>
+        private async ValueTask<TResponse> HandleObserved(TRequest request, CancellationToken cancellationToken)
+        {
+            // scope may be null when the adapter declined this dispatch (filtered / sampled out) — the
+            // null-conditional calls below then no-op, so the dispatch runs exactly like the fast path.
+            // (IsActive was already checked in HandleWithObserver before we got here.)
+            var scope = _observer!.BeginDispatch<TRequest, TResponse>(request, _handler);
+            try
+            {
+                return await HandleCore(request, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                // Only exceptions that propagated past EVERY component (incl. exception handlers) reach here —
+                // i.e. the dispatch genuinely failed. `throw;` preserves the original stack.
+                scope?.OnError(ex);
+                throw;
+            }
+            finally
+            {
+                scope?.Dispose();
+            }
+        }
 
         /// <summary>
         /// Hot path for behaviors-only (no processors, no exception handlers).

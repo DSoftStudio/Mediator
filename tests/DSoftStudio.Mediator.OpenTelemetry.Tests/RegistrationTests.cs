@@ -11,17 +11,17 @@ namespace DSoftStudio.Mediator.OpenTelemetry.Tests;
 public class RegistrationTests
 {
     [Fact]
-    public void AddMediatorInstrumentation_registers_tracing_behaviors()
+    public void AddMediatorInstrumentation_registers_dispatch_tracing_observer()
     {
+        // The request span is opened through the core's dispatch-observation port (so it wraps pre-/post-
+        // processors, which a behavior cannot), NOT as a pipeline behavior.
         var services = new ServiceCollection();
         services.AddMediatorInstrumentation();
 
-        var pipelineBehaviors = services
-            .Where(s => s.ServiceType == typeof(IPipelineBehavior<,>))
-            .ToList();
+        var observer = services.SingleOrDefault(s => s.ServiceType == typeof(IMediatorDispatchObserver));
 
-        pipelineBehaviors.ShouldContain(s =>
-            s.ImplementationType == typeof(MediatorTracingBehavior<,>));
+        observer.ShouldNotBeNull();
+        observer!.ImplementationInstance.ShouldBeOfType<MediatorDispatchTracingObserver>();
     }
 
     [Fact]
@@ -108,8 +108,7 @@ public class RegistrationTests
             options.EnableTracing = false;
         });
 
-        services.ShouldNotContain(s =>
-            s.ImplementationType == typeof(MediatorTracingBehavior<,>));
+        services.ShouldNotContain(s => s.ServiceType == typeof(IMediatorDispatchObserver));
         services.ShouldNotContain(s =>
             s.ImplementationType == typeof(MediatorStreamTracingBehavior<,>));
     }
