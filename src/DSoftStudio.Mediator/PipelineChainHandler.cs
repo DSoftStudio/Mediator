@@ -105,11 +105,21 @@ namespace DSoftStudio.Mediator
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         public ValueTask<TResponse> Handle(TRequest request, CancellationToken cancellationToken)
         {
-            // HOT path: the only cost the dispatch port adds to a non-OTel app is this single field-null check.
-            // `_observer` is null → straight to HandleCore, whose switch the JIT inlines right here (both this
-            // method and HandleCore are AggressiveInlining), so the dispatch stays as tight as the pre-observer
-            // version. The `IsActive` interface call lives in the COLD HandleWithObserver, never in this method.
-            return (_observer is null) ? HandleCore(request, cancellationToken) : HandleWithObserver(request, cancellationToken);
+            // Peel the COLD observer path off first; the common (no-adapter) path is then a single predictable
+            // null-test followed by the 3-way switch laid out INLINE here — byte-for-byte the pre-observer hot
+            // path. Delegating the switch to a separate HandleCore() did NOT inline in practice: the JIT
+            // declined the AggressiveInlining hint and emitted a real call, adding ~2.3 ns to EVERY chain
+            // dispatch (measured back-to-back vs. the pre-observer build). So the switch lives directly in
+            // Handle; the observer paths reuse HandleCore, where a call is cold and irrelevant.
+            if (_observer is not null)
+                return HandleWithObserver(request, cancellationToken);
+
+            return _pipelineMode switch
+            {
+                0 => _handler.Handle(request, cancellationToken),
+                1 => HandleBehaviorsOnly(request, cancellationToken),
+                _ => HandleFull(request, cancellationToken),
+            };
         }
 
         /// <summary>
@@ -129,9 +139,9 @@ namespace DSoftStudio.Mediator
                 : HandleCore(request, cancellationToken);
 
         /// <summary>
-        /// The single 3-way dispatch switch, shared by the hot path (<see cref="Handle"/> delegates here) and
-        /// the cold observer paths. <see cref="MethodImplOptions.AggressiveInlining"/> lets the JIT inline the
-        /// switch into <see cref="Handle"/>, so the delegation costs nothing on the non-observed fast path.
+        /// The 3-way dispatch switch for the COLD observer paths only (<see cref="HandleWithObserver"/> and
+        /// <see cref="HandleObserved"/>). The hot path in <see cref="Handle"/> carries its own inline copy of
+        /// this switch — see the note there for why it is not delegated here.
         /// </summary>
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         private ValueTask<TResponse> HandleCore(TRequest request, CancellationToken cancellationToken)
