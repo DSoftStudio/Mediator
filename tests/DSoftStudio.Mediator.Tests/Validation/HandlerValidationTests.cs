@@ -40,6 +40,10 @@ public class HandlerValidationTests
         services.AddSingleton<Integration.IChaosRandom>(new Integration.ThreadSafeChaosRandom());
         services.AddSingleton(new Integration.ChaosConfig());
 
+        // Dependencies required by the auto-lifetime-detection test handlers (Lifetimes/)
+        services.AddSingleton<Lifetimes.AutoSingletonDep>();
+        services.AddScoped<Lifetimes.AutoScopedDep>();
+
         using var provider = services.BuildServiceProvider();
 
         // Act & Assert — should not throw

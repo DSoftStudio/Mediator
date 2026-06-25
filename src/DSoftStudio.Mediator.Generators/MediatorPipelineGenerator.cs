@@ -416,6 +416,7 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
 
         sb.AppendLine("        {");
 
+        sb.AppendLine("            global::DSoftStudio.Mediator.HandlerLifetimeOptimizer.Apply(services);");
         sb.AppendLine("            MediatorRegistry.RegisterPipelineChains(services);");
         sb.AppendLine("            global::DSoftStudio.Mediator.RequestObjectDispatch.Freeze();");
         sb.AppendLine("            return services;");
@@ -450,6 +451,7 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
         sb.AppendLine("            configure(builder);");
 
         // 4. Precompile pipelines (closes open generics, registers chains, freezes dispatch).
+        sb.AppendLine("            global::DSoftStudio.Mediator.HandlerLifetimeOptimizer.Apply(services);");
         sb.AppendLine("            MediatorRegistry.RegisterPipelineChains(services);");
         sb.AppendLine("            global::DSoftStudio.Mediator.RequestObjectDispatch.Freeze();");
         sb.AppendLine("            return services;");
