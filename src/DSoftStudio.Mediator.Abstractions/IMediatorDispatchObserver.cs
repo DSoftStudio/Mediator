@@ -6,7 +6,7 @@ using System;
 namespace DSoftStudio.Mediator.Abstractions;
 
 /// <summary>
-/// Optional observation port for the request-dispatch boundary (Ports &amp; Adapters).
+/// Optional observation port for the request-dispatch boundary (Ports & Adapters).
 /// <para>
 /// The mediator itself does NOT observe or trace — it merely EXPOSES the dispatch lifecycle so an external
 /// adapter (e.g. the OpenTelemetry bridge) can wrap the WHOLE pipeline: pre-processors, behaviors, handler
