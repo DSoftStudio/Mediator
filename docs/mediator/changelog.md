@@ -15,6 +15,35 @@ description: "All notable changes to DSoftStudio.Mediator."
 
 # Changelog
 
+## [1.3.0] — Unreleased (pre-release `1.3.0-rc.1`)
+
+> Companions: `OpenTelemetry` 1.1.0-rc.1 · `HybridCache` 1.0.9-rc.1 · `FluentValidation` 1.0.9-rc.1.
+> Soaking as a release candidate before promotion to the stable `1.3.0`.
+
+### Added
+
+- **`IPipelineHandlerTypeAccessor` (Abstractions)** — exposes the concrete request/stream handler type at the tail of the pipeline chain to an outermost pipeline behavior, without resolving or instantiating it. A behavior is open-generic and may serve many handlers; the correct one for a given request is only knowable by walking the chain it was handed as `next`. The internal chain adapters (`BehaviorHandlerAdapter`, `StreamBehaviorHandlerAdapter`) implement the interface; a behavior reads the terminal handler via `next is IPipelineHandlerTypeAccessor`. Enables tracing/diagnostics to tag the concrete handler.
+- **DSOFT008 — missing handler registration** — new compile-time diagnostic (Warning) that flags a parameterless `AddMediator()` when handlers exist in the compilation but nothing anywhere registers them (no builder overload, no `RegisterMediatorHandlers()`, no manual `AddTransient<IRequestHandler<,>>`). Detection is **compilation-wide** (reported from a `CompilationEndAction`), so splitting `AddMediator()` and the handler registration across different methods is not a false positive.
+- **OpenTelemetry: `mediator.handler.type` on request and stream spans** — the bridge now tags the concrete handler type on request-send and stream spans (it already did so for notification-handler spans), so an imported OTLP/Jaeger trace maps each span to its handler source and renders HTTP/DB child spans as dependencies under it. The handler type is read through the new `IPipelineHandlerTypeAccessor` — it is never resolved or instantiated.
+
+### Changed
+
+- **DSOFT007 converted to a `DiagnosticAnalyzer`** — runs after source generators, so it correctly sees the generated `RegisterMediatorHandlers()` / builder-overload registrations that the prior generator-based diagnostic could not (DSOFT007 was silently inert; DSOFT008 false-positived).
+- **DSOFT006 location widened** to the full type header so the IDE offers the ConvertToCqrs lightbulb when hovering the offending `IRequest<T>` base type, not just the type name (Info severity unchanged).
+- **Dependency bumps** — `Microsoft.Extensions.DependencyInjection.Abstractions` → 10.0.9 and `Microsoft.Bcl.AsyncInterfaces` → 10.0.9 (core/abstractions, .NET 10 servicing band); companion `OpenTelemetry` → 1.16.0; companion `Microsoft.Extensions.Caching.Hybrid` → 10.7.0. `Microsoft.CodeAnalysis.CSharp` is intentionally kept at 4.12.0 — the generator's referenced Roslyn version is the minimum compiler-host a consumer needs, so raising it would break consumers on older SDK/VS.
+
+### Removed
+
+- **`PipelineBuilder` and `RequestDispatch<,>.Pipeline` / `TryInitialize`** — vestigial dead dispatch state. The generator populated a per-request-type pipeline delegate that nothing ever invoked: `Send`, the interceptors and `Send(object)` all dispatch through `RequestDispatch.HasPipelineChain` + the ThreadStatic `PipelineChainCache` / `HandlerCache` (the stream side still uses `StreamDispatch.Pipeline`; the request side left it vestigial). `RequestDispatch<,>` is `[EditorBrowsable(Never)]` infrastructure, and `PipelineBuilder` was public but only ever intended for generated code that no longer uses it. Removal saves one delegate allocation per request type at startup with no behavior or hot-path change. (If you referenced `PipelineBuilder.Build<,>()` directly — unsupported — resolve `PipelineChainHandler<,>` from DI instead.)
+
+### Fixed
+
+- **Open-generic dispatch call sites no longer break the build** — the `Send` / `Publish` / `CreateStream` interceptor generators attempted to intercept call sites whose type arguments are open type parameters (e.g. a generic dispatch wrapper `Dispatch<TReq, TResp>(req) => sender.Send<TReq, TResp>(req)`) and emitted code referencing the unbound parameters → `CS0246`. A single `[InterceptsLocation]` cannot stand in for a call site instantiated across many type arguments, so such sites are now skipped and dispatch through the runtime `Mediator.Send` / `Publish` / `CreateStream`.
+
+### Security
+
+- **Scriban 7.0.3 → 7.2.4** in the benchmarks project (dev-only, not shipped) — resolves [GHSA-24c8-4792-22hx](https://github.com/advisories/GHSA-24c8-4792-22hx) (high severity).
+
 ## [1.2.0] — 2026-04-12
 
 ### Added
@@ -38,7 +67,7 @@ description: "All notable changes to DSoftStudio.Mediator."
   });
   ```
 
-- **Strong naming** — All 5 assemblies (`DSoftStudio.Mediator`, `DSoftStudio.Mediator.Abstractions`, `DSoftStudio.Mediator.FluentValidation`, `DSoftStudio.Mediator.HybridCache`, `DSoftStudio.Mediator.OpenTelemetry`) are now signed with `PublicKeyToken=6c7e753832e8eb05`. Enables installation in GAC, use from other strong-named assemblies, and tamper detection. Key file: `DSoftStudio.Mediator.snk` with `InternalsVisibleTo` attributes updated across all projects. See [ADR-0003](adr/0003-strong-naming.md).
+- **Strong naming** — All 5 assemblies (`DSoftStudio.Mediator`, `DSoftStudio.Mediator.Abstractions`, `DSoftStudio.Mediator.FluentValidation`, `DSoftStudio.Mediator.HybridCache`, `DSoftStudio.Mediator.OpenTelemetry`) are now signed with `PublicKeyToken=6c7e753832e8eb05`. Enables installation in GAC, use from other strong-named assemblies, and tamper detection. Key file: `DSoftStudio.Mediator.snk` with `InternalsVisibleTo` attributes updated across all projects. See [ADR-0003](docs/mediator/adr/0003-strong-naming.md).
 - **DSOFT007: Mixed registration API detection** — New compile-time diagnostic (Warning) that detects when `RegisterMediatorHandlers()` or `PrecompilePipelines()` are called alongside `AddMediator(Action<MediatorBuilder>)`. The builder overload already performs these operations internally — calling them separately causes redundant registrations. The diagnostic identifies the specific redundant call and explains what the builder handles automatically.
 - **Runtime idempotency guards** — Source-generated `RegisterMediatorHandlers()` and `RegisterPipelineChains()` now detect duplicate invocations via a per-`IServiceCollection` sentinel pattern (private `__Sentinel` / `__PipelineSentinel` marker types registered as singletons). If the sentinel is already present, the method returns immediately — preventing double handler/pipeline registration when `AddMediator(configure)` is used alongside legacy calls. The sentinel approach was chosen over `static bool` guards to preserve test isolation across parallel test classes with independent `ServiceCollection` instances.
 
@@ -49,7 +78,7 @@ description: "All notable changes to DSoftStudio.Mediator."
 
 ### Architecture Decisions Recorded
 
-- **ADR-0003: Strong Naming** — Accepted. All published assemblies signed with a committed `.snk` key for enterprise compatibility, GAC installation, and `InternalsVisibleTo` with public key verification. See [`docs/mediator/adr/0003-strong-naming.md`](adr/0003-strong-naming.md).
+- **ADR-0003: Strong Naming** — Accepted. All published assemblies signed with a committed `.snk` key for enterprise compatibility, GAC installation, and `InternalsVisibleTo` with public key verification. See [`docs/mediator/adr/0003-strong-naming.md`](docs/mediator/adr/0003-strong-naming.md).
 
 ---
 
@@ -62,7 +91,7 @@ description: "All notable changes to DSoftStudio.Mediator."
 - **Nullable response type support** — Source generators now emit fully nullable-qualified type names (`NullableFullyQualifiedFormat`) for all handler registrations, interceptors, and typed extensions. Types like `IRequest<string?>`, `IRequest<List<int?>?>`, and `IRequest<(string? Name, int? Age)?>` are correctly propagated through the entire pipeline.
 - **Diagnostic integration tests** — Comprehensive Roslyn in-memory test suites for all compile-time diagnostics: `DependencyInjectionDiagnosticTests` (12 tests covering DSOFT001/002/003), `ReferencedAssemblyDiagnosticTests` (6 tests covering DSOFT001/005 with 3-assembly pattern), `CqrsSemanticAnalyzerTests` (10 tests for DSOFT006).
 - **Nullable integration tests** — 14 same-assembly tests (`NullableResponseTests`) and 4 cross-assembly tests (`NullableCrossAssemblyTests`) validating nullable type propagation through handlers, interceptors, and cross-project discovery.
-- **Enterprise integration tests** — 48 tests across 14 test classes covering multi-project discovery, DI lifetime validation, deep pipeline (6 behaviors), 2000-parallel concurrency, Native AOT precompilation, expression tree safety, complex generics, runtime vs compile-time dispatch, background service patterns, stress testing (5000 sequential + 100 parallel streams), failure injection with retry, allocation regression, timeout/deadlock detection, and chaos testing. See [Production Validation](architecture/production-validation.md).
+- **Enterprise integration tests** — 48 tests across 14 test classes covering multi-project discovery, DI lifetime validation, deep pipeline (6 behaviors), 2000-parallel concurrency, Native AOT precompilation, expression tree safety, complex generics, runtime vs compile-time dispatch, background service patterns, stress testing (5000 sequential + 100 parallel streams), failure injection with retry, allocation regression, timeout/deadlock detection, and chaos testing. See [Production Validation](docs/mediator/architecture/production-validation.md).
 - **Production validation documentation** — New `docs/mediator/architecture/production-validation.md` page documenting all 48 enterprise integration tests organized by category with direct links to source.
 - **`NullableCrossAssemblyDiscoveryTests`** — 2 Roslyn in-memory regression tests covering both cross-assembly discovery paths: Phase 1 (attribute-based, where `typeof()` strips nullable — the bug path) and Phase 2 (type-based, where `AllInterfaces` preserves nullable from PE metadata). Both verify generated DI registrations contain the correct `global::User?>` annotation.
 
@@ -271,7 +300,7 @@ description: "All notable changes to DSoftStudio.Mediator."
   Zero impact on the existing `Send<TRequest, TResponse>()` hot path — completely
   separate dispatch table and code path.
 
-  See [ADR-0004](adr/0004-runtime-typed-send.md) for design rationale.
+  See [ADR-0004](docs/mediator/adr/0004-runtime-typed-send.md) for design rationale.
 
 - **`DSoftStudio.Mediator.OpenTelemetry` package** — New companion NuGet package providing
   automatic distributed tracing and metrics for all mediator operations via standard
@@ -299,7 +328,7 @@ description: "All notable changes to DSoftStudio.Mediator."
   (suppress health checks), enrichment (custom tags), and independent tracing/metrics
   toggles.
 
-  See [ADR-0005](adr/0005-opentelemetry-instrumentation.md) for design rationale.
+  See [ADR-0005](docs/mediator/adr/0005-opentelemetry-instrumentation.md) for design rationale.
 
 - **`DSoftStudio.Mediator.FluentValidation` package** — New companion NuGet package
   providing automatic request validation via FluentValidation. Registers a single
@@ -339,12 +368,12 @@ description: "All notable changes to DSoftStudio.Mediator."
   `FrozenDictionary` dispatch table. Extension method design is required because
   `ISender.Send<TRequest, TResponse>` has two generic type parameters that cannot be
   inferred — an instance `Send(object)` would shadow all generated typed extensions
-  due to C# overload resolution rules. See [`docs/mediator/adr/0004-runtime-typed-send.md`](adr/0004-runtime-typed-send.md).
+  due to C# overload resolution rules. See [`docs/mediator/adr/0004-runtime-typed-send.md`](docs/mediator/adr/0004-runtime-typed-send.md).
 
 - **ADR-0005: OpenTelemetry Instrumentation Package** — Accepted. Separate NuGet
   package (`DSoftStudio.Mediator.OpenTelemetry`) providing automatic distributed
   tracing and metrics via standard pipeline behaviors, with zero impact on the core
-  mediator library. See [`docs/mediator/adr/0005-opentelemetry-instrumentation.md`](adr/0005-opentelemetry-instrumentation.md).
+  mediator library. See [`docs/mediator/adr/0005-opentelemetry-instrumentation.md`](docs/mediator/adr/0005-opentelemetry-instrumentation.md).
 
 ---
 
