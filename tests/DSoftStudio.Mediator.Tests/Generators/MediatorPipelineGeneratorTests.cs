@@ -41,6 +41,21 @@ public class MediatorPipelineGeneratorTests
     }
 
     [Fact]
+    public void RegisterPipeline_FoldsHandlerLifetimeIntoChainLifetime()
+    {
+        // ADR-0001: the chain lifetime is the lowest of everything it wraps - including the HANDLER, not just
+        // the pipeline components. The chain's constructor consumes the handler, so a Singleton chain wrapping
+        // a Transient/Scoped handler would capture it (and its scoped deps, e.g. an injected IMediator) for the
+        // whole app lifetime: the captive-dependency crash (cannot consume scoped service from singleton).
+        // RegisterPipeline must therefore fold the IRequestHandler<TRequest, TResponse> descriptor's lifetime
+        // into allSingleton, not only the behaviors/processors.
+        var (result, _) = GeneratorTestHarness.Run<MediatorPipelineGenerator>(RequestHandler);
+        var code = result.AllSource();
+
+        code.ShouldContain("st == typeof(global::DSoftStudio.Mediator.Abstractions.IRequestHandler<TRequest, TResponse>)");
+    }
+
+    [Fact]
     public void Emits_Aot_Behavior_Closure_For_OpenGeneric_Behavior_And_Processor()
     {
         // A handler PLUS open-generic pipeline components (behavior + pre-processor) triggers the AOT-safe

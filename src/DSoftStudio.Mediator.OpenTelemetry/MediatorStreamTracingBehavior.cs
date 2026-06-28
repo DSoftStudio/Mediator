@@ -45,7 +45,8 @@ public sealed class MediatorStreamTracingBehavior<TRequest, TResponse>(MediatorI
             activity.SetTag("mediator.response.type", MediatorStreamMetadata<TRequest, TResponse>.ResponseType);
             activity.SetTag("mediator.request.kind", MediatorStreamMetadata<TRequest, TResponse>.RequestKind);
             // ADR-0049 — the concrete stream handler behind this request (resolved through the chain, never
-            // instantiated), so an imported trace maps the stream span to its handler source. See MediatorTracingBehavior.
+            // instantiated), so an imported trace maps the stream span to its handler source. The request path
+            // does the same in MediatorDispatchTracingObserver (streams have no dispatch port, so this stays a behavior).
             activity.SetTag("mediator.handler.type", ResolveHandlerType(next).FullName);
 
             options.EnrichActivity?.Invoke(activity, request);

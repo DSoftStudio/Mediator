@@ -131,6 +131,41 @@ public sealed class MediatorBuilder
             nameof(T), "IRequestExceptionHandler<TRequest, TResponse>");
 
     /// <summary>
+    /// Registers a dispatch observer (<see cref="IMediatorDispatchObserver"/>) — an adapter that wraps the
+    /// WHOLE request-dispatch boundary (pre-processors, behaviors, handler and post-processors), e.g. to open
+    /// one tracing span around the entire pipeline. Unlike a pipeline behavior, an observer can nest the
+    /// pre-/post-processors (which run outside the behavior chain) under its scope.
+    /// <para>
+    /// The mediator pays nothing when no observer is registered: the dispatch stays on its fast path. Defaults
+    /// to <see cref="ServiceLifetime.Singleton"/> — an observer is a stateless cross-cutting adapter.
+    /// </para>
+    /// </summary>
+    /// <typeparam name="T">The concrete observer type implementing <see cref="IMediatorDispatchObserver"/>.</typeparam>
+    /// <param name="lifetime">The DI service lifetime. Defaults to <see cref="ServiceLifetime.Singleton"/>.</param>
+    /// <returns>This builder for chaining.</returns>
+    public MediatorBuilder AddDispatchObserver<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] T>(
+        ServiceLifetime lifetime = ServiceLifetime.Singleton)
+        where T : class, IMediatorDispatchObserver
+    {
+        Services.Add(new ServiceDescriptor(typeof(IMediatorDispatchObserver), typeof(T), lifetime));
+        return this;
+    }
+
+    /// <summary>
+    /// Registers a pre-configured dispatch observer instance (<see cref="IMediatorDispatchObserver"/>). Use
+    /// this overload when the observer carries configuration that cannot be resolved from DI (the OpenTelemetry
+    /// bridge registers its tracing observer this way). See <see cref="AddDispatchObserver{T}(ServiceLifetime)"/>.
+    /// </summary>
+    /// <param name="observer">The observer instance to register as a singleton.</param>
+    /// <returns>This builder for chaining.</returns>
+    public MediatorBuilder AddDispatchObserver(IMediatorDispatchObserver observer)
+    {
+        ArgumentNullException.ThrowIfNull(observer);
+        Services.AddSingleton(observer);
+        return this;
+    }
+
+    /// <summary>
     /// Replaces the default sequential notification publisher with a parallel implementation
     /// that invokes all notification handlers concurrently via <see cref="Task.WhenAll"/>.
     /// </summary>
