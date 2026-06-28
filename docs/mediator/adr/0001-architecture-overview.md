@@ -231,9 +231,9 @@ Handlers with DI dependencies are registered as Transient.
 ## 9. Pipeline Lifetime Determination
 
 ### Decision
-`PrecompilePipelines()` determines each `PipelineChainHandler` lifetime based on the registered components:
+`PrecompilePipelines()` determines each `PipelineChainHandler` lifetime from the lifetime of **everything the chain wraps — the handler AND the registered components** (behaviors, pre/post processors, exception handlers):
 
-| Components | Chain Lifetime |
+| Lowest lifetime among handler + components | Chain Lifetime |
 |------------|---------------|
 | All Singleton | Singleton |
 | Any Scoped | Scoped |
@@ -242,6 +242,7 @@ Handlers with DI dependencies are registered as Transient.
 ### Rationale
 - Ensures correct DI semantics without manual configuration.
 - Singleton chains are cached per-thread for maximum performance.
+- The **handler** is included because the chain's constructor consumes it. A Singleton chain wrapping a Transient/Scoped handler would capture that handler — and its scoped dependencies (e.g. an injected `IMediator` used to publish domain events) — for the whole application lifetime, producing the "Cannot consume scoped service from singleton" captive-dependency error at `BuildServiceProvider`. Likewise, instrumentation behaviors (e.g. the profiler's `EventSourceProfilingBehavior`) are registered **Scoped, not Singleton**, so adding them never promotes a chain to Singleton and captures a non-singleton handler.
 
 ### Consequences
 - Registrations added after `PrecompilePipelines()` are not picked up.

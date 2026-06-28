@@ -479,6 +479,10 @@ public class MultiProjectIntegrationTests : IDisposable
         services.AddSingleton(new FlakeyState(0));
         services.AddSingleton<IChaosRandom>(new ThreadSafeChaosRandom());
 
+        // Dependencies required by the auto-lifetime-detection test handlers (Lifetimes/)
+        services.AddSingleton<Lifetimes.AutoSingletonDep>();
+        services.AddScoped<Lifetimes.AutoScopedDep>();
+
         _provider = services.BuildServiceProvider();
         _mediator = _provider.GetRequiredService<IMediator>();
     }

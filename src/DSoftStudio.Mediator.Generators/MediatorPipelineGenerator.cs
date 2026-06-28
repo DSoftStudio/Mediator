@@ -290,6 +290,7 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
         sb.AppendLine("            bool needsChain = false;");
         sb.AppendLine("            bool allSingleton = true;");
         sb.AppendLine("            bool hasTransientPipelineComponent = false;");
+        sb.AppendLine("            bool hasDispatchObserver = false;");
         sb.AppendLine("            foreach (var descriptor in services)");
         sb.AppendLine("            {");
         sb.AppendLine("                var st = descriptor.ServiceType;");
@@ -309,6 +310,30 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
         sb.AppendLine("                    if (descriptor.Lifetime == global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)");
         sb.AppendLine("                        hasTransientPipelineComponent = true;");
         sb.AppendLine("                }");
+        sb.AppendLine("                else if (st == typeof(global::DSoftStudio.Mediator.Abstractions.IMediatorDispatchObserver))");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    hasDispatchObserver = true;");
+        sb.AppendLine("                }");
+        sb.AppendLine("                else if (st == typeof(global::DSoftStudio.Mediator.Abstractions.IRequestHandler<TRequest, TResponse>))");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    // The chain's ctor consumes the handler, so a non-singleton handler (for example one");
+        sb.AppendLine("                    // that injects a scoped IMediator) constrains the chain DOWN to Scoped, preventing a");
+        sb.AppendLine("                    // singleton chain from capturing it (and its scoped deps) for the whole app lifetime.");
+        sb.AppendLine("                    // It does NOT set needsChain: a handler on its own never needs a chain.");
+        sb.AppendLine("                    if (descriptor.Lifetime != global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton)");
+        sb.AppendLine("                        allSingleton = false;");
+        sb.AppendLine("                }");
+        sb.AppendLine("            }");
+        sb.AppendLine();
+        sb.AppendLine("            // A dispatch observer wraps EVERY request at the dispatch boundary (it lives inside the");
+        sb.AppendLine("            // PipelineChainHandler), even handler-only requests with no behaviors/processors. Force a");
+        sb.AppendLine("            // chain so such requests are still observed. The lifetime is NOT pinned here: the loop above");
+        sb.AppendLine("            // already folded the handler's (and every component's) lifetime into allSingleton, so a");
+        sb.AppendLine("            // singleton handler keeps a cached Singleton chain (no per-request resolution) while a");
+        sb.AppendLine("            // scoped/transient handler yields a Scoped/Transient chain.");
+        sb.AppendLine("            if (hasDispatchObserver && !needsChain)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                needsChain = true;");
         sb.AppendLine("            }");
         sb.AppendLine();
         sb.AppendLine("            if (needsChain)");
@@ -391,6 +416,7 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
 
         sb.AppendLine("        {");
 
+        sb.AppendLine("            global::DSoftStudio.Mediator.HandlerLifetimeOptimizer.Apply(services);");
         sb.AppendLine("            MediatorRegistry.RegisterPipelineChains(services);");
         sb.AppendLine("            global::DSoftStudio.Mediator.RequestObjectDispatch.Freeze();");
         sb.AppendLine("            return services;");
@@ -425,6 +451,7 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
         sb.AppendLine("            configure(builder);");
 
         // 4. Precompile pipelines (closes open generics, registers chains, freezes dispatch).
+        sb.AppendLine("            global::DSoftStudio.Mediator.HandlerLifetimeOptimizer.Apply(services);");
         sb.AppendLine("            MediatorRegistry.RegisterPipelineChains(services);");
         sb.AppendLine("            global::DSoftStudio.Mediator.RequestObjectDispatch.Freeze();");
         sb.AppendLine("            return services;");

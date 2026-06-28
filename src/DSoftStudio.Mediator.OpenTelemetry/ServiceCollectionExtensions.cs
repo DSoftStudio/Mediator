@@ -29,7 +29,11 @@ public static class OpenTelemetryServiceCollectionExtensions
 
         if (options.EnableTracing)
         {
-            services.AddTransient(typeof(IPipelineBehavior<,>), typeof(MediatorTracingBehavior<,>));
+            // The request span is opened at the dispatch boundary through the core's observation port, so it
+            // wraps the WHOLE pipeline — pre-/post-processors included (a behavior cannot: they run outside the
+            // behavior chain). One stateless singleton adapter; the core injects it as IEnumerable and pays
+            // nothing when it is absent. Streams have no dispatch port, so the stream span stays a behavior.
+            services.AddSingleton<IMediatorDispatchObserver>(new MediatorDispatchTracingObserver(options));
             services.AddTransient(typeof(IStreamPipelineBehavior<,>), typeof(MediatorStreamTracingBehavior<,>));
         }
 

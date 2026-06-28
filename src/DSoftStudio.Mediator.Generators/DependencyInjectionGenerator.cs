@@ -117,7 +117,7 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
                 .ThenBy(static h => h.HandlerType)
                 .ToArray();
 
-            // Local self-handlers only — external self-handlers are now discovered
+            // Local self-handlers only - external self-handlers are now discovered
             // as regular handlers via [assembly: MediatorHandlerRegistration] attributes.
             var localSelfHandlers = selfHandlers.IsDefaultOrEmpty
                 ? []
@@ -147,7 +147,7 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
     /// <summary>
     /// Reports compile-time diagnostics for request/stream handler types that have
     /// multiple implementations. With Microsoft.Extensions.DI, <c>GetRequiredService&lt;T&gt;</c>
-    /// returns the last registration — earlier handlers are silently ignored.
+    /// returns the last registration - earlier handlers are silently ignored.
     /// Notification handlers are excluded (multiple handlers per notification is by design).
     /// </summary>
     private static void ReportDuplicateHandlers(SourceProductionContext spc, HandlerInfo[] allHandlers)
@@ -182,7 +182,7 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
                     interfaceType,
                     handlerNames));
             }
-            // Notification handlers: multiple implementations per type is expected — no diagnostic
+            // Notification handlers: multiple implementations per type is expected - no diagnostic
         }
     }
 
@@ -251,9 +251,44 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
         if (HandlerDiscovery.IsFileLocal(classDecl))
             return null;
 
-        // Handlers with no constructor parameters are stateless — safe to register as Singleton.
+        // Handlers with no constructor parameters are stateless - safe to register as Singleton.
         bool isStateless = symbol.InstanceConstructors.Length > 0
             && symbol.InstanceConstructors.All(static c => c.Parameters.IsEmpty);
+
+        // Capture the dependency types of the constructor DI will use (the greediest public ctor) so the
+        // runtime optimizer can raise this handler's lifetime from its dependency lifetimes (AOT-safe: the
+        // types are emitted as typeof, never reflected). Empty for stateless handlers.
+        string depTypes = "";
+        if (!isStateless)
+        {
+            var ctor = symbol.InstanceConstructors
+                .Where(static c => c.DeclaredAccessibility == Accessibility.Public)
+                .OrderByDescending(static c => c.Parameters.Length)
+                .FirstOrDefault();
+            if (ctor is not null && !ctor.Parameters.IsEmpty)
+            {
+                var depsBuilder = new System.Text.StringBuilder();
+                for (int p = 0; p < ctor.Parameters.Length; p++)
+                {
+                    if (p > 0) depsBuilder.Append('|'); // '|' never appears in a type name (generics use < , >)
+                    depsBuilder.Append(ctor.Parameters[p].Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+                }
+                depTypes = depsBuilder.ToString();
+            }
+        }
+
+        // An explicit [HandlerLifetime(...)] pins the lifetime: it is emitted directly and skips the optimizer.
+        string? explicitLifetime = null;
+        foreach (var attr in symbol.GetAttributes())
+        {
+            if (attr.AttributeClass?.ToDisplayString() == "DSoftStudio.Mediator.Abstractions.HandlerLifetimeAttribute"
+                && attr.ConstructorArguments.Length == 1
+                && attr.ConstructorArguments[0].Value is int lifetimeValue)
+            {
+                explicitLifetime = lifetimeValue switch { 1 => "Scoped", 2 => "Singleton", _ => "Transient" };
+                break;
+            }
+        }
 
         foreach (var iface in symbol.AllInterfaces)
         {
@@ -275,7 +310,7 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
                         return new HandlerInfo(
                             $"global::DSoftStudio.Mediator.Abstractions.IRequestHandler<{request},{response}>",
                             symbol.ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat),
-                            isStateless);
+                            isStateless, depTypes, explicitLifetime);
                     }
 
                 case "INotificationHandler`1":
@@ -286,7 +321,7 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
                         return new HandlerInfo(
                             $"global::DSoftStudio.Mediator.Abstractions.INotificationHandler<{notification}>",
                             symbol.ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat),
-                            isStateless);
+                            isStateless, depTypes, explicitLifetime);
                     }
 
                 case "IStreamRequestHandler`2":
@@ -300,7 +335,7 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
                         return new HandlerInfo(
                             $"global::DSoftStudio.Mediator.Abstractions.IStreamRequestHandler<{request},{response}>",
                             symbol.ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat),
-                            isStateless);
+                            isStateless, depTypes, explicitLifetime);
                     }
             }
         }
@@ -353,7 +388,7 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
     /// <param name="localHandlers">Handlers discovered in the current project (emit assembly attributes for these).</param>
     /// <param name="allHandlers">Local + external handlers (register all in DI).</param>
     /// <param name="selfHandlers">Self-handling request classes (IRequest&lt;T&gt; + static Execute).</param>
-    /// <param name="assemblyName">The consuming assembly name — used to generate a unique namespace for extension classes.</param>
+    /// <param name="assemblyName">The consuming assembly name - used to generate a unique namespace for extension classes.</param>
     private static string GenerateCode(HandlerInfo[] localHandlers, HandlerInfo[] allHandlers, SelfHandlerDetail[] selfHandlers, string assemblyName)
     {
         var sanitizedAsm = HandlerDiscovery.SanitizeIdentifier(assemblyName);
@@ -413,29 +448,101 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
 
         // Register ALL handlers (local + external) in DI
         var registeredConcreteTypes = new System.Collections.Generic.HashSet<string>();
+        // Request handlers eligible for the deferred lifetime upgrade: they resolve by interface, carry
+        // dependencies, and have no explicit [HandlerLifetime]. Each is added through an explicit descriptor
+        // captured in a local so the finalization pass can verify ours is still the live registration.
+        var optimizableHandlers = new System.Collections.Generic.List<(int Index, HandlerInfo Handler)>();
 
         foreach (var handler in allHandlers)
         {
-            // Stateless handlers (no constructor parameters) ? Singleton (zero allocation per call).
-            // Handlers with DI dependencies ? Transient (safe default).
-            sb.Append(handler.IsStateless
-                ? "        global::Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<"
-                : "        global::Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddTransient<");
-            sb.Append(handler.InterfaceType);
-            sb.Append(", ");
-            sb.Append(handler.HandlerType);
-            sb.AppendLine(">(services);");
+            var isOptimizable = handler.ExplicitLifetime is null
+                && !handler.IsStateless
+                && handler.DepTypes.Length > 0
+                && handler.InterfaceType.Contains("IRequestHandler<");
+
+            if (isOptimizable)
+            {
+                // Same effect as AddTransient, but the captured descriptor reference lets
+                // HandlerLifetimeOptimizer.Apply confirm ours is still the winning registration before
+                // upgrading. The startup optimizer may then raise it to Singleton (all-singleton deps) or
+                // Scoped (any scoped dep) once every registration is visible.
+                var optIndex = optimizableHandlers.Count;
+                sb.Append("        var __mh");
+                sb.Append(optIndex);
+                sb.Append(" = global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor.Transient(typeof(");
+                sb.Append(handler.InterfaceType);
+                sb.Append("), typeof(");
+                sb.Append(handler.HandlerType);
+                sb.AppendLine("));");
+                sb.Append("        services.Add(__mh");
+                sb.Append(optIndex);
+                sb.AppendLine(");");
+                optimizableHandlers.Add((optIndex, handler));
+            }
+            else
+            {
+                // Lifetime: an explicit [HandlerLifetime] wins; otherwise stateless handlers are Singleton
+                // (zero allocation per call) and handlers-with-deps default to Transient.
+                var addMethod = handler.ExplicitLifetime switch
+                {
+                    "Singleton" => "AddSingleton<",
+                    "Scoped" => "AddScoped<",
+                    "Transient" => "AddTransient<",
+                    _ => handler.IsStateless ? "AddSingleton<" : "AddTransient<",
+                };
+                sb.Append("        global::Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.");
+                sb.Append(addMethod);
+                sb.Append(handler.InterfaceType);
+                sb.Append(", ");
+                sb.Append(handler.HandlerType);
+                sb.AppendLine(">(services);");
+            }
 
             // Notification and stream dispatch tables resolve by CONCRETE type,
-            // so we must also register the implementation type directly.
+            // so we must also register the implementation type directly (matching lifetime).
             if (!handler.InterfaceType.Contains("IRequestHandler<") && registeredConcreteTypes.Add(handler.HandlerType))
             {
-                sb.Append(handler.IsStateless
-                    ? "        global::Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAddSingleton(services, typeof("
-                    : "        global::Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAddTransient(services, typeof(");
+                var tryAddMethod = handler.ExplicitLifetime switch
+                {
+                    "Singleton" => "TryAddSingleton",
+                    "Scoped" => "TryAddScoped",
+                    "Transient" => "TryAddTransient",
+                    _ => handler.IsStateless ? "TryAddSingleton" : "TryAddTransient",
+                };
+                sb.Append("        global::Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.");
+                sb.Append(tryAddMethod);
+                sb.Append("(services, typeof(");
                 sb.Append(handler.HandlerType);
                 sb.AppendLine("));");
             }
+        }
+
+        // Deferred lifetime optimization: stage each eligible request handler so the finalization step
+        // (PrecompilePipelines / the single-call AddMediator) can raise it from the Transient default to the
+        // longest SAFE lifetime its dependencies allow - once ALL registrations are visible, regardless of
+        // whether a dependency was registered before or after this call. AOT-safe (dependency types emitted
+        // as typeof; only registered descriptor lifetimes are read).
+        if (optimizableHandlers.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("        global::DSoftStudio.Mediator.HandlerLifetimeOptimizer.Stage(services, new (global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor, global::System.Type[])[]");
+            sb.AppendLine("        {");
+            foreach (var (index, handler) in optimizableHandlers)
+            {
+                sb.Append("            (__mh");
+                sb.Append(index);
+                sb.Append(", new global::System.Type[] { ");
+                var deps = handler.DepTypes.Split('|');
+                for (int d = 0; d < deps.Length; d++)
+                {
+                    if (d > 0) sb.Append(", ");
+                    sb.Append("typeof(");
+                    sb.Append(deps[d]);
+                    sb.Append(')');
+                }
+                sb.AppendLine(" }),");
+            }
+            sb.AppendLine("        });");
         }
 
         // Register local self-handler adapters in DI
@@ -653,7 +760,7 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
             foreach (var handler in allHandlers)
             {
                 // Skip duplicate interface types (e.g. multiple notification handlers
-                // for the same notification type — GetServices validates all at once).
+                // for the same notification type - GetServices validates all at once).
                 if (!emittedInterfaces.Add(handler.InterfaceType))
                     continue;
 
@@ -750,15 +857,26 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
         }
     }
 
-    internal readonly struct HandlerInfo(string iface, string handler, bool isStateless = false) : IEquatable<HandlerInfo>
+    internal readonly struct HandlerInfo(string iface, string handler, bool isStateless = false, string depTypes = "", string? explicitLifetime = null) : IEquatable<HandlerInfo>
     {
         public string InterfaceType { get; } = iface;
         public string HandlerType { get; } = handler;
         public bool IsStateless { get; } = isStateless;
 
+        // Comma-joined fully-qualified constructor dependency types (greediest public ctor), captured at
+        // compile time so the runtime optimizer can pick the lifetime from their registered lifetimes
+        // without reflection. A string (not an array) keeps the incremental-generator model cached by value.
+        public string DepTypes { get; } = depTypes;
+
+        // "Singleton"/"Scoped"/"Transient" when the handler carries an explicit [HandlerLifetime]; null otherwise.
+        public string? ExplicitLifetime { get; } = explicitLifetime;
+
         public bool Equals(HandlerInfo other) =>
             InterfaceType == other.InterfaceType &&
-            HandlerType == other.HandlerType;
+            HandlerType == other.HandlerType &&
+            IsStateless == other.IsStateless &&
+            DepTypes == other.DepTypes &&
+            ExplicitLifetime == other.ExplicitLifetime;
 
         public override bool Equals(object? obj) =>
             obj is HandlerInfo other && Equals(other);
@@ -767,7 +885,8 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
         {
             unchecked
             {
-                return (InterfaceType.GetHashCode() * 397) ^ HandlerType.GetHashCode();
+                int hash = (InterfaceType.GetHashCode() * 397) ^ HandlerType.GetHashCode();
+                return (hash * 397) ^ DepTypes.GetHashCode();
             }
         }
     }

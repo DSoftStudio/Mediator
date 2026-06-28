@@ -45,34 +45,31 @@ public class FilteringTests : IDisposable
     }
 
     [Fact]
-    public async Task Filter_suppresses_tracing_for_matched_request()
+    public void Filter_suppresses_tracing_for_matched_request()
     {
         using var collector = new ActivityCollector();
-        var options = new MediatorInstrumentationOptions
+        var observer = new MediatorDispatchTracingObserver(new MediatorInstrumentationOptions
         {
             Filter = type => !type.Name.StartsWith("HealthCheck")
-        };
-        var behavior = new MediatorTracingBehavior<HealthCheckQuery, string>(options);
-        var handler = new HealthCheckHandler();
+        });
 
-        var result = await behavior.Handle(new HealthCheckQuery(), handler, TestContext.Current.CancellationToken);
+        var scope = observer.BeginDispatch<HealthCheckQuery, string>(new HealthCheckQuery(), new HealthCheckHandler());
 
-        result.ShouldBe("ok");
+        scope.ShouldBeNull();
         collector.Activities.ShouldBeEmpty();
     }
 
     [Fact]
-    public async Task Filter_allows_tracing_for_non_matched_request()
+    public void Filter_allows_tracing_for_non_matched_request()
     {
         using var collector = new ActivityCollector();
-        var options = new MediatorInstrumentationOptions
+        var observer = new MediatorDispatchTracingObserver(new MediatorInstrumentationOptions
         {
             Filter = type => !type.Name.StartsWith("HealthCheck")
-        };
-        var behavior = new MediatorTracingBehavior<TestCommand, string>(options);
-        var handler = new TestCommandHandler();
+        });
 
-        await behavior.Handle(new TestCommand("test"), handler, TestContext.Current.CancellationToken);
+        var scope = observer.BeginDispatch<TestCommand, string>(new TestCommand("test"), new TestCommandHandler());
+        scope!.Dispose();
 
         collector.Activities.ShouldHaveSingleItem();
     }
@@ -155,14 +152,13 @@ public class FilteringTests : IDisposable
     }
 
     [Fact]
-    public async Task Null_filter_instruments_everything()
+    public void Null_filter_instruments_everything()
     {
         using var collector = new ActivityCollector();
-        var options = new MediatorInstrumentationOptions { Filter = null };
-        var behavior = new MediatorTracingBehavior<HealthCheckQuery, string>(options);
-        var handler = new HealthCheckHandler();
+        var observer = new MediatorDispatchTracingObserver(new MediatorInstrumentationOptions { Filter = null });
 
-        await behavior.Handle(new HealthCheckQuery(), handler, TestContext.Current.CancellationToken);
+        var scope = observer.BeginDispatch<HealthCheckQuery, string>(new HealthCheckQuery(), new HealthCheckHandler());
+        scope!.Dispose();
 
         collector.Activities.ShouldHaveSingleItem();
     }
