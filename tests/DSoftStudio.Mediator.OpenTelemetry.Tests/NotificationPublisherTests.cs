@@ -109,6 +109,46 @@ public class NotificationPublisherTests : IDisposable
     }
 
     [Fact]
+    public async Task Handler_span_unwraps_transparent_wrapper_to_real_handler_type()
+    {
+        // Repro for the live-profiler + bridge coexistence bug: when the profiler wraps each notification
+        // handler in a per-handler timing decorator (TimedNotificationHandler<T>, which implements
+        // IPipelineHandlerTypeAccessor), the bridge must read the REAL handler type via that seam — NOT the
+        // decorator's compiler-mangled type — so the notification fan-out shows the concrete subscriber
+        // (SendConfirmationEmail/UpdateInventory), not <...>__TimedNotificationHandler.
+        using var collector = new ActivityCollector();
+        var options = new MediatorInstrumentationOptions();
+        var inner = new SequentialNotificationPublisher();
+        var publisher = new InstrumentedNotificationPublisher(inner, options, _metrics.Metrics);
+
+        var handlers = new INotificationHandler<TestNotification>[]
+        {
+            new TracingTransparentNotificationHandler<TestNotification>(new TestNotificationHandler1()),
+            new TracingTransparentNotificationHandler<TestNotification>(new TestNotificationHandler2()) // file-scoped wrapper below
+        };
+
+        await publisher.Publish(handlers, new TestNotification("hi"), TestContext.Current.CancellationToken);
+
+        var childSpans = collector.Activities
+            .Where(a => a.DisplayName.EndsWith(" handle"))
+            .ToList();
+        childSpans.Count.ShouldBe(2);
+
+        // Span NAME must use the real handler's type name, not the wrapper's mangled name.
+        var childNames = childSpans.Select(a => a.DisplayName).ToList();
+        childNames.ShouldContain("TestNotificationHandler1 handle");
+        childNames.ShouldContain("TestNotificationHandler2 handle");
+
+        // mediator.handler.type must be the REAL handler's FullName (what the IDE fan-out joins on).
+        var handlerTypes = childSpans
+            .Select(a => (string)a.GetTagItem("mediator.handler.type")!)
+            .ToList();
+        handlerTypes.ShouldContain(typeof(TestNotificationHandler1).FullName!);
+        handlerTypes.ShouldContain(typeof(TestNotificationHandler2).FullName!);
+        handlerTypes.ShouldNotContain(t => t.Contains("TracingTransparentNotificationHandler", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Error_in_handler_sets_error_status_on_parent_and_child()
     {
         using var collector = new ActivityCollector();
@@ -223,4 +263,26 @@ public class NotificationPublisherTests : IDisposable
         var parentSpan = collector.Activities.Single(a => a.DisplayName == "TestNotification publish");
         parentSpan.GetTagItem("custom.value")!.ShouldBe("enriched");
     }
+}
+
+/// <summary>
+/// A per-handler notification decorator that is TRANSPARENT to tracing: it wraps an inner handler
+/// (for timing/profiling) yet exposes the real handler type via <see cref="IPipelineHandlerTypeAccessor"/>,
+/// exactly like the Enterprise live-profiler's generated per-handler wrapper (TimedNotificationHandler&lt;T&gt;).
+/// <para>
+/// Declared <c>file</c> so the OSS DependencyInjectionGenerator skips it during handler discovery — an
+/// open-generic <c>INotificationHandler&lt;TNotification&gt;</c> shape would otherwise be registered with an
+/// unbound type parameter. This is the SAME reason the real profiler wrapper is file-scoped.
+/// </para>
+/// </summary>
+file sealed class TracingTransparentNotificationHandler<TNotification>(INotificationHandler<TNotification> inner)
+    : INotificationHandler<TNotification>, IPipelineHandlerTypeAccessor
+    where TNotification : INotification
+{
+    // Same recursive walk to the terminal handler as BehaviorHandlerAdapter / StreamPipelineChainHandler.
+    public Type HandlerType
+        => inner is IPipelineHandlerTypeAccessor a ? a.HandlerType : inner.GetType();
+
+    public Task Handle(TNotification notification, CancellationToken cancellationToken)
+        => inner.Handle(notification, cancellationToken);
 }
