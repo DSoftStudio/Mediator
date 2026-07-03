@@ -123,8 +123,16 @@ internal sealed class InstrumentedNotificationPublisher(INotificationPublisher i
 
         public async Task Handle(TNotification notification, CancellationToken cancellationToken)
         {
+            // Resolve the CONCRETE handler type through any transparent decorator. When the live-profiler
+            // is also active it wraps this handler in a per-handler timing decorator that exposes the real
+            // subscriber via IPipelineHandlerTypeAccessor — the SAME seam the request path
+            // (MediatorDispatchTracingObserver) and stream path (MediatorStreamTracingBehavior) use. Reading
+            // it here keeps the span name + mediator.handler.type pointing at the real handler, never the
+            // profiler's compiler-mangled wrapper (which would collapse every subscriber to one type in the
+            // IDE fan-out and break the per-handler join).
+            var handlerType = ResolveHandlerType(inner);
             var spanName = HandlerSpanNames.GetOrAdd(
-                inner.GetType(),
+                handlerType,
                 static type => $"{type.Name} handle");
 
             using var activity = Source.StartActivity(spanName, ActivityKind.Internal);
@@ -139,7 +147,7 @@ internal sealed class InstrumentedNotificationPublisher(INotificationPublisher i
             {
                 activity.SetTag("mediator.request.kind", MediatorNotificationMetadata<TNotification>.RequestKind);
                 activity.SetTag("mediator.request.type", MediatorNotificationMetadata<TNotification>.RequestType);
-                activity.SetTag("mediator.handler.type", inner.GetType().FullName);
+                activity.SetTag("mediator.handler.type", handlerType.FullName);
             }
 
             try
@@ -158,5 +166,12 @@ internal sealed class InstrumentedNotificationPublisher(INotificationPublisher i
                 throw;
             }
         }
+
+        // Mirrors MediatorDispatchTracingObserver.ResolveHandlerType / MediatorStreamTracingBehavior:
+        // a transparent decorator (e.g. the live-profiler's per-handler wrapper) exposes the real handler
+        // through IPipelineHandlerTypeAccessor; a terminal handler does not implement it and reports its own
+        // runtime type.
+        private static Type ResolveHandlerType(INotificationHandler<TNotification> handler)
+            => handler is IPipelineHandlerTypeAccessor accessor ? accessor.HandlerType : handler.GetType();
     }
 }

@@ -9,7 +9,12 @@
 
 		<!-- NuGet -->
 		<PackageId>DSoftStudio.Mediator.OpenTelemetry</PackageId>
-		<Version>1.1.0-rc.3</Version>
+		<!-- 1.1.0-rc.4 — notification per-handler spans resolve the concrete subscriber through
+		     IPipelineHandlerTypeAccessor, so a live-profiler wrapper no longer leaks its mangled type into
+		     mediator.handler.type (ADR-0034 §3.6). Next after the real published rc.3. NOTE: stale unpublished
+		     rc.4 copies must be purged from ~/.nuget/packages before restore, or the cache serves the old build
+		     (same-version cache trap). -->
+		<Version>1.1.0-rc.4</Version>
 
 		<Authors>DSoftStudio</Authors>
 		<Company>DSoftStudio</Company>
