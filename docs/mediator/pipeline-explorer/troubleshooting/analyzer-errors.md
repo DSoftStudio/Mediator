@@ -31,13 +31,13 @@ error CS0234: The type or namespace name 'IServiceCollection' does not exist in 
 'Microsoft.Extensions.DependencyInjection' (are you missing an assembly reference?)
 ```
 
-Pipeline Explorer installs a Roslyn analyzer at the solution level via `Directory.Build.props`. The analyzer ships a source generator that emits profiling and visualization code into every project that picks the analyzer up — which can collide with projects that don't reference the types the generated code needs.
+Pipeline Explorer installs a Roslyn analyzer **machine-locally**. The MSBuild block that enables it is injected under `$(MSBuildUserExtensionsPath)\DSoftStudio.Mediator\enabled.props` (on Windows, `%LOCALAPPDATA%\Microsoft\MSBuild\DSoftStudio.Mediator\enabled.props`), which MSBuild auto-imports into every project you build on this machine — **nothing is written to your repository**. (Older versions injected this block into the solution's `Directory.Build.props`; that repo-level injection is no longer used, and any leftover markers are stripped on solution open.) The analyzer ships a source generator that emits profiling and visualization code into every project that picks it up — which can collide with projects that don't reference the types the generated code needs.
 
 ---
 
 ## 1. Pure projects without `DSoftStudio.Mediator.Abstractions`
 
-The classic case: a Clean Architecture solution where the `Domain` project intentionally has zero dependencies. The solution-level `Directory.Build.props` injects the Pipeline Explorer analyzer into the Domain project too, and the generator emits code referencing `DSoftStudio.Mediator.Abstractions` and `Microsoft.Extensions.DependencyInjection` — neither of which the Domain project references.
+The classic case: a Clean Architecture solution where the `Domain` project intentionally has zero dependencies. The machine-local analyzer import applies to the Domain project too, and the generator emits code referencing `DSoftStudio.Mediator.Abstractions` and `Microsoft.Extensions.DependencyInjection` — neither of which the Domain project references.
 
 This produces the `CS0234 Abstractions does not exist` errors listed above.
 
@@ -85,27 +85,32 @@ dotnet build
 
 ---
 
-## 3. `Directory.Build.props` collision
+## 3. Machine-local injection and leftover repo blocks
 
-If your solution already has a custom `Directory.Build.props` at the root, Pipeline Explorer's install routine appends to it. A pre-existing `<PropertyGroup>` or `<ItemGroup>` with conflicting settings can shadow the extension's additions.
+Pipeline Explorer no longer writes anything to your repository. When you enable it, the extension writes the analyzer import **machine-locally**, under MSBuild's per-user extension point:
+
+- the enablement registry → `$(MSBuildUserExtensionsPath)\DSoftStudio.Mediator\enabled.props`
+- an `ImportBefore` targets file that MSBuild auto-imports into every SDK build on the machine
+
+On Windows both resolve under `%LOCALAPPDATA%\Microsoft\MSBuild\`. Because nothing lands in the repo, **your solution's `Directory.Build.props` is not touched and will not contain any Pipeline Explorer markers** — that is the normal, expected state, not a sign that injection failed. Toggling **Diagnostics enabled** off/on rewrites the machine-local files; it will **not** make marker comments appear in your repo.
+
+> **Older versions** injected the block directly into the solution's `Directory.Build.props`, wrapped in marker comments — `<!-- BEGIN DSoftStudio.Mediator (auto-injected by VS Code extension) -->` (VS Code) or `<!-- BEGIN DSoftStudio.Mediator (auto-injected by VSIX) -->` (Visual Studio). Current versions strip any such block on solution open. If you find one, an outdated tool wrote it.
 
 **Check**
 
-Open `Directory.Build.props` at the solution root. Look for the marker comments:
+Confirm the machine-local registry exists (Windows PowerShell):
 
-```xml
-<!-- BEGIN DSoftStudio.Mediator (auto-injected by VS Code extension) -->
-...
-<!-- END DSoftStudio.Mediator -->
+```powershell
+Get-Content "$env:LOCALAPPDATA\Microsoft\MSBuild\DSoftStudio.Mediator\enabled.props"
 ```
 
-If those markers are missing, the extension never injected its block.
-If those markers are present but a duplicate analyzer reference exists elsewhere, you have a conflict.
+If the file is missing, the extension has not enabled diagnostics on this machine yet.
+If it exists **and** you also have a leftover marker block in your repo's `Directory.Build.props`, the stale repo copy can reference an old analyzer path and conflict with the machine-local one.
 
 **Fix**
 
-- **Missing block**: open the Pipeline Explorer settings panel and toggle **Diagnostics enabled** off, then on. The injection runs again.
-- **Duplicate**: remove the non-extension copy and keep only the block between the marker comments.
+- **Registry missing**: open the Pipeline Explorer settings panel and toggle **Diagnostics enabled** off, then on. The machine-local files are rewritten.
+- **Leftover repo block**: delete the marker-wrapped block from your solution's `Directory.Build.props` (current versions do this automatically on solution open). The machine-local import supersedes it.
 
 ---
 
@@ -129,6 +134,8 @@ If you intentionally have both libraries in the same solution, scope each analyz
 
 …in your `Directory.Build.props`. This disables only Pipeline Explorer's analyzer; it does not affect the runtime mediator library.
 
+> **Note**: `DSoftMediatorDiagnosticsEnabled` only takes effect when your project references the `DSoftStudio.Mediator.Diagnostics` NuGet package. If Pipeline Explorer was installed via the IDE extension (the usual case), this property is **not** `CompilerVisible` on the machine-local injected path, so setting it silently does nothing. In that case, disable the analyzer from the Pipeline Explorer **Settings panel → Diagnostics** toggle instead.
+
 > Disabling the analyzer hides Pipeline Explorer from the IDE. To get the tree back, re-enable diagnostics and reload the IDE.
 
 ---
@@ -151,13 +158,13 @@ For most users this is not a real issue — strong-name conflicts only matter in
 
 ## Quick disable as a workaround
 
-If you need to ship a build immediately and the errors are blocking you, disable the Pipeline Explorer analyzer for the broken build:
+If you need to ship a build immediately and the errors are blocking you, disable the Pipeline Explorer profiling generator for the broken build. The `CS0234` errors come from the profiling source generator, which is gated on `DSoftMediatorProfilingEnabled` — pass it as `false`:
 
 ```shell
-dotnet build -p:DSoftMediatorDiagnosticsEnabled=false
+dotnet build -p:DSoftMediatorProfilingEnabled=false
 ```
 
-This produces a clean build but disables the analyzer and the source generator for that invocation. The IDE tree will not populate until you re-enable diagnostics.
+This produces a clean build but disables the profiling code generation for that invocation. The IDE tree will not populate profiling data until you build again without the override.
 
 ---
 

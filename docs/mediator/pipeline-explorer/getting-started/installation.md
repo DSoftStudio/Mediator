@@ -40,7 +40,7 @@ A single license activates both editions, so installing one does not prevent ins
 Or install from the command line:
 
 ```shell
-code --install-extension DSoftStudio.dsoftstudio-mediator
+code --install-extension DSoftStudio.mediator-pipeline-explorer
 ```
 
 ### Install from a `.vsix` file
@@ -48,7 +48,7 @@ code --install-extension DSoftStudio.dsoftstudio-mediator
 If your environment can't reach the Marketplace, download the latest release from the [GitHub releases page](https://github.com/DSoftStudio/Mediator.Enterprise/releases) and install:
 
 ```shell
-code --install-extension dsoftstudio-mediator-<version>.vsix
+code --install-extension mediator-pipeline-explorer-<target>-<version>.vsix
 ```
 
 ### First launch
@@ -135,7 +135,7 @@ Your license persists across IDE restarts. See [Troubleshooting: activation fail
 ### Visual Studio Code
 
 ```shell
-code --uninstall-extension DSoftStudio.dsoftstudio-mediator
+code --uninstall-extension DSoftStudio.mediator-pipeline-explorer
 ```
 
 Or remove it from the Extensions view.

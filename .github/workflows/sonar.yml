@@ -53,13 +53,15 @@ jobs:
           /d:sonar.exclusions="**/obj/**,**/bin/**,samples/**,benchmarks/**,docs/**,tests/**"
           /d:sonar.coverage.exclusions="src/**/DSoftStudio.Mediator.Generators/**"
           /d:sonar.cpd.exclusions="src/**/DSoftStudio.Mediator.Generators/**"
-          /d:sonar.issue.ignore.multicriteria="e1,e2,e3"
+          /d:sonar.issue.ignore.multicriteria="e1,e2,e3,e4"
           /d:sonar.issue.ignore.multicriteria.e1.ruleKey="csharpsquid:S2326"
           /d:sonar.issue.ignore.multicriteria.e1.resourceKey="src/**/I*Request.cs"
           /d:sonar.issue.ignore.multicriteria.e2.ruleKey="csharpsquid:S3267"
           /d:sonar.issue.ignore.multicriteria.e2.resourceKey="src/**/DSoftStudio.Mediator.Generators/**"
           /d:sonar.issue.ignore.multicriteria.e3.ruleKey="csharpsquid:S2743"
           /d:sonar.issue.ignore.multicriteria.e3.resourceKey="src/**/DSoftStudio.Mediator/*Cache.cs"
+          /d:sonar.issue.ignore.multicriteria.e4.ruleKey="*"
+          /d:sonar.issue.ignore.multicriteria.e4.resourceKey="tests/**/*"
 
       - name: Build
         run: dotnet build DSoftStudio.Mediator.slnx -c Release --no-incremental

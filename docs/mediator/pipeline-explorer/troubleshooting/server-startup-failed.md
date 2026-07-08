@@ -23,7 +23,20 @@ Work through the causes below in order.
 
 ---
 
-## 1. Antivirus or endpoint protection quarantined the server
+## 1. The .NET 8 runtime is missing
+
+The bundled server is published framework-dependent (`--no-self-contained`), so it needs the **.NET 8 runtime** installed on your machine. On startup the extension runs `dotnet --list-runtimes`; if no .NET 8 runtime is found it stops and reports:
+
+> Mediator: .NET 8 SDK/Runtime is required…
+
+**Fix**
+
+- Install the **.NET 8 runtime** (or SDK) from Microsoft's [.NET downloads](https://dotnet.microsoft.com/download/dotnet/8.0), then reload the IDE.
+- After installing, confirm it's visible by running `dotnet --list-runtimes` in a terminal — you should see a `Microsoft.NETCore.App 8.x` entry.
+
+---
+
+## 2. Antivirus or endpoint protection quarantined the server
 
 Security products sometimes quarantine freshly-installed binaries before they are widely trusted. If the bundled server file is removed or blocked from running, the extension can't launch it.
 
@@ -44,13 +57,20 @@ If the server files are missing right after a successful install, quarantine is 
 
 ---
 
-## 2. The server can't run on your platform
+## 3. A `.vsix` installed for the wrong platform
 
-The bundled server is a native binary matched to your operating system and CPU architecture. If it won't start and you're on an uncommon platform, capture the output (see [Capturing logs](#capturing-logs) below) so we can help.
+The bundled server is matched to your operating system and CPU architecture. The most common cause of a platform mismatch is a **manually installed `.vsix` for the wrong target** — for example a `win-x64` build dropped onto an `osx-arm64` machine. When the server binary doesn't match the host, it can't launch.
+
+**Fix**
+
+- Install the platform-specific package for your machine — `mediator-pipeline-explorer-<target>-<version>.vsix`, where `<target>` matches your OS/architecture (e.g. `win-x64`, `linux-x64`, `osx-arm64`).
+- Easiest: install from the **Marketplace** instead of a downloaded file — it automatically selects the correct target for your machine.
+
+If you're on an uncommon platform and it still won't start, capture the output (see [Capturing logs](#capturing-logs) below) so we can help.
 
 ---
 
-## 3. A leftover server process or stale lock
+## 4. A leftover server process or stale lock
 
 Pipeline Explorer keeps a single background server per machine and tracks it with a lock. If a previous session left a server running, or the lock points at a process that is no longer alive, the new session can fail to connect.
 
@@ -62,7 +82,7 @@ Pipeline Explorer keeps a single background server per machine and tracks it wit
 
 ---
 
-## 4. Very old Linux system libraries
+## 5. Very old Linux system libraries
 
 On Linux, the server needs reasonably current system libraries. Very old distributions may not have them, and the server exits immediately on launch.
 
@@ -79,10 +99,10 @@ On Windows and macOS this is rarely an issue.
 
 If you want to look closer or report the problem, capture the full output:
 
-- **VS Code** — open the **Output** panel (`Ctrl+Shift+U`) and select **Mediator** from the dropdown.
-- **Visual Studio** — **View → Output**, then select **Mediator** in the dropdown.
+- **VS Code** — open the **Output** panel (`Ctrl+Shift+U`) and select **Mediator Server** from the dropdown.
+- **Visual Studio** — **View → Output**, then select **DSoftStudio Mediator** in the dropdown.
 
-Reload the IDE so the log captures startup from the beginning, reproduce the failure, then copy the **Mediator** output. You can [open an issue](https://github.com/DSoftStudio/Mediator.Enterprise/issues) with that output plus your IDE and extension version — no project source is needed.
+Reload the IDE so the log captures startup from the beginning, reproduce the failure, then copy the output (from the **Mediator Server** channel in VS Code, or **DSoftStudio Mediator** in Visual Studio). You can [open an issue](https://github.com/DSoftStudio/Mediator.Enterprise/issues) with that output plus your IDE and extension version — no project source is needed.
 
 ---
 

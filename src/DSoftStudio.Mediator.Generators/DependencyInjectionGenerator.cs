@@ -258,90 +258,95 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
         // Capture the dependency types of the constructor DI will use (the greediest public ctor) so the
         // runtime optimizer can raise this handler's lifetime from its dependency lifetimes (AOT-safe: the
         // types are emitted as typeof, never reflected). Empty for stateless handlers.
-        string depTypes = "";
-        if (!isStateless)
-        {
-            var ctor = symbol.InstanceConstructors
-                .Where(static c => c.DeclaredAccessibility == Accessibility.Public)
-                .OrderByDescending(static c => c.Parameters.Length)
-                .FirstOrDefault();
-            if (ctor is not null && !ctor.Parameters.IsEmpty)
-            {
-                var depsBuilder = new System.Text.StringBuilder();
-                for (int p = 0; p < ctor.Parameters.Length; p++)
-                {
-                    if (p > 0) depsBuilder.Append('|'); // '|' never appears in a type name (generics use < , >)
-                    depsBuilder.Append(ctor.Parameters[p].Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
-                }
-                depTypes = depsBuilder.ToString();
-            }
-        }
+        string depTypes = isStateless ? "" : GetDependencyTypes(symbol);
 
         // An explicit [HandlerLifetime(...)] pins the lifetime: it is emitted directly and skips the optimizer.
-        string? explicitLifetime = null;
+        string? explicitLifetime = GetExplicitLifetime(symbol);
+
+        return MatchHandlerInterface(symbol, isStateless, depTypes, explicitLifetime);
+    }
+
+    /// <summary>
+    /// The '|'-joined fully-qualified constructor dependency types of the greediest public constructor DI
+    /// would pick, or "" when there is no public constructor with parameters. Caller guarantees the handler
+    /// is not stateless.
+    /// </summary>
+    private static string GetDependencyTypes(INamedTypeSymbol symbol)
+    {
+        var ctor = symbol.InstanceConstructors
+            .Where(static c => c.DeclaredAccessibility == Accessibility.Public)
+            .OrderByDescending(static c => c.Parameters.Length)
+            .FirstOrDefault();
+
+        if (ctor is null || ctor.Parameters.IsEmpty)
+            return "";
+
+        var depsBuilder = new System.Text.StringBuilder();
+        for (int p = 0; p < ctor.Parameters.Length; p++)
+        {
+            if (p > 0) depsBuilder.Append('|'); // '|' never appears in a type name (generics use < , >)
+            depsBuilder.Append(ctor.Parameters[p].Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+        }
+
+        return depsBuilder.ToString();
+    }
+
+    /// <summary>
+    /// The lifetime pinned by an explicit <c>[HandlerLifetime(...)]</c> attribute ("Scoped"/"Singleton"/
+    /// "Transient"), or null when the attribute is absent - in which case the runtime optimizer decides.
+    /// </summary>
+    private static string? GetExplicitLifetime(INamedTypeSymbol symbol)
+    {
         foreach (var attr in symbol.GetAttributes())
         {
             if (attr.AttributeClass?.ToDisplayString() == "DSoftStudio.Mediator.Abstractions.HandlerLifetimeAttribute"
                 && attr.ConstructorArguments.Length == 1
                 && attr.ConstructorArguments[0].Value is int lifetimeValue)
             {
-                explicitLifetime = lifetimeValue switch { 1 => "Scoped", 2 => "Singleton", _ => "Transient" };
-                break;
-            }
-        }
-
-        foreach (var iface in symbol.AllInterfaces)
-        {
-            var ns = iface.ContainingNamespace.ToDisplayString();
-
-            if (ns != "DSoftStudio.Mediator.Abstractions")
-                continue;
-
-            switch (iface.MetadataName)
-            {
-                case "IRequestHandler`2":
-                    {
-                        var request = iface.TypeArguments[0]
-                            .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
-
-                        var response = iface.TypeArguments[1]
-                            .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
-
-                        return new HandlerInfo(
-                            $"global::DSoftStudio.Mediator.Abstractions.IRequestHandler<{request},{response}>",
-                            symbol.ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat),
-                            isStateless, depTypes, explicitLifetime);
-                    }
-
-                case "INotificationHandler`1":
-                    {
-                        var notification = iface.TypeArguments[0]
-                            .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
-
-                        return new HandlerInfo(
-                            $"global::DSoftStudio.Mediator.Abstractions.INotificationHandler<{notification}>",
-                            symbol.ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat),
-                            isStateless, depTypes, explicitLifetime);
-                    }
-
-                case "IStreamRequestHandler`2":
-                    {
-                        var request = iface.TypeArguments[0]
-                            .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
-
-                        var response = iface.TypeArguments[1]
-                            .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
-
-                        return new HandlerInfo(
-                            $"global::DSoftStudio.Mediator.Abstractions.IStreamRequestHandler<{request},{response}>",
-                            symbol.ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat),
-                            isStateless, depTypes, explicitLifetime);
-                    }
+                return lifetimeValue switch { 1 => "Scoped", 2 => "Singleton", _ => "Transient" };
             }
         }
 
         return null;
     }
+
+    /// <summary>
+    /// Maps the first recognized mediator handler interface the symbol implements to its <see cref="HandlerInfo"/>,
+    /// or null when the type implements none.
+    /// </summary>
+    private static HandlerInfo? MatchHandlerInterface(
+        INamedTypeSymbol symbol,
+        bool isStateless,
+        string depTypes,
+        string? explicitLifetime)
+    {
+        var implName = symbol.ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
+
+        foreach (var iface in symbol.AllInterfaces)
+        {
+            if (iface.ContainingNamespace.ToDisplayString() != "DSoftStudio.Mediator.Abstractions")
+                continue;
+
+            string? serviceType = iface.MetadataName switch
+            {
+                "IRequestHandler`2" =>
+                    $"global::DSoftStudio.Mediator.Abstractions.IRequestHandler<{TypeArg(iface, 0)},{TypeArg(iface, 1)}>",
+                "INotificationHandler`1" =>
+                    $"global::DSoftStudio.Mediator.Abstractions.INotificationHandler<{TypeArg(iface, 0)}>",
+                "IStreamRequestHandler`2" =>
+                    $"global::DSoftStudio.Mediator.Abstractions.IStreamRequestHandler<{TypeArg(iface, 0)},{TypeArg(iface, 1)}>",
+                _ => null,
+            };
+
+            if (serviceType is not null)
+                return new HandlerInfo(serviceType, implName, isStateless, depTypes, explicitLifetime);
+        }
+
+        return null;
+    }
+
+    private static string TypeArg(INamedTypeSymbol iface, int index) =>
+        iface.TypeArguments[index].ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
 
     private static RequestTypeEntry? GetRequestTypeInfo(
         GeneratorSyntaxContext ctx,
