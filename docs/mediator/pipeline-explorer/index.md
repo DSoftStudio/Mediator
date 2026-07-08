@@ -23,7 +23,7 @@ Pipeline Explorer is a commercial IDE extension that scans your solution, discov
 
 <figure class="screenshot">
   <img src="assets/screenshots/dashboard.png" alt="Pipeline Explorer with the discovered pipeline tree on the left and the Dashboard on the right showing handler counts, pipeline-mode and lifetime distributions, and recent activity">
-  <figcaption>Pipeline Explorer — the discovered pipeline tree on the left, the Dashboard on the right: live counts of handlers, behaviors, notifications, and streams, the pipeline-mode and DI-lifetime distributions, and a recent-activity feed.</figcaption>
+  <figcaption>Pipeline Explorer — the discovered pipeline tree on the left, the Dashboard on the right: live counts of handlers, components, notifications, and streams, the pipeline-mode and DI-lifetime distributions, and a recent-activity feed.</figcaption>
 </figure>
 
 ---
@@ -46,7 +46,7 @@ Pipeline Explorer answers all of these in seconds, with one click to source.
 
 | Capability | Outcome |
 |---|---|
-| **Pipeline tree explorer** | Browse Commands, Queries, Notifications, and Streams grouped by kind, with at-a-glance badges and live counts. |
+| **Pipeline tree explorer** | Browse request pipelines (commands & queries), notifications, and streams, with at-a-glance badges and live counts. |
 | **Click-to-source navigation** | Click any node — handler, behavior, call site — and the IDE opens the file at the right line. |
 | **Interactive pipeline graph** | See pre-processors → behaviors → handler → post-processors visualized per pipeline, with notification fan-out and nested calls inline. Detach it into its own window, and overlay per-node timing + health badges once profiling is on. |
 | **Runtime profiler** | Live handler / behavior timings with p50 / p95 / p99 percentiles, error rates, and tail-heavy detection — plus per-pipeline statistics, request telemetry, and a Hot Path / Flame breakdown of where each request spends its time. |
@@ -97,7 +97,8 @@ See the [full troubleshooting hub](troubleshooting/index.md) for the diagnostic 
 
 Pipeline Explorer ships as two editions that share the same backend, the same data model, and the same workflow:
 
-- **Visual Studio Code extension** — available on the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=DSoftStudio.dsoftstudio-mediator). Bundled server auto-spawns on Windows, macOS, and Linux.
+<!-- TODO(doc-review): confirm the extension is actually published under this Marketplace slug before release -->
+- **Visual Studio Code extension** — available on the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=DSoftStudio.mediator-pipeline-explorer). Bundled server auto-spawns on Windows, macOS, and Linux.
 - **Visual Studio extension** — available on the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=DSoftStudio.MediatorPipelineExplorer). Visual Studio 2022 17.0+ and 2026.
 
 A single license activates both editions.

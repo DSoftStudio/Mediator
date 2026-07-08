@@ -27,7 +27,7 @@ dotnet add package DSoftStudio.Mediator.OpenTelemetry
 services
     .AddMediator()
     .RegisterMediatorHandlers()
-    .AddMediatorInstrumentation()       // ← registers tracing + metrics behaviors
+    .AddMediatorInstrumentation()       // ← registers tracing + metrics instrumentation
     .PrecompilePipelines()
     .PrecompileNotifications()
     .PrecompileStreams();

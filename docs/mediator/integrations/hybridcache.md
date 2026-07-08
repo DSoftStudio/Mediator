@@ -48,7 +48,7 @@ public record GetProduct(Guid Id) : IQuery<ProductDto>, ICachedRequest
 }
 ```
 
-That's it — the `CachingBehavior` intercepts the pipeline, checks for `ICachedRequest`, and uses `HybridCache.GetOrCreateAsync()` to cache the result. Requests that don't implement `ICachedRequest` pass through with zero overhead.
+That's it — the `CachingBehavior` intercepts the pipeline, checks for `ICachedRequest`, and uses `HybridCache.GetOrCreateAsync()` to cache the result. Requests that don't implement `ICachedRequest` pass through with negligible overhead — a single `is not ICachedRequest` type-check before the behavior awaits the rest of the pipeline.
 
 ## Adding Redis as L2
 

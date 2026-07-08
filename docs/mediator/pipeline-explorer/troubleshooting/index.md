@@ -33,6 +33,18 @@ Quick links to the most common issues. Each page walks through likely causes in 
 
 ---
 
+## Known issues
+
+### Handler / component "Open in Editor" is disabled until a full rebuild (layered solutions)
+
+**Symptom** — In a multi-project solution where a handler or a pipeline component (a pre/post-processor or behavior) is defined in a **referenced** project — while the `Send` / `Publish` call site lives in the host project — the detail panel's **FILE** field is blank and **Open in Editor** / **Copy File Path** are disabled for that handler or component. Call sites still resolve normally, and the pipeline, counts, and profiling are all correct.
+
+**Why** — To open a solution quickly, the first discovery reads the pipeline maps produced at build time (one per project). In the *host* project's map, a handler/component that lives in a referenced project is recorded as an external symbol with **no source path** — the source path is present only in the *owner* project's own map. An incremental build may not have regenerated the owner project's map, so the source path isn't available yet.
+
+**Workaround** — **Rebuild the solution** (Visual Studio: `Build → Rebuild Solution`; VS Code / CLI: `dotnet build --no-incremental`, or clean the `obj` folders and build). A full rebuild regenerates every project's map and re-runs the complete analysis, so the handler/component source paths resolve — **FILE**, **Open in Editor**, and **Copy File Path** then work.
+
+---
+
 ## Diagnostic checklist before reporting
 
 If you plan to open an issue at the [GitHub repository](https://github.com/DSoftStudio/Mediator.Enterprise/issues), collecting these four items up front cuts the round-trip in half:
@@ -41,8 +53,8 @@ If you plan to open an issue at the [GitHub repository](https://github.com/DSoft
    - VS Code: `Help → About` and Extensions view → click the extension → version on the right.
    - Visual Studio: `Help → About Microsoft Visual Studio`, then `Extensions → Manage Extensions → Installed → DSoftStudio Mediator Pipeline Explorer` for the extension version.
 2. **Mediator output panel** (last 50 lines)
-   - VS Code: `Ctrl+Shift+U` → select **Mediator** in the dropdown.
-   - Visual Studio: `View → Output` → select **Mediator** in the dropdown.
+   - VS Code: `Ctrl+Shift+U` → select **Mediator Server** in the dropdown.
+   - Visual Studio: `View → Output` → select **DSoftStudio Mediator** in the dropdown.
 3. **Package list**
 
    ```shell

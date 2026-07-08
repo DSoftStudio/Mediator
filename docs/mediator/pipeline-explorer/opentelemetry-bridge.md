@@ -19,7 +19,7 @@ There are two ways the bridge's traces reach Pipeline Explorer:
 | Mode | Status | When | What you do |
 |---|---|---|---|
 | **Import a production trace** | Available | Analyse a trace captured in prod / staging | Export an OTLP/JSON (or Jaeger/JSON) trace, then run **Mediator: Import Production Trace…** and pick the file |
-| **Live capture** | In development | Profiling a local run whose solution references the bridge | Build your solution — on a successful build Pipeline Explorer refreshes and detects the bridge automatically |
+| **Live capture** | Available | Profiling a local run whose solution references the bridge | Build your solution — on a successful build Pipeline Explorer refreshes and detects the bridge automatically |
 
 > **Automatic vs. configured — read this first.** Discovery and profiling activate automatically on a successful
 > build. The **enriched** spans — the greyed dependency nodes and `db.operation.name` — are **not** automatic and do
@@ -38,7 +38,7 @@ GetOrdersQuery query            mediator span    (ActivitySource "DSoftStudio.Me
 └─ SELECT orders                db dependency    (Npgsql; enriched → db.operation.name=SELECT, db.sql.table=orders)
 ```
 
-- **Mediator spans** carry `mediator.request.type`, `mediator.request.kind` (command / query / stream / notification)
+- **Mediator spans** carry `mediator.request.type`, `mediator.request.kind` (command / query / request / stream / notification)
   and `mediator.handler.type`. That is how Pipeline Explorer maps each frame to its handler and rebuilds the
   dispatch tree (a command and the notification it publishes are sibling dispatches, exactly as the source expresses
   them).
@@ -46,6 +46,11 @@ GetOrdersQuery query            mediator span    (ActivitySource "DSoftStudio.Me
   handler that made them. The bridge's `DatabaseSpanEnrichmentProcessor` parses `db.statement` **in-process** into
   `db.operation.name` / `db.sql.table` / `db.stored_procedure.name`, so each query is a distinct, readable
   dependency — **and the raw statement never leaves the app** (see [Security & redaction](#security--redaction)).
+
+<figure>
+  <img src="assets/screenshots/bridge-flame-dependencies.png" alt="Runtime Profiler Hot Path / Flame for CreateOrderCommand with the bridge active: the pre-processors, behaviors and handler, then greyed DEPENDENCY rows — 'postgresql SELECT inventory', 'postgresql INSERT orders' and the connection — plus a 'SELF wait' row, each with its share of the total and bottleneck markers on the slowest">
+  <figcaption>Live capture with the bridge active — the <strong>Hot Path · Flame</strong> nests the enriched <strong>dependency</strong> spans (<code>postgresql SELECT inventory</code>, <code>INSERT orders</code>, the connection) and a <code>SELF wait</code> row under the handler that made them, each with its share of the total and a <code>bottleneck</code> marker on the slowest.</figcaption>
+</figure>
 
 ---
 
@@ -91,19 +96,21 @@ into the IDE for analysis, without attaching a profiler to anything.
 
 ---
 
-## Mode B — Live capture (in development)
-
-> **Status:** in development — not yet in a released build. Use **Mode A** (import) to analyse the bridge's enriched
-> traces today.
+## Mode B — Live capture
 
 Pipeline Explorer **refreshes automatically after a successful build** (with `mediator.autoRefresh` on — the
 default): it re-discovers the solution, and that re-discovery is where it sees whether your projects reference the
 bridge.
 
-The planned live mode builds on that: when a discovered solution **references** `DSoftStudio.Mediator.OpenTelemetry`,
-the live profiler will capture the bridge's enriched spans directly from the running process — over the same EventPipe
-channel it already uses, with no OTLP collector and no file export — giving the dependency spans and
-`db.operation.name` live, exactly as in an imported trace.
+When a discovered solution **references** `DSoftStudio.Mediator.OpenTelemetry`, the live profiler captures the
+bridge's enriched spans directly from the running process — over the same EventPipe channel it already uses, with no
+OTLP collector and no file export — giving the dependency spans and `db.operation.name` live, exactly as in an
+imported trace.
+
+<figure>
+  <img src="assets/screenshots/bridge-profiler.png" alt="Runtime Profiler with the bridge active on the OpenTelemetry sample: per-pipeline statistics for CreateOrderCommand and the queries, a Notification Fanout table for OrderCreatedNotification with its two handlers, and the request-telemetry summary — all captured live over EventPipe">
+  <figcaption>Live capture on a bridge-enabled solution — commands, queries, the notification fan-out (<code>OrderCreatedNotification → 2 handlers</code>) and streams, all captured over EventPipe with no OTLP collector running.</figcaption>
+</figure>
 
 When the solution does **not** reference the bridge, the profiler stays on its built-in instrumentation events
 (handlers + behaviors, without external dependency spans), and **Mode A** remains the way to get the full picture.

@@ -20,8 +20,8 @@ description: "The Pipeline Explorer tree is empty after opening a solution. Caus
 You opened a solution but the Pipeline Explorer shows **No pipeline data found** — empty Request Pipelines, Notifications, and Streams — even though your project contains mediator handlers.
 
 <figure class="screenshot">
-  <img src="../assets/screenshots/empty-pipeline.png" alt="Pipeline Explorer empty state: 'No pipeline data found' with Refresh, Build Solution and Open .sln buttons and a 'Things to check' checklist">
-  <figcaption>The empty state — when discovery finds nothing, the panel offers <strong>Refresh</strong> / <strong>Build Solution</strong> / <strong>Open .sln</strong> plus a built-in checklist that mirrors the causes below.</figcaption>
+  <img src="../assets/screenshots/empty-pipeline.png" alt="Pipeline Explorer empty state in Visual Studio: 'No pipeline data found — Build your solution to generate the pipeline map' with Refresh, Build Solution, Open solution… and 'Analyze anyway (slow)' buttons and a 'Things to check' checklist">
+  <figcaption>The empty state (Visual Studio) — when discovery finds nothing, the panel offers <strong>Refresh</strong> / <strong>Build Solution</strong> / <strong>Open solution…</strong>, an <strong>Analyze anyway (slow)</strong> escape hatch, plus a built-in checklist that mirrors the causes below. (In VS Code the empty view shows the checklist without buttons.)</figcaption>
 </figure>
 
 This page walks through the five most common causes in order of likelihood.
@@ -45,7 +45,7 @@ Open the folder that contains the `.sln`, or open the `.sln` directly. Click **R
 
 ## 2. No project references `DSoftStudio.Mediator`
 
-The discovery step only scans projects that reference the `DSoftStudio.Mediator` NuGet package.
+Discovery iterates over **every** project in the solution — projects that don't reference the `DSoftStudio.Mediator` NuGet package simply yield no handlers. If no project references the package, the tree stays empty.
 
 **Check**
 
@@ -69,7 +69,7 @@ After the package is added, build the solution once, then click **Refresh** in t
 
 ## 3. The solution has never been built
 
-Pipeline Explorer relies on assembly metadata produced by the source generator. A solution that has never been compiled has no metadata to read.
+Pipeline Explorer discovers handlers from a generated encrypted source map (`PipelineMap.g.json.cs`) or by analyzing the Roslyn compilation — not from compiled assembly metadata. When the `requireBuild` setting is enabled, a solution that has never been compiled has nothing for discovery to read.
 
 **Check**
 
@@ -115,8 +115,8 @@ Pipeline Explorer talks to a bundled background server that performs the actual 
 
 **Check**
 
-- VS Code: open the **Output** panel (`Ctrl+Shift+U`) and select **Mediator** from the dropdown. Look for a line confirming the server started. If you see startup errors, see [server startup failed](server-startup-failed.md).
-- Visual Studio: open **View → Output** and select **Mediator** in the **Show output from** dropdown.
+- VS Code: open the **Output** panel (`Ctrl+Shift+U`) and select **Mediator Server** from the dropdown. Look for a line confirming the server started. If you see startup errors, see [server startup failed](server-startup-failed.md).
+- Visual Studio: open **View → Output** and select **DSoftStudio Mediator** in the **Show output from** dropdown.
 
 **Fix**
 

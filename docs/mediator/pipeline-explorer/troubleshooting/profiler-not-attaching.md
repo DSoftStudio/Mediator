@@ -31,7 +31,7 @@ When everything is wired correctly the profiler fills with live data — total e
   <figcaption>A working profiling session — executions and per-pipeline statistics fill in as traffic flows.</figcaption>
 </figure>
 
-> **Important**: Pipeline Explorer wires `AddMediatorProfiling()` into your application **automatically** via C# 12 interceptors. You do NOT need to add any line to `Program.cs` — referencing the analyzer (which the extension auto-injects into your solution) is enough. If profiling isn't working, the wiring failed for one of the reasons below.
+> **Important**: Pipeline Explorer wires `AddMediatorProfiling()` into your application **automatically** via C# 12 interceptors. You do NOT need to add any line to `Program.cs` — referencing the analyzer (which the extension auto-injects for you) is enough. If profiling isn't working, the wiring failed for one of the reasons below.
 
 ---
 
@@ -56,7 +56,9 @@ If you are running the application from inside the same IDE (F5 in Visual Studio
 
 The auto-wiring is gated on the MSBuild property `DSoftMediatorProfilingEnabled`. When it is `false`, the source generator emits nothing and the auto-registration disappears entirely — no profiling code exists in the produced IL.
 
-The default value is `true`, but the extension's Settings panel exposes a toggle that flips this property in your solution's `Directory.Build.props`. If you (or someone on your team) ever turned profiling off, the toggle persists.
+The default value is `false` — profiling is off until something turns it on. When the Pipeline Explorer extension is active, the IDE tooling enables it for you, but only in your **profiling configurations** (Debug by default), and it is **force-disabled** for AOT, trimmed, CI, and publish builds. So a Release / CI / AOT / publish build produces zero events even though `DSoftMediatorProfilingEnabled` is never literally set to `false` — searching your project files for it set to `false` comes up empty. Use the **Profiling Configurations…** command to control which build configurations opt in.
+
+The extension sets this property machine-local (under `$(MSBuildUserExtensionsPath)`); older versions used to write it into your solution's `Directory.Build.props`.
 
 **Check**
 
@@ -68,7 +70,7 @@ Search your solution for `DSoftMediatorProfilingEnabled`. If you find it set to 
 
 **Fix**
 
-Set it to `true` (or remove the property — the default is `true`):
+Set it explicitly to `true`:
 
 ```xml
 <PropertyGroup>
@@ -76,13 +78,13 @@ Set it to `true` (or remove the property — the default is `true`):
 </PropertyGroup>
 ```
 
-Then rebuild the affected project so the source generator runs again. The extension also exposes this toggle in the Settings panel (gear icon in the toolbar).
+Then rebuild the affected project so the source generator runs again. To turn profiling on or off per build configuration, use the **Profiling Configurations…** command rather than editing this property by hand.
 
 ---
 
 ## 3. The analyzer isn't loaded in the project that calls `AddMediator`
 
-The auto-registration only fires in projects that pick up the Pipeline Explorer analyzer **and** reference `DSoftStudio.Mediator.Abstractions`. If your composition root lives in a project that doesn't satisfy both conditions, the interceptors are never generated and profiling never wires itself in.
+The auto-registration only fires in projects that pick up the Pipeline Explorer analyzer **and** reference the main `DSoftStudio.Mediator` package (which provides `MediatorBuilder`). If your composition root lives in a project that doesn't satisfy both conditions, the interceptors are never generated and profiling never wires itself in.
 
 **Check**
 
@@ -94,23 +96,12 @@ In the project that contains your `services.AddMediator(...)` call:
   dotnet list <project>.csproj package | findstr Mediator
   ```
 
-- Confirm the analyzer is loaded. The simplest way is to look for a `Directory.Build.props` at the solution root with this block:
-
-  ```xml
-  <!-- BEGIN DSoftStudio.Mediator (auto-injected by VS Code extension) -->
-  <ItemGroup ...>
-    <Analyzer Include="...DSoftStudio.Mediator.Profiling.dll" />
-    ...
-  </ItemGroup>
-  <!-- END DSoftStudio.Mediator -->
-  ```
-
-  If that block is missing, the analyzer never got injected (or was removed).
+- Confirm the analyzer is loaded. The extension injects it **machine-local** — under `$(MSBuildUserExtensionsPath)\DSoftStudio.Mediator\enabled.props`, not into your repo. (Older versions wrote a `<!-- BEGIN/END DSoftStudio.Mediator -->` block into the solution-root `Directory.Build.props`; those legacy repo markers are now actively stripped, so a missing block there is expected and not the problem.)
 
 **Fix**
 
 - If the package reference is missing: `dotnet add package DSoftStudio.Mediator`.
-- If the `Directory.Build.props` block is missing: open the extension's Settings panel, toggle **Diagnostics enabled** off, then on. The auto-injection runs again.
+- If the analyzer injection is missing: open the extension's Settings panel, toggle **Diagnostics enabled** off, then on. The machine-local injection runs again.
 - Rebuild.
 
 ---
@@ -156,8 +147,6 @@ Raise the cap (up to 50,000):
 
 …or open the settings panel in Visual Studio and bump the value there.
 
-For sustained high-volume traffic, use **Snapshot** to capture batches instead of relying on the live buffer.
-
 ---
 
 ## 6. Direct handler resolution bypasses the mediator
@@ -196,14 +185,11 @@ Is your application a console app that exits right after `mediator.Send(...)`?
 
 **Fix**
 
-Either:
+Add a small delay at the end of your test / console run so the profiler has time to flush the last events before the process exits:
 
-- Use **Snapshot** instead of live streaming for short-lived processes — it forces a synchronous flush before the snapshot completes.
-- Add a small delay at the end of your test / console run:
-
-  ```csharp
-  await Task.Delay(500);   // give the profiler time to flush
-  ```
+```csharp
+await Task.Delay(500);   // give the profiler time to flush
+```
 
 For long-running services (APIs, workers, daemons), this is not an issue.
 

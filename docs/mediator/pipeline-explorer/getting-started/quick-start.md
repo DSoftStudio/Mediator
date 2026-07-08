@@ -17,7 +17,7 @@ description: "Your first solution scan, profiling session, and source navigation
 
 By the end of this guide you will have scanned your first solution, navigated to a handler in one click, and watched live profiling data flow in.
 
-This walkthrough assumes you have already [installed the extension](installation.md) and opened a solution that references `DSoftStudio.Mediator`. The steps are identical in Visual Studio Code and Visual Studio; the screenshots below are drawn from both — the layout and workflow match in either IDE.
+This walkthrough assumes you have already [installed the extension](installation.md) and opened a solution that references `DSoftStudio.Mediator`. The core workflow is the same in Visual Studio Code and Visual Studio, and the screenshots below are drawn from both. A few features are Visual Studio-only, however — detaching/docking the graph, the section-filter dropdown, and some context-menu commands — and those differences are called out inline as you reach them.
 
 ---
 
@@ -48,7 +48,7 @@ The tree populates with three sections — **Request Pipelines**, **Notification
 The badge after each request pipeline tells you two things at a glance:
 
 - **CQRS kind** — `Command`, `Query`, or `Request` (when neither marker interface is implemented).
-- **Pipeline mode** — `PassThrough` (handler only), `BehaviorsOnly`, or `Full` (pre/post-processors + behaviors).
+- **Pipeline mode** — **Direct** (handler only), **Behaviors**, or **Full Pipeline** (pre/post-processors + behaviors).
 
 If the tree is empty, click **Refresh** in the toolbar. If it is still empty after refresh, see [Troubleshooting: empty tree](../troubleshooting/empty-tree.md).
 
@@ -72,27 +72,27 @@ Click any item — handler, behavior, or call site — and the IDE jumps to the 
 
 The execution-order table numbers every step in the exact order it runs — pre-processors, behaviors, the handler, then post-processors. Behavior and processor times are **inclusive**: each wraps the steps below it, so its average equals the combined time of everything it surrounds plus its own overhead.
 
-> **Tip:** right-click any node for **Go to Definition**, **Find All References**, **Copy Type Name**, and **Pin to Quick Access**.
+> **Tip:** right-click any node for a context menu. In **Visual Studio** it offers **Go to Definition**, **Find All References**, **Copy Type Name**, and **Pin to Quick Access**. In **VS Code** it offers **Go to Source**, **Show Pipeline Graph**, and **Copy Type Name** (no Find All References / Pin to Quick Access).
 
 ---
 
 ## 3. Visualize the pipeline graph
 
-The detail panel exposes a **graph** toggle (the branching icon in the toolbar) that opens the interactive graph below the detail.
+The detail panel exposes a **graph** toggle (the branching icon in the toolbar) that opens the interactive graph.
 
 - **Pan** — drag empty space.
 - **Zoom** — mouse wheel.
 - **Click a node** — navigates to source in the editor.
-- **Detach** — pop the graph out into its own resizable window, then **Dock back** when you're done.
+- **Detach / Dock** (Visual Studio only) — pop the graph out into its own resizable window, then **Dock back** when you're done.
 
-The graph lays out the full request flow left to right: **Send → request → pre-processors → behaviors → handler → post-processors**. It sits docked beneath the detail panel, so you can read the structure and the step list together.
+The graph lays out the full request flow left to right: **Send → request → pre-processors → behaviors → handler → post-processors**. In **Visual Studio** it sits docked beneath the detail panel, so you can read the structure and the step list together; in **VS Code** it opens as a side-by-side editor tab next to the detail.
 
 <figure class="screenshot">
   <img src="../assets/screenshots/graph-view.png" alt="Detail panel above a docked pipeline graph for PlaceOrderCommand: Send, the command, two pre-processors, the handler, and a post-processor laid out left to right">
   <figcaption>The graph docked beneath the detail panel for a <code>Full</code> pipeline — <code>Send → PlaceOrderCommand → LoggingPreProcessor → ValidationPreProcessor → PlaceOrderCommandHandler → AuditPostProcessor</code> — every node click-to-source.</figcaption>
 </figure>
 
-Need more room? **Detach** the graph into its own window — handy for wide pipelines or walking your team through the flow — then **Dock back** when you're done.
+Need more room? In **Visual Studio** you can **Detach** the graph into its own window — handy for wide pipelines or walking your team through the flow — then **Dock back** when you're done. (In **VS Code** the graph already opens as a full side-by-side editor tab, so there is no detach/dock step.)
 
 <figure class="screenshot">
   <img src="../assets/screenshots/graph-view-detached.png" alt="The pipeline graph popped out into its own full-window detached view, showing the end-to-end flow from Send through the processors to the post-processor">
@@ -117,7 +117,7 @@ A handler rarely works alone — it often publishes a notification or dispatches
 
 ## 4. Start runtime profiling
 
-Profiling captures live timings as your code runs. The profiling hooks are wired into your application **automatically** by the analyzer — there is nothing to add to `Program.cs`. As long as the project that calls `services.AddMediator(...)` has the Pipeline Explorer analyzer loaded (which the extension auto-injects via `Directory.Build.props`), the hooks are emitted at compile time with zero allocation overhead until a profiling session is attached.
+Profiling captures live timings as your code runs. The profiling hooks are wired into your application **automatically** by the analyzer — there is nothing to add to `Program.cs`, and nothing is written into your repository. The extension injects the analyzer machine-locally through an MSBuild user-extensions file (`$(MSBuildUserExtensionsPath)\DSoftStudio.Mediator\enabled.props`), so every build on your machine picks it up without touching your solution's `Directory.Build.props`. (Older versions used to write a marked block into the repo's `Directory.Build.props`; those legacy markers are now actively stripped.) As long as the project that calls `services.AddMediator(...)` has the analyzer loaded, the hooks are emitted at compile time with zero allocation overhead until a profiling session is attached.
 
 ### Attach the profiler
 
@@ -131,18 +131,18 @@ Profiling captures live timings as your code runs. The profiling hooks are wired
 
 Then issue requests against your application — run an integration test, exercise an endpoint, replay traffic. Within a second or two, the **Runtime Profiler** fills with live timings.
 
-Each behavior is timed independently. Select a pipeline's **Behaviors** node to see every behavior's own runtime profile side by side — calls, average, self time, p50/p95/p99, and max — so you can tell which cross-cutting concern (validation, logging, transactions) is costing you. Tail-heavy handlers — those with a p99 far above the median — are flagged so you can spot bottlenecks instantly. The default threshold (`tailHeavyMinP99Ms`) prevents false positives on sub-millisecond noise.
+Each component is timed independently. Select a pipeline's **Components** node to see every component's own runtime profile side by side — calls, average, self time, p50/p95/p99, and max — so you can tell which cross-cutting concern (validation, logging, transactions) is costing you. Tail-heavy handlers — those with a p99 far above the median — are flagged so you can spot bottlenecks instantly. The default threshold (`tailHeavyMinP99Ms`) prevents false positives on sub-millisecond noise.
 
 <figure class="screenshot">
-  <img src="../assets/screenshots/behaviors.png" alt="Behaviors panel listing each pipeline behavior with its calls, average, self time, p50/p95/p99, max, and kind (Pre or Post)">
-  <figcaption>The <strong>Behaviors</strong> panel — each behavior's runtime profile side by side (calls, avg, self, p50/p95/p99, max) with its kind (<code>Pre</code> / <code>Post</code>), so the costly cross-cutting concern stands out.</figcaption>
+  <img src="../assets/screenshots/behaviors.png" alt="Components panel listing each pipeline component with its calls, average, self time, p50/p95/p99, max, and kind (Pre or Post)">
+  <figcaption>The <strong>Components</strong> panel — each component's runtime profile side by side (calls, avg, self, p50/p95/p99, max) with its kind (<code>Pre</code> / <code>Post</code>), so the costly cross-cutting concern stands out.</figcaption>
 </figure>
 
-Select a single behavior to see its type, lifetime, and source file — with one click to jump to where it's defined.
+Select a single component to see its type, lifetime, and source file — with one click to jump to where it's defined.
 
 <figure class="screenshot">
-  <img src="../assets/screenshots/behavior-detail.png" alt="Detail for a single behavior: its runtime-stats row plus a properties panel with type, kind, lifetime, file path, and Open in Editor / Copy buttons">
-  <figcaption>Drilling into one behavior — its runtime stats plus type, kind, lifetime, and source file, with <strong>Open in Editor</strong> to jump straight to its definition.</figcaption>
+  <img src="../assets/screenshots/behavior-detail.png" alt="Detail for a single component: its runtime-stats row plus a properties panel with type, kind, lifetime, file path, and Open in Editor / Copy buttons">
+  <figcaption>Drilling into one component — its runtime stats plus type, kind, lifetime, and source file, with <strong>Open in Editor</strong> to jump straight to its definition.</figcaption>
 </figure>
 
 <figure class="screenshot">
@@ -161,7 +161,7 @@ Sort the table by **p99** or **Avg** to identify the worst offender. The **Hot P
 
 Click the bottleneck row to jump to the source. Fix it, re-run, and watch the new numbers replace the old.
 
-When you're done, click **Stop** to detach the profiler. Click **Clear** to reset the in-memory buffer, or **Snapshot** to capture the current state for later comparison.
+When you're done, click **Stop** to detach the profiler. Click **Clear** to reset the in-memory buffer.
 
 ---
 
@@ -169,7 +169,7 @@ When you're done, click **Stop** to detach the profiler. Click **Clear** to rese
 
 As your codebase grows, the tree grows with it. Two tools keep it manageable:
 
-- **Section filter** — the dropdown at the top of the toolbar narrows the tree to one of **All / Commands / Queries / Notifications / Streams**. Picking *Commands* leaves only `ICommand<>`-derived pipelines visible; *Queries* leaves only `IQuery<>`-derived ones.
+- **Section filter** (Visual Studio only) — the dropdown at the top of the toolbar narrows the tree to one of **All / Commands / Queries / Notifications / Streams**. Picking *Commands* leaves only `ICommand<>`-derived pipelines visible; *Queries* leaves only `IQuery<>`-derived ones. **VS Code** has no section-filter dropdown — narrow the tree with the search box below instead.
 - **Search box** — type any fragment of a type name, handler name, behavior name, or file path. Matches highlight and the tree collapses to the matching pipelines.
 
 `Ctrl+F` (VS Code) or click the search box (VS) focuses the input. `Esc` clears it.

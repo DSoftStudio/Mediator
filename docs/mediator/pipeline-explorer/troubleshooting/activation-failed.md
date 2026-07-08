@@ -64,7 +64,7 @@ The message indicates the seat limit for your subscription has been reached.
 **Fix**
 
 - Free up a seat: open the [customer portal](https://portal.dsoftstudio.com/login), find a machine you no longer use, and release it — then activate again.
-- Moving this license from another machine? Use **Move to another machine** in the portal (<https://portal.dsoftstudio.com/transfer>).
+- Moving this license from another machine? Open the [customer portal](https://portal.dsoftstudio.com/login), open the license, and **Deactivate** the old machine — then activate again on the new one.
 - Or upgrade to a plan with more seats on the [Pricing page](https://mediator.dsoftstudio.com/pricing).
 
 ---
@@ -79,7 +79,7 @@ The message mentions a machine or hardware mismatch.
 
 **Fix**
 
-Release or transfer the previous binding in the [customer portal](https://portal.dsoftstudio.com/login) using **Move to another machine**, then activate again on the new machine.
+Open the [customer portal](https://portal.dsoftstudio.com/login), open the license, and **Deactivate** the old machine — then activate again on the new machine.
 
 ---
 
