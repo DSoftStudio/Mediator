@@ -9,7 +9,7 @@
 
 		<!-- NuGet -->
 		<PackageId>DSoftStudio.Mediator.FluentValidation</PackageId>
-		<Version>1.0.9-rc.2</Version>
+		<Version>1.0.9</Version>
 
 		<Authors>DSoftStudio</Authors>
 		<Company>DSoftStudio</Company>

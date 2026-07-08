@@ -15,10 +15,9 @@ description: "All notable changes to DSoftStudio.Mediator."
 
 # Changelog
 
-## [1.3.0] — Unreleased (pre-release `1.3.0-rc.1`)
+## [1.3.0] — 2026-07-08
 
-> Companions: `OpenTelemetry` 1.1.0-rc.1 · `HybridCache` 1.0.9-rc.1 · `FluentValidation` 1.0.9-rc.1.
-> Soaking as a release candidate before promotion to the stable `1.3.0`.
+> Companions: `OpenTelemetry` 1.1.0 · `HybridCache` 1.0.9 · `FluentValidation` 1.0.9.
 
 ### Added
 
