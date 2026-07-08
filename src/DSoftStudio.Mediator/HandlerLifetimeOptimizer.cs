@@ -69,7 +69,7 @@ namespace DSoftStudio.Mediator
             IServiceCollection services,
             (ServiceDescriptor Descriptor, Type[] Dependencies)[] handlers)
         {
-            if (services is null) throw new ArgumentNullException(nameof(services));
+            ArgumentNullException.ThrowIfNull(services);
             if (handlers is null || handlers.Length == 0) return;
 
             var list = Staged.GetOrCreateValue(services);
@@ -88,7 +88,7 @@ namespace DSoftStudio.Mediator
         /// <param name="services">The fully-populated service collection, immediately before building.</param>
         public static void Apply(IServiceCollection services)
         {
-            if (services is null) throw new ArgumentNullException(nameof(services));
+            ArgumentNullException.ThrowIfNull(services);
             if (!Staged.TryGetValue(services, out var staged) || staged.Count == 0) return;
             Staged.Remove(services);
 
@@ -109,15 +109,7 @@ namespace DSoftStudio.Mediator
                 // The last descriptor for the service type is the one DI resolves. Upgrade ours only when it
                 // is STILL that winner (reference identity) - any user re-registration appends a newer
                 // descriptor and is therefore respected, including an identical re-Add that forces Transient.
-                int last = -1;
-                for (int i = services.Count - 1; i >= 0; i--)
-                {
-                    if (services[i].ServiceType == descriptor.ServiceType)
-                    {
-                        last = i;
-                        break;
-                    }
-                }
+                int last = FindWinningDescriptorIndex(services, descriptor.ServiceType);
 
                 if (last < 0 || !ReferenceEquals(services[last], descriptor))
                     continue;
@@ -127,6 +119,21 @@ namespace DSoftStudio.Mediator
 
                 services[last] = new ServiceDescriptor(descriptor.ServiceType, descriptor.ImplementationType, target);
             }
+        }
+
+        /// <summary>
+        /// Index of the last descriptor registered for <paramref name="serviceType"/> - the one DI resolves
+        /// (last registration wins) - or -1 if none. A separate pass keeps <see cref="Apply"/> flat.
+        /// </summary>
+        private static int FindWinningDescriptorIndex(IServiceCollection services, Type serviceType)
+        {
+            for (int i = services.Count - 1; i >= 0; i--)
+            {
+                if (services[i].ServiceType == serviceType)
+                    return i;
+            }
+
+            return -1;
         }
 
         /// <summary>
