@@ -33,11 +33,30 @@ namespace DSoftStudio.Mediator;
 [EditorBrowsable(EditorBrowsableState.Never)]
 public static class AggressiveDispatchLatch
 {
+    /// <summary>
+    /// Opt-in fail-closed mode for CI: when this <see cref="AppContext"/> switch is enabled, a
+    /// poison that disarms at least one ARMED holder throws <see cref="InvalidOperationException"/>
+    /// (from the second container's <c>AddMediator</c> call — catchable and deterministic)
+    /// instead of degrading silently. Never triggered by test resets.
+    /// </summary>
+    internal const string StrictPoisonSwitchName = "DSoftStudio.Mediator.AggressiveDispatch.StrictPoison";
+
     private static readonly object Gate = new();
     private static readonly ConditionalWeakTable<IServiceCollection, object> SeenCollections = new();
     private static int _containerCount;
     private static int _poisoned;
     private static Action? _disarmCallbacks;
+    private static int _armedHolderCount;
+
+    // Backing values for the aggressive-armed / aggressive-poisoned PollingCounters. They live
+    // HERE, not on the EventSource: touching a static field of the EventSource class would run
+    // its type initializer, whose construction synchronously notifies every in-proc
+    // EventListener.OnEventSourceCreated — arbitrary third-party code that must never execute
+    // under <see cref="Gate"/>. ArmedCount is a CURRENT-STATE gauge (mirrors
+    // <see cref="_armedHolderCount"/>: decremented on poison, zeroed on reset);
+    // PoisonedCount is cumulative.
+    internal static int ArmedCount;
+    internal static int PoisonedCount;
 
     /// <summary>True once a second container has been observed — one-way, process-wide.</summary>
     public static bool IsPoisoned => Volatile.Read(ref _poisoned) != 0;
@@ -48,14 +67,37 @@ public static class AggressiveDispatchLatch
     /// </summary>
     public static void OnContainerRegistered(IServiceCollection services)
     {
+        int disarmed;
         lock (Gate)
         {
             if (SeenCollections.TryGetValue(services, out _))
                 return;
             SeenCollections.Add(services, Sentinel);
 
-            if (++_containerCount >= 2)
-                PoisonLocked();
+            if (++_containerCount < 2 || _poisoned != 0)
+                return;
+
+            disarmed = PoisonLocked();
+        }
+
+        // The EventSource write and the opt-in strict throw both run OUTSIDE the lock:
+        // WriteEvent synchronously invokes in-proc EventListener callbacks (OTel bridges, APM
+        // agents), and third-party code must never run under the lock that serializes every
+        // AddMediator and every first-dispatch arm. State is already safe here — everything
+        // degraded to SAFE before the lock was released.
+        AggressiveDispatchEventSource.Log.AggressivePoisoned("second-container", disarmed);
+
+        if (disarmed > 0
+            && AppContext.TryGetSwitch(StrictPoisonSwitchName, out var strict)
+            && strict)
+        {
+            throw new InvalidOperationException(
+                "DSoftStudio.Mediator: a second IServiceCollection was registered while the " +
+                "AGGRESSIVE fast path was armed; the tier has degraded to SAFE. This throw is " +
+                $"opt-in via AppContext switch '{StrictPoisonSwitchName}' (fail-closed CI mode). " +
+                "Either this process legitimately builds multiple containers (disable the switch, " +
+                "or set the DSoftMediatorDisableAggressive MSBuild property) or a container is " +
+                "being created unexpectedly.");
         }
     }
 
@@ -76,19 +118,29 @@ public static class AggressiveDispatchLatch
 
             arm();
             _disarmCallbacks += disarm;
+            _armedHolderCount++;
+            Interlocked.Increment(ref ArmedCount);
             return true;
         }
     }
 
-    private static void PoisonLocked()
+    /// <summary>
+    /// Poisons the tier and disarms every holder, all under <see cref="Gate"/> (the disarm
+    /// callbacks are trivial generated <c>Volatile.Write(ref _armed, null)</c> closures — no
+    /// user or listener code). Returns the number of holders disarmed; the caller fires the
+    /// poison event and the strict throw AFTER releasing the lock.
+    /// </summary>
+    private static int PoisonLocked()
     {
-        if (_poisoned != 0)
-            return;
-
         Volatile.Write(ref _poisoned, 1);
         var callbacks = _disarmCallbacks;
+        var disarmed = _armedHolderCount;
         _disarmCallbacks = null;
+        _armedHolderCount = 0;
+        Interlocked.Add(ref ArmedCount, -disarmed);
+        Interlocked.Increment(ref PoisonedCount);
         callbacks?.Invoke();
+        return disarmed;
     }
 
     /// <summary>
@@ -101,6 +153,8 @@ public static class AggressiveDispatchLatch
         {
             _containerCount = 0;
             _poisoned = 0;
+            _armedHolderCount = 0;
+            Interlocked.Exchange(ref ArmedCount, 0); // gauge mirrors _armedHolderCount
             var callbacks = _disarmCallbacks;
             _disarmCallbacks = null;
             callbacks?.Invoke();
@@ -191,7 +245,18 @@ public static class AggressiveDispatch<TRequest, TResponse>
             return false;
         }
 
-        return AggressiveDispatchLatch.TryArm(arm, disarm);
+        if (!AggressiveDispatchLatch.TryArm(arm, disarm))
+            return false;
+
+        // Fired OUTSIDE the latch lock (in-proc EventListener callbacks must never run under
+        // it), so a concurrent poison can land in between — re-check and skip rather than
+        // record an arm AFTER the poison that already disarmed this very holder. A poison can
+        // still slip inside the few instructions between this check and the write; events are
+        // best-effort transition records — the aggressive-armed gauge (maintained under the
+        // lock) is the authoritative current-state signal.
+        if (!AggressiveDispatchLatch.IsPoisoned)
+            AggressiveDispatchEventSource.Log.AggressiveArmed(typeof(TRequest).Name);
+        return true;
     }
 
     /// <summary>Test-only companion to <see cref="AggressiveDispatchLatch.ResetForTests"/>.</summary>

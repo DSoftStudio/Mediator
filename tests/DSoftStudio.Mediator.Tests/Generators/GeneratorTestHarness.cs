@@ -4,6 +4,7 @@
 using DSoftStudio.Mediator.Generators;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace DSoftStudio.Mediator.Tests.Generators;
 
@@ -66,11 +67,12 @@ internal static class GeneratorTestHarness
     /// <c>InterceptorsNamespaces</c> feature flag or the compiler rejects the generated code with CS9137.
     /// </summary>
     public static (GeneratorRunResult Result, Compilation Output) Run<TGenerator>(
-        string source, bool interceptors = false, bool release = false)
+        string source, bool interceptors = false, bool release = false,
+        Dictionary<string, string>? buildProperties = null)
         where TGenerator : IIncrementalGenerator, new()
     {
         var (parse, compilation) = Build(source, interceptors, release);
-        var driver = DriverFor(new TGenerator(), parse)
+        var driver = DriverFor(new TGenerator(), parse, buildProperties)
             .RunGeneratorsAndUpdateCompilation(compilation, out var output, out _);
         return (driver.GetRunResult().Results.Single(), output);
     }
@@ -121,10 +123,57 @@ internal static class GeneratorTestHarness
         return (parse, compilation);
     }
 
-    private static GeneratorDriver DriverFor(IIncrementalGenerator generator, CSharpParseOptions parse)
+    private static GeneratorDriver DriverFor(
+        IIncrementalGenerator generator,
+        CSharpParseOptions parse,
+        Dictionary<string, string>? buildProperties = null)
         => CSharpGeneratorDriver.Create(
-            generators: new[] { generator.AsSourceGenerator() },
-            parseOptions: parse);
+            generators: [generator.AsSourceGenerator()],
+            parseOptions: parse,
+            optionsProvider: buildProperties is null
+                ? null
+                : new TestAnalyzerConfigOptionsProvider(buildProperties));
+
+    /// <summary>
+    /// Surfaces MSBuild properties to the generators exactly as the real build does
+    /// (<c>CompilerVisibleProperty</c> → <c>build_property.&lt;Name&gt;</c> in GlobalOptions) so
+    /// tests can exercise knobs like <c>DSoftMediatorDisableAggressive</c>.
+    /// </summary>
+    private sealed class TestAnalyzerConfigOptionsProvider(Dictionary<string, string> properties)
+        : AnalyzerConfigOptionsProvider
+    {
+        private readonly TestAnalyzerConfigOptions _global = new(properties);
+
+        public override AnalyzerConfigOptions GlobalOptions => _global;
+        public override AnalyzerConfigOptions GetOptions(SyntaxTree tree) => _global;
+        public override AnalyzerConfigOptions GetOptions(AdditionalText textFile) => _global;
+
+        private sealed class TestAnalyzerConfigOptions : AnalyzerConfigOptions
+        {
+            // The real compiler's contract is case-INsensitive (AnalyzerConfigOptions.KeyComparer
+            // is OrdinalIgnoreCase; editorconfig property keys compare case-insensitively), so
+            // the double must be too — a casing mismatch between a test's dictionary and a
+            // generator's lookup literal would otherwise false-green the opposite of production.
+            private readonly Dictionary<string, string> _properties;
+
+            public TestAnalyzerConfigOptions(Dictionary<string, string> properties)
+                => _properties = new Dictionary<string, string>(properties, StringComparer.OrdinalIgnoreCase);
+
+            public override bool TryGetValue(string key, out string value)
+            {
+                const string prefix = "build_property.";
+                if (key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                    && _properties.TryGetValue(key.Substring(prefix.Length), out var v))
+                {
+                    value = v;
+                    return true;
+                }
+
+                value = string.Empty;
+                return false;
+            }
+        }
+    }
 
     /// <summary>All documents this generator emitted, concatenated — for substring assertions.</summary>
     public static string AllSource(this GeneratorRunResult result)

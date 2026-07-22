@@ -280,6 +280,49 @@ public class SendFastPathTests
     }
 
     [Fact]
+    public void Aggressive_Armed_Gate_Is_Emitted_By_Default()
+    {
+        var (result, _) = GeneratorTestHarness.Run<SendInterceptorGenerator>(
+            UniqueHandler, interceptors: true, release: true);
+
+        var code = result.AllSource();
+        code.ShouldContain(".Armed;",
+            customMessage: "the AGGRESSIVE tier is default-ON: the armed-holder gate must be emitted");
+        code.ShouldContain("AggressiveDispatch<global::TestApp.Ping, string>",
+            customMessage: "arming must go through the runtime eligibility/latch infrastructure");
+    }
+
+    [Fact]
+    public void DisableAggressive_Knob_Suppresses_Armed_Gate_But_Keeps_Safe_Tier()
+    {
+        var (result, output) = GeneratorTestHarness.Run<SendInterceptorGenerator>(
+            UniqueHandler, interceptors: true, release: true,
+            buildProperties: new() { ["DSoftMediatorDisableAggressive"] = "true" });
+
+        var code = result.AllSource();
+        code.ShouldNotContain(".Armed",
+            customMessage: "DSoftMediatorDisableAggressive=true must remove the armed-holder gate entirely");
+        code.ShouldNotContain("AggressiveDispatch<");
+        code.ShouldContain("__SendConcreteCache_0",
+            customMessage: "the SAFE concrete cache must remain — the knob only disables the AGGRESSIVE tier");
+        string.Join(" | ", output.GetDiagnostics()
+            .Where(d => d.Severity == DiagnosticSeverity.Error)
+            .Select(d => d.ToString())).ShouldBe("");
+    }
+
+    [Fact]
+    public void DisableAggressive_Knob_Applies_To_Typed_Extensions_Too()
+    {
+        var (result, _) = GeneratorTestHarness.Run<MediatorExtensionsGenerator>(
+            UniqueHandler,
+            buildProperties: new() { ["DSoftMediatorDisableAggressive"] = "true" });
+
+        var code = result.AllSource();
+        code.ShouldNotContain(".Armed");
+        code.ShouldContain("__SendConcreteCache_0.Dispatch(sp, request, cancellationToken)");
+    }
+
+    [Fact]
     public void Generated_Cache_Compiles_With_Internal_Handler()
     {
         // Same-compilation internal handlers are nameable from generated code — the cache must be

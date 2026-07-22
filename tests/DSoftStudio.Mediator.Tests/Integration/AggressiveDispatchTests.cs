@@ -211,6 +211,73 @@ public class AggressiveDispatchTests
     }
 
     [Fact]
+    public async Task Arming_And_Poisoning_Update_Observability_Counters()
+    {
+        ResetTierState();
+        int armedBefore = Volatile.Read(ref AggressiveDispatchLatch.ArmedCount);
+        int poisonedBefore = Volatile.Read(ref AggressiveDispatchLatch.PoisonedCount);
+
+        await using var spA = BuildProvider();
+        var senderA = spA.GetRequiredService<ISender>();
+        (await senderA.Send(new AggPing(1))).ShouldBe("agg:1"); // arms
+
+        Volatile.Read(ref AggressiveDispatchLatch.ArmedCount).ShouldBe(armedBefore + 1,
+            "arming must increment the aggressive-armed gauge");
+
+        await using var spB = BuildProvider(); // second container -> poison
+
+        Volatile.Read(ref AggressiveDispatchLatch.PoisonedCount).ShouldBe(poisonedBefore + 1,
+            "poisoning must increment the aggressive-poisoned counter");
+        Volatile.Read(ref AggressiveDispatchLatch.ArmedCount).ShouldBe(armedBefore,
+            "the aggressive-armed gauge is CURRENT state — poison disarms every holder, " +
+            "so the gauge must drop back, not stay frozen at its pre-poison value");
+    }
+
+    [Fact]
+    public async Task StrictPoison_Switch_Throws_On_PoisonWhileArmed()
+    {
+        ResetTierState();
+        AppContext.SetSwitch(AggressiveDispatchLatch.StrictPoisonSwitchName, true);
+        try
+        {
+            await using var spA = BuildProvider();
+            var senderA = spA.GetRequiredService<ISender>();
+            (await senderA.Send(new AggPing(1))).ShouldBe("agg:1"); // arms
+
+            // The second container's AddMediator must throw (fail-closed CI mode) — AFTER the
+            // tier has already safely degraded.
+            var ex = Should.Throw<InvalidOperationException>(() => BuildProvider());
+            ex.Message.ShouldContain("second IServiceCollection");
+            AggressiveDispatchLatch.IsPoisoned.ShouldBeTrue("the poison itself must still happen");
+        }
+        finally
+        {
+            AppContext.SetSwitch(AggressiveDispatchLatch.StrictPoisonSwitchName, false);
+        }
+    }
+
+    [Fact]
+    public void StrictPoison_Switch_Does_Not_Throw_When_Nothing_Was_Armed()
+    {
+        ResetTierState();
+        AppContext.SetSwitch(AggressiveDispatchLatch.StrictPoisonSwitchName, true);
+        try
+        {
+            var collectionA = new ServiceCollection();
+            AggressiveDispatchLatch.OnContainerRegistered(collectionA);
+
+            // No dispatch happened -> nothing armed -> multi-container is a legitimate pattern.
+            var collectionB = new ServiceCollection();
+            Should.NotThrow(() => AggressiveDispatchLatch.OnContainerRegistered(collectionB));
+            AggressiveDispatchLatch.IsPoisoned.ShouldBeTrue();
+        }
+        finally
+        {
+            AppContext.SetSwitch(AggressiveDispatchLatch.StrictPoisonSwitchName, false);
+        }
+    }
+
+    [Fact]
     public void Poison_Invokes_Registered_Disarm_Callbacks()
     {
         ResetTierState();

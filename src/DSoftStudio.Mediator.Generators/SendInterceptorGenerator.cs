@@ -272,6 +272,10 @@ public sealed class SendInterceptorGenerator : IIncrementalGenerator
                 sb.AppendLine(call.AttributeSyntax);
             }
 
+            // AggressiveInlining: the ADR-0065 armed-gate + concrete-cache body exceeds the
+            // inliner's discretionary budget at ordinary call sites (same rationale as the
+            // typed extensions — measured ~1.8 ns frame tax on the enlarged body).
+            sb.AppendLine("        [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]");
             sb.Append("        internal static global::System.Threading.Tasks.ValueTask<");
             sb.Append(resType);
             sb.Append("> Send_");
