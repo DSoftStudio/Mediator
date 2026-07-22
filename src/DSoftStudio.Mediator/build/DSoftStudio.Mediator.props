@@ -13,8 +13,17 @@
     <InterceptorsNamespaces Condition="'$(DSoftMediatorSuppressInterceptors)' != 'true'">$(InterceptorsNamespaces);DSoftStudio.Mediator.Generated</InterceptorsNamespaces>
   </PropertyGroup>
 
-  <!-- Expose the property to the source generator via AnalyzerConfigOptionsProvider -->
+  <!-- Expose the properties to the source generator via AnalyzerConfigOptionsProvider.
+
+       DSoftMediatorDisableAggressive: forces the ADR-0065 AGGRESSIVE dispatch tier off
+       (static-holder fast path for Singleton no-pipeline handlers, default-ON with a
+       runtime second-container safety latch). Set it to true in apps that build MULTIPLE
+       ServiceProviders from ONE IServiceCollection — the one pattern the latch cannot see:
+
+         <DSoftMediatorDisableAggressive>true</DSoftMediatorDisableAggressive>
+  -->
   <ItemGroup>
     <CompilerVisibleProperty Include="DSoftMediatorSuppressInterceptors" />
+    <CompilerVisibleProperty Include="DSoftMediatorDisableAggressive" />
   </ItemGroup>
 </Project>

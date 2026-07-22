@@ -15,8 +15,11 @@
     <InterceptorsNamespaces Condition="'$(DSoftMediatorSuppressInterceptors)' != 'true'">$(InterceptorsNamespaces);DSoftStudio.Mediator.Generated</InterceptorsNamespaces>
   </PropertyGroup>
 
-  <!-- Expose the suppress-flag to the source generator via AnalyzerConfigOptionsProvider -->
+  <!-- Expose the flags to the source generator via AnalyzerConfigOptionsProvider.
+       DSoftMediatorDisableAggressive: force-off escape hatch for the ADR-0065 AGGRESSIVE
+       dispatch tier (see build/DSoftStudio.Mediator.props for when to set it). -->
   <ItemGroup>
     <CompilerVisibleProperty Include="DSoftMediatorSuppressInterceptors" />
+    <CompilerVisibleProperty Include="DSoftMediatorDisableAggressive" />
   </ItemGroup>
 </Project>
