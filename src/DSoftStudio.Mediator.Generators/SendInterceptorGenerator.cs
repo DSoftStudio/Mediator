@@ -37,14 +37,41 @@ public sealed class SendInterceptorGenerator : IIncrementalGenerator
 
         var collected = callSites.Collect();
 
+        // ── Handler discovery (ADR-0065 SAFE fast path) ───────────────
+        // Maps (requestType, responseType) → concrete handler type so the dispatch tail can use
+        // a concrete-typed cache (devirtualized Handle) when the mapping is unique and nameable.
+        var localHandlers = context.SyntaxProvider
+            .CreateSyntaxProvider(
+                predicate: static (node, _) => node is ClassDeclarationSyntax { BaseList: not null },
+                transform: static (ctx, ct) => SendFastPath.GetLocalHandlerMapEntry(ctx, ct))
+            .Where(static entry => entry is not null)
+            .Select(static (entry, _) => entry!.Value);
+
+        var localHandlersCollected = localHandlers.Collect();
+
+        // External handlers: accessibility is already filtered by ReferencedAssemblyScanner
+        // (internal-without-IVT implementations never reach this list), so every entry is
+        // nameable from the generated code. Same CompilationProvider-based pattern as
+        // DependencyInjectionGenerator — the output node already combines CompilationProvider,
+        // so this adds no incrementality regression.
+        var externalHandlers = context.CompilationProvider
+            .Select(static (compilation, _) => new EquatableArray<SendFastPath.HandlerMapEntry>(
+                ReferencedAssemblyScanner.GetExternalRequestHandlerMap(compilation)
+                    .Select(static e => new SendFastPath.HandlerMapEntry(e.RequestType, e.ResponseType, e.HandlerType))
+                    .OrderBy(static e => e.RequestType, System.StringComparer.Ordinal)
+                    .ThenBy(static e => e.HandlerType, System.StringComparer.Ordinal)
+                    .ToArray()));
+
         // Combine with compilation + analyzer options (for SuppressInterceptors property).
         var collectedWithCompilation = collected
+            .Combine(localHandlersCollected)
+            .Combine(externalHandlers)
             .Combine(context.CompilationProvider)
             .Combine(context.AnalyzerConfigOptionsProvider);
 
         context.RegisterSourceOutput(collectedWithCompilation, static (spc, pair) =>
         {
-            var ((calls, compilation), optionsProvider) = pair;
+            var ((((calls, localHandlerEntries), externalHandlerEntries), compilation), optionsProvider) = pair;
             if (calls.IsDefaultOrEmpty)
                 return;
 
@@ -57,8 +84,16 @@ public sealed class SendInterceptorGenerator : IIncrementalGenerator
             }
 
             bool isRelease = compilation.Options.OptimizationLevel == OptimizationLevel.Release;
+
+            // ADR-0065 AGGRESSIVE tier is default-ON; DSoftMediatorDisableAggressive forces it off
+            // (escape hatch for one-collection-multi-provider apps the runtime latch cannot see).
+            bool emitAggressive = !(optionsProvider.GlobalOptions.TryGetValue(
+                    "build_property.DSoftMediatorDisableAggressive", out var disableAggressive)
+                && string.Equals(disableAggressive, "true", System.StringComparison.OrdinalIgnoreCase));
+
             var unique = calls.Distinct().ToList();
-            var code = GenerateInterceptors(unique, isRelease);
+            var handlerMap = SendFastPath.BuildUniqueHandlerMap(localHandlerEntries, externalHandlerEntries);
+            var code = GenerateInterceptors(unique, isRelease, handlerMap, emitAggressive);
 
             spc.AddSource(
                 "MediatorInterceptors.g.cs",
@@ -181,7 +216,9 @@ public sealed class SendInterceptorGenerator : IIncrementalGenerator
 
     private static string GenerateInterceptors(
         List<InterceptCallInfo> calls,
-        bool isRelease)
+        bool isRelease,
+        Dictionary<(string Request, string Response), string> handlerMap,
+        bool emitAggressive)
     {
         var sb = new StringBuilder(2048);
 
@@ -210,11 +247,23 @@ public sealed class SendInterceptorGenerator : IIncrementalGenerator
             .GroupBy(c => (c.RequestType, c.ResponseType))
             .ToList();
 
+        // Cache classes are file-local siblings of SendInterceptors: collected here, emitted
+        // after the class closes (still inside the namespace).
+        var cacheClasses = new List<(string ClassName, string ReqType, string ResType, string HandlerType)>();
+
         int methodIndex = 0;
         foreach (var group in groups)
         {
             var reqType = group.Key.RequestType;
             var resType = group.Key.ResponseType;
+
+            // ADR-0065 SAFE fast path: unique + nameable concrete handler → concrete-typed cache.
+            string? cacheClassName = null;
+            if (handlerMap.TryGetValue((reqType, resType), out var handlerType))
+            {
+                cacheClassName = "__SendConcreteCache_" + methodIndex;
+                cacheClasses.Add((cacheClassName, reqType, resType, handlerType));
+            }
 
             // Emit [InterceptsLocation] for each call site
             foreach (var call in group)
@@ -232,7 +281,7 @@ public sealed class SendInterceptorGenerator : IIncrementalGenerator
             sb.AppendLine(" request, global::System.Threading.CancellationToken cancellationToken = default)");
             sb.AppendLine("        {");
 
-            InterceptorHelpers.AppendSendDispatchBody(sb, reqType, resType, isRelease, "            ");
+            InterceptorHelpers.AppendSendDispatchBody(sb, reqType, resType, isRelease, "            ", cacheClassName, emitAggressive);
 
             sb.AppendLine("        }");
             sb.AppendLine();
@@ -241,6 +290,14 @@ public sealed class SendInterceptorGenerator : IIncrementalGenerator
         }
 
         sb.AppendLine("    }");
+
+        foreach (var cache in cacheClasses)
+        {
+            sb.AppendLine();
+            InterceptorHelpers.AppendConcreteCacheClass(
+                sb, cache.ClassName, cache.ReqType, cache.ResType, cache.HandlerType, emitAggressive);
+        }
+
         sb.AppendLine("}");
 
         return sb.ToString();

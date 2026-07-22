@@ -468,6 +468,47 @@ namespace DSoftStudio.Mediator.Generators
         }
 
         /// <summary>
+        /// Returns the (requestType, responseType) → concrete handler map for external
+        /// <c>IRequestHandler&lt;TRequest, TResponse&gt;</c> implementations that are accessible
+        /// from the consuming compilation (accessibility already filtered by
+        /// <see cref="GetAllExternalHandlers"/> — inaccessible internals are excluded, so the
+        /// generated fast-path cache can safely name the concrete type).
+        /// Used by the Send fast-path emitters (ADR-0065): a call site whose request type maps to
+        /// exactly one accessible concrete handler gets a concrete-typed dispatch cache; anything
+        /// else keeps the interface-typed <c>HandlerCache</c> tail.
+        /// </summary>
+        public static List<(string RequestType, string ResponseType, string HandlerType)>
+            GetExternalRequestHandlerMap(Compilation compilation)
+        {
+            var results = new List<(string, string, string)>();
+
+            foreach (var handler in GetAllExternalHandlers(compilation))
+            {
+                var original = handler.ServiceType.OriginalDefinition;
+                if (original.ContainingNamespace?.ToDisplayString() != AbstractionsNamespace
+                    || original.MetadataName != RequestHandlerMetadataName)
+                {
+                    continue;
+                }
+
+                // Explicit interface implementations expose no public Handle on the concrete
+                // type — the emitted concrete-typed call would not compile (CS1061).
+                if (!SendFastPath.HasPublicImplicitHandle(handler.ImplementationType, handler.ServiceType))
+                    continue;
+
+                results.Add((
+                    handler.ServiceType.TypeArguments[0]
+                        .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat),
+                    handler.ServiceType.TypeArguments[1]
+                        .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat),
+                    handler.ImplementationType
+                        .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat)));
+            }
+
+            return results;
+        }
+
+        /// <summary>
         /// Discovers concrete request types (<c>IRequest&lt;TResponse&gt;</c> implementations)
         /// from referenced assemblies that reference <c>DSoftStudio.Mediator.Abstractions</c>.
         /// </summary>

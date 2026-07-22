@@ -39,12 +39,16 @@ internal static class GeneratorTestHarness
             refs.Add(MetadataReference.CreateFromFile(bclAsync));
 
         // Facade assemblies required for cross-TFM type unification (netstandard2.0 → .NET 10).
+        // System.ComponentModel: System.IServiceProvider is type-forwarded there on .NET 10 —
+        // needed since the ADR-0065 concrete caches name the type explicitly in generated code
+        // (real consumer builds always have it via the default reference pack).
         foreach (var facade in new[]
                  {
                      "netstandard.dll",
                      "System.Threading.Tasks.Extensions.dll",
                      "System.Collections.dll",
                      "System.Linq.dll",
+                     "System.ComponentModel.dll",
                  })
         {
             var path = Path.Combine(runtimeDir, facade);

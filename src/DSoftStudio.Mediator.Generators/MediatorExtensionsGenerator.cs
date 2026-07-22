@@ -80,6 +80,26 @@ public sealed class MediatorExtensionsGenerator : IIncrementalGenerator
                 return new EquatableArray<RequestResponsePair>(array);
             });
 
+        // ── Handler map (ADR-0065 SAFE fast path) ────────────────
+        // (requestType, responseType) → unique nameable concrete handler; pairs found here get a
+        // concrete-typed dispatch cache in the typed Send extension + Send(object) case body.
+        var localHandlerMap = context.SyntaxProvider
+            .CreateSyntaxProvider(
+                predicate: static (node, _) =>
+                    node is ClassDeclarationSyntax { BaseList: not null },
+                transform: static (ctx, ct) => SendFastPath.GetLocalHandlerMapEntry(ctx, ct))
+            .Where(static entry => entry is not null)
+            .Select(static (entry, _) => entry!.Value)
+            .Collect();
+
+        var externalHandlerMap = context.CompilationProvider
+            .Select(static (compilation, _) => new EquatableArray<SendFastPath.HandlerMapEntry>(
+                ReferencedAssemblyScanner.GetExternalRequestHandlerMap(compilation)
+                    .Select(static e => new SendFastPath.HandlerMapEntry(e.RequestType, e.ResponseType, e.HandlerType))
+                    .OrderBy(static e => e.RequestType, System.StringComparer.Ordinal)
+                    .ThenBy(static e => e.HandlerType, System.StringComparer.Ordinal)
+                    .ToArray()));
+
         // ── Combine and emit ─────────────────────────────────────
         var assemblyName = context.CompilationProvider
             .Select(static (c, _) => c.AssemblyName ?? "Assembly");
@@ -89,11 +109,19 @@ public sealed class MediatorExtensionsGenerator : IIncrementalGenerator
             .Combine(selfCollected)
             .Combine(localStreams)
             .Combine(externalStreams)
-            .Combine(assemblyName);
+            .Combine(assemblyName)
+            .Combine(localHandlerMap)
+            .Combine(externalHandlerMap)
+            .Combine(context.AnalyzerConfigOptionsProvider);
 
         context.RegisterSourceOutput(combined, static (spc, data) =>
         {
-            var (((((localReqs, extReqs), selfReqs), localStrs), extStrs), asmName) = data;
+            var ((((((((localReqs, extReqs), selfReqs), localStrs), extStrs), asmName), localHandlers), externalHandlers), optionsProvider) = data;
+
+            // ADR-0065 AGGRESSIVE tier is default-ON; DSoftMediatorDisableAggressive forces it off.
+            bool emitAggressive = !(optionsProvider.GlobalOptions.TryGetValue(
+                    "build_property.DSoftMediatorDisableAggressive", out var disableAggressive)
+                && string.Equals(disableAggressive, "true", System.StringComparison.OrdinalIgnoreCase));
 
             var localReqList = localReqs.IsDefaultOrEmpty
                 ? []
@@ -120,7 +148,8 @@ public sealed class MediatorExtensionsGenerator : IIncrementalGenerator
                 .OrderBy(static p => p.RequestType)
                 .ToList();
 
-            var code = GenerateCode(requests, streams, asmName);
+            var handlerMap = SendFastPath.BuildUniqueHandlerMap(localHandlers, externalHandlers);
+            var code = GenerateCode(requests, streams, asmName, handlerMap, emitAggressive);
 
             spc.AddSource(
                 "MediatorExtensions.g.cs",
@@ -205,8 +234,23 @@ public sealed class MediatorExtensionsGenerator : IIncrementalGenerator
     private static string GenerateCode(
         List<RequestResponsePair> requests,
         List<RequestResponsePair> streams,
-        string assemblyName)
+        string assemblyName,
+        Dictionary<(string Request, string Response), string> handlerMap,
+        bool emitAggressive)
     {
+        // Per-request-type concrete cache classes (ADR-0065 SAFE tier): named by request index so
+        // the typed Send extension and the Send(object) switch case share ONE cache (one TLS pair).
+        var cacheClasses = new List<(string ClassName, string ReqType, string ResType, string HandlerType)>();
+        string? CacheNameFor(int requestIndex, in RequestResponsePair pair)
+        {
+            if (!handlerMap.TryGetValue((pair.RequestType, pair.ResponseType), out var handlerType))
+                return null;
+            var name = "__SendConcreteCache_" + requestIndex;
+            if (!cacheClasses.Exists(c => c.ClassName == name))
+                cacheClasses.Add((name, pair.RequestType, pair.ResponseType, handlerType));
+            return name;
+        }
+
         var sanitizedAsm = HandlerDiscovery.SanitizeIdentifier(assemblyName);
         var sb = new StringBuilder(2048);
 
@@ -238,18 +282,25 @@ public sealed class MediatorExtensionsGenerator : IIncrementalGenerator
         // path (< 0.05% of total request processing) while guaranteeing consistent
         // behaviour across Debug and Release builds — critical because enterprise
         // CI/CD pipelines routinely run `dotnet test -c Release`.
-        foreach (var pair in requests)
+        for (int reqIndex = 0; reqIndex < requests.Count; reqIndex++)
         {
+            var pair = requests[reqIndex];
+            var cacheClassName = CacheNameFor(reqIndex, pair);
+
             sb.AppendLine("        /// <summary>");
             sb.AppendLine($"        /// Sends a <see cref=\"{EscapeXml(pair.RequestType)}\"/> through the pipeline. Type-inferred shorthand.");
             sb.AppendLine("        /// </summary>");
+            // AggressiveInlining: the ADR-0065 armed-gate + concrete-cache body exceeds the
+            // inliner's discretionary budget at ordinary call sites (measured: the framed real
+            // extension ran ~1.8 ns over the pasted-body shape); forcing the inline recovers it.
+            sb.AppendLine("        [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]");
             sb.Append("        public static global::System.Threading.Tasks.ValueTask<");
             sb.Append(pair.ResponseType);
             sb.Append("> Send(this global::DSoftStudio.Mediator.Abstractions.ISender sender, ");
             sb.Append(pair.RequestType);
             sb.AppendLine(" request, global::System.Threading.CancellationToken cancellationToken = default)");
             sb.AppendLine("        {");
-            InterceptorHelpers.AppendSendDispatchBody(sb, pair.RequestType, pair.ResponseType, isRelease: false, "            ");
+            InterceptorHelpers.AppendSendDispatchBody(sb, pair.RequestType, pair.ResponseType, isRelease: false, "            ", cacheClassName, emitAggressive);
             sb.AppendLine("        }");
             sb.AppendLine();
         }
@@ -293,7 +344,7 @@ public sealed class MediatorExtensionsGenerator : IIncrementalGenerator
                 var pair = requests[i];
                 sb.AppendLine($"                case {pair.RequestType} __r{i}:");
                 sb.AppendLine("                {");
-                EmitSendObjectCaseBody(sb, pair.RequestType, pair.ResponseType, $"__r{i}", "                    ");
+                EmitSendObjectCaseBody(sb, pair.RequestType, pair.ResponseType, $"__r{i}", "                    ", CacheNameFor(i, pair));
                 sb.AppendLine("                }");
             }
             sb.AppendLine("                default:");
@@ -348,6 +399,15 @@ public sealed class MediatorExtensionsGenerator : IIncrementalGenerator
         sb.AppendLine("        }");
 
         sb.AppendLine("    }");
+
+        // ADR-0065 SAFE tier: file-local concrete cache classes, siblings of the extensions class.
+        foreach (var cache in cacheClasses)
+        {
+            sb.AppendLine();
+            InterceptorHelpers.AppendConcreteCacheClass(
+                sb, cache.ClassName, cache.ReqType, cache.ResType, cache.HandlerType, emitAggressive);
+        }
+
         sb.AppendLine("}");
 
         return sb.ToString();
@@ -366,7 +426,8 @@ public sealed class MediatorExtensionsGenerator : IIncrementalGenerator
         string requestType,
         string responseType,
         string varName,
-        string indent)
+        string indent,
+        string? concreteCacheClassName)
     {
         sb.Append(indent).AppendLine($"global::System.Threading.Tasks.ValueTask<{responseType}> __vt;");
         sb.Append(indent).AppendLine($"if (global::DSoftStudio.Mediator.RequestDispatch<{requestType}, {responseType}>.HasPipelineChain)");
@@ -382,7 +443,13 @@ public sealed class MediatorExtensionsGenerator : IIncrementalGenerator
         sb.Append(indent).AppendLine("            : AwaitAndBox(__vt);");
         sb.Append(indent).AppendLine("    }");
         sb.Append(indent).AppendLine("}");
-        sb.Append(indent).AppendLine($"__vt = global::DSoftStudio.Mediator.HandlerCache<{requestType}, {responseType}>.Resolve(__sp).Handle({varName}, cancellationToken);");
+
+        // ADR-0065 SAFE tier: same concrete cache as the typed Send extension (shared TLS pair).
+        if (concreteCacheClassName is not null)
+            sb.Append(indent).AppendLine($"__vt = {concreteCacheClassName}.Dispatch(__sp, {varName}, cancellationToken);");
+        else
+            sb.Append(indent).AppendLine($"__vt = global::DSoftStudio.Mediator.HandlerCache<{requestType}, {responseType}>.Resolve(__sp).Handle({varName}, cancellationToken);");
+
         sb.Append(indent).AppendLine("return __vt.IsCompletedSuccessfully");
         sb.Append(indent).AppendLine("    ? new global::System.Threading.Tasks.ValueTask<object?>(__vt.Result)");
         sb.Append(indent).AppendLine("    : AwaitAndBox(__vt);");

@@ -42,14 +42,57 @@ internal static class InterceptorHelpers
         string responseType,
         bool isRelease,
         string indent)
+        => AppendSendDispatchBody(sb, requestType, responseType, isRelease, indent,
+            concreteCacheClassName: null, emitAggressive: false);
+
+    /// <summary>
+    /// Overload with the ADR-0065 fast paths.
+    /// <para>
+    /// SAFE: when <paramref name="concreteCacheClassName"/> is non-null the no-pipeline tail
+    /// dispatches through the emitted concrete-typed cache (see
+    /// <see cref="AppendConcreteCacheClass"/>) instead of the interface-typed
+    /// <c>HandlerCache</c>, devirtualizing the final <c>Handle</c> call. Callers pass a class
+    /// name only when the request type maps to exactly ONE concrete handler nameable from this
+    /// compilation.
+    /// </para>
+    /// <para>
+    /// AGGRESSIVE (default-ON, disable via <c>DSoftMediatorDisableAggressive</c>): a null-gated
+    /// armed-holder prologue — non-null means "Singleton effective lifetime, no pipeline chain,
+    /// single container" (armed lazily by the cache's SlowPath under
+    /// <c>AggressiveDispatch&lt;,&gt;</c> gating, disarmed by the process latch on a second
+    /// container). The armed check SUBSUMES the <c>HasPipelineChain</c> read. Placement differs
+    /// by variant: Release interceptors check before the castclass (a non-Mediator sender threw
+    /// there anyway); defensive bodies check AFTER the accessor probe so a mock
+    /// <c>ISender</c> still gets its virtual <c>Send</c> — mock behavior is unchanged.
+    /// </para>
+    /// </summary>
+    public static void AppendSendDispatchBody(
+        StringBuilder sb,
+        string requestType,
+        string responseType,
+        bool isRelease,
+        string indent,
+        string? concreteCacheClassName,
+        bool emitAggressive = false)
     {
         var i2 = indent + "    ";
         var i3 = indent + "        ";
+        bool aggressive = emitAggressive && concreteCacheClassName is not null;
+
+        void AppendArmedGate()
+        {
+            sb.Append(indent).Append("var __armed = ").Append(concreteCacheClassName).AppendLine(".Armed;");
+            sb.Append(indent).AppendLine("if (__armed is not null)");
+            sb.Append(i2).AppendLine("return __armed.Handle(request, cancellationToken);");
+        }
 
         sb.Append(indent).AppendLine("global::System.ArgumentNullException.ThrowIfNull(request);");
 
         if (isRelease)
         {
+            if (aggressive)
+                AppendArmedGate();
+
             // Interceptor Release path: branchless castclass — GDV devirtualizes to ~0 ns.
             // Safe because test projects suppress interceptors via DSoftMediatorSuppressInterceptors.
             sb.Append(indent).AppendLine("var sp = ((global::DSoftStudio.Mediator.IServiceProviderAccessor)sender).ServiceProvider;");
@@ -62,6 +105,10 @@ internal static class InterceptorHelpers
             sb.Append(i2).Append("return sender.Send<")
               .Append(requestType).Append(", ").Append(responseType)
               .AppendLine(">(request, cancellationToken);");
+
+            if (aggressive)
+                AppendArmedGate();
+
             sb.Append(indent).AppendLine("var sp = __spa.ServiceProvider;");
         }
 
@@ -88,9 +135,113 @@ internal static class InterceptorHelpers
         sb.Append(i3).AppendLine("return chain.Handle(request, cancellationToken);");
         sb.Append(indent).AppendLine("}");
 
-        sb.Append(indent).Append("return global::DSoftStudio.Mediator.HandlerCache<")
-          .Append(requestType).Append(", ").Append(responseType)
-          .AppendLine(">.Resolve(sp).Handle(request, cancellationToken);");
+        if (concreteCacheClassName is not null)
+        {
+            // ADR-0065 SAFE tier: concrete-typed provider-keyed cache — devirtualized Handle.
+            sb.Append(indent).Append("return ").Append(concreteCacheClassName)
+              .AppendLine(".Dispatch(sp, request, cancellationToken);");
+        }
+        else
+        {
+            sb.Append(indent).Append("return global::DSoftStudio.Mediator.HandlerCache<")
+              .Append(requestType).Append(", ").Append(responseType)
+              .AppendLine(">.Resolve(sp).Handle(request, cancellationToken);");
+        }
+    }
+
+    /// <summary>
+    /// Emits the ADR-0065 SAFE-tier support class: a file-local, non-generic, per-request-type
+    /// cache whose mechanics mirror <c>HandlerCache&lt;TReq,TRes&gt;</c> (provider-keyed
+    /// <c>[ThreadStatic]</c> pair + <c>ReferenceEquals</c> guard) but whose cached field is typed
+    /// to the CONCRETE handler, so the final <c>Handle</c> call devirtualizes (measured net11
+    /// 6.41 → 5.05 ns; net8 8.62 → 7.72; net10 neutral — see the ADR-0065 Amendment §A3/§A4).
+    /// <para>
+    /// Correctness: the miss path resolves through the existing interface-typed
+    /// <c>HandlerCache</c> (keeping it as the L2 tier) and only caches when the resolved
+    /// instance is EXACTLY the generator-known concrete type — a user override, decorator,
+    /// test replacement, or SUBCLASS (which could hide <c>Handle</c> with <c>new</c>) degrades
+    /// gracefully to interface dispatch on every call (never an <c>InvalidCastException</c>),
+    /// at today's cached-resolve cost. Correct for multiple containers; lifetime pinning
+    /// envelope matches <c>HandlerCache</c>, to which the miss path delegates (Transient
+    /// handlers get the same per-(thread, provider) pinning both tiers share).
+    /// </para>
+    /// </summary>
+    public static void AppendConcreteCacheClass(
+        StringBuilder sb,
+        string cacheClassName,
+        string requestType,
+        string responseType,
+        string handlerType,
+        bool emitAggressive = false)
+    {
+        sb.Append("    file static class ").AppendLine(cacheClassName);
+        sb.AppendLine("    {");
+
+        if (emitAggressive)
+        {
+            // AGGRESSIVE holder: non-null <=> armed <=> (Singleton, no chain, single container).
+            // Written only via AggressiveDispatch<,>.TryArm (under the process latch) and the
+            // registered disarm callback — the fast path reads it with Volatile (no CSE/hoisting).
+            sb.Append("        private static ").Append(handlerType).AppendLine("? _armed;");
+            sb.AppendLine();
+            sb.Append("        internal static ").Append(handlerType).AppendLine("? Armed");
+            sb.AppendLine("        {");
+            sb.AppendLine("            [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]");
+            sb.AppendLine("            get => global::System.Threading.Volatile.Read(ref _armed);");
+            sb.AppendLine("        }");
+            sb.AppendLine();
+        }
+
+        sb.AppendLine("        [global::System.ThreadStatic] private static global::System.IServiceProvider? _cachedProvider;");
+        sb.Append("        [global::System.ThreadStatic] private static ").Append(handlerType).AppendLine("? _cachedHandler;");
+        sb.AppendLine();
+        sb.AppendLine("        [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]");
+        sb.Append("        internal static global::System.Threading.Tasks.ValueTask<").Append(responseType)
+          .Append("> Dispatch(global::System.IServiceProvider sp, ").Append(requestType)
+          .AppendLine(" request, global::System.Threading.CancellationToken cancellationToken)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (global::System.Object.ReferenceEquals(_cachedProvider, sp))");
+        sb.AppendLine("                return _cachedHandler!.Handle(request, cancellationToken);");
+        sb.AppendLine("            return ResolveSlow(sp, request, cancellationToken);");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+        sb.AppendLine("        [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]");
+        sb.Append("        private static global::System.Threading.Tasks.ValueTask<").Append(responseType)
+          .Append("> ResolveSlow(global::System.IServiceProvider sp, ").Append(requestType)
+          .AppendLine(" request, global::System.Threading.CancellationToken cancellationToken)");
+        sb.AppendLine("        {");
+        sb.Append("            var svc = global::DSoftStudio.Mediator.HandlerCache<").Append(requestType)
+          .Append(", ").Append(responseType).AppendLine(">.Resolve(sp);");
+        // EXACT-type guard (not `is`): a runtime-registered SUBCLASS of the mapped handler that
+        // hides Handle (`new`) would statically bind to the base implementation through the
+        // concrete-typed call. Exact match keeps such overrides on interface dispatch.
+        sb.Append("            if (svc.GetType() == typeof(").Append(handlerType).AppendLine("))");
+        sb.AppendLine("            {");
+        sb.Append("                var concrete = (").Append(handlerType).AppendLine(")svc;");
+        sb.AppendLine("                _cachedProvider = sp;");
+        sb.AppendLine("                _cachedHandler = concrete;");
+
+        if (emitAggressive)
+        {
+            sb.AppendLine();
+            sb.AppendLine("                // AGGRESSIVE arming: one-shot, miss-path only. TryArm re-verifies the winning");
+            sb.AppendLine("                // descriptor at arm time and runs the arm under the process latch (poison-safe).");
+            sb.Append("                if (global::DSoftStudio.Mediator.AggressiveDispatch<").Append(requestType)
+              .Append(", ").Append(responseType).AppendLine(">.ShouldAttemptArm)");
+            sb.AppendLine("                {");
+            sb.Append("                    global::DSoftStudio.Mediator.AggressiveDispatch<").Append(requestType)
+              .Append(", ").Append(responseType).AppendLine(">.TryArm(");
+            sb.AppendLine("                        concrete,");
+            sb.AppendLine("                        () => global::System.Threading.Volatile.Write(ref _armed, concrete),");
+            sb.AppendLine("                        static () => global::System.Threading.Volatile.Write(ref _armed, null));");
+            sb.AppendLine("                }");
+        }
+
+        sb.AppendLine("                return concrete.Handle(request, cancellationToken);");
+        sb.AppendLine("            }");
+        sb.AppendLine("            return svc.Handle(request, cancellationToken);");
+        sb.AppendLine("        }");
+        sb.AppendLine("    }");
     }
 
     /// <summary>
