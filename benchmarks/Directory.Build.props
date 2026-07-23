@@ -1,0 +1,18 @@
+<Project>
+
+  <!-- Keep the repo-root chain (strong naming): a nested Directory.Build.props SHADOWS the
+       parent unless it imports it explicitly. -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <!-- net11 runtime-async, evaluated per-TargetFramework. Placed HERE (not in the benchmarks
+       csproj) so BenchmarkDotNet's generated project — which lives under
+       BenchmarkDotNet.Artifacts and inherits this file via MSBuild directory walk-up — gets the
+       same per-TFM condition. A conditional PropertyGroup in the csproj does NOT survive: BDN's
+       CsProjGenerator flattens it, leaking runtime-async into net10 builds (SYSLIB5007:
+       AsyncHelpers is [Experimental] in the net10 corelib). -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net11.0'">
+    <Features>runtime-async=on</Features>
+    <LangVersion>preview</LangVersion>
+  </PropertyGroup>
+
+</Project>

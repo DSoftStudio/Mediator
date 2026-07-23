@@ -422,8 +422,22 @@ BenchmarkDotNet v0.15.8, Windows 11 (10.0.26200.8039/25H2/2025Update/HudsonValle
 Close Visual Studio and heavy apps before running for best accuracy.
 
 ```sh
-# All benchmarks sequentially (recommended)
+# Full suite on both runtimes (net10.0, then net11.0)
 benchmarks\run-all-benchmarks.cmd
+
+# Full suite on a single runtime
+benchmarks\run-all-benchmarks.cmd net11.0
+
+# One library, isolated per class — same [net10.0|net11.0|all] selector (default: all)
+benchmarks\run-dsoft-benchmarks.cmd net11.0
+benchmarks\run-mediatr-benchmarks.cmd
+benchmarks\run-dispatchr-benchmarks.cmd
+benchmarks\run-mediator-sg-benchmarks.cmd
+
+# A subset, directly — pick the runtime with -f
+dotnet run -c Release -f net11.0 --project benchmarks\DSoftStudio.Mediator.Benchmarks -- --filter *DSoftSend*
 ```
 
-Results are saved to `benchmarks/BenchmarkDotNet.Artifacts/results/`.
+Results are saved per runtime to `benchmarks/BenchmarkDotNet.Artifacts/<tfm>/results/`
+(runs on different runtimes never overwrite each other). net11.0 builds enable the
+runtime-async feature via `benchmarks/Directory.Build.props`.

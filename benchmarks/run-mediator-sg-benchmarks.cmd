@@ -1,47 +1,60 @@
 @echo off
+setlocal
+rem Usage: run-mediator-sg-benchmarks.cmd [net10.0^|net11.0^|all]   (default: all)
+set "TFMS=%~1"
+if "%TFMS%"=="" set "TFMS=all"
+if /i "%TFMS%"=="all" (set "LIST=net10.0 net11.0") else (set "LIST=%TFMS%")
+
 echo ============================================================
-echo  DSoftStudio.Mediator - Full Benchmark Suite
+echo  DSoftStudio.Mediator - Mediator Source Gen Benchmark Suite  [%TFMS%]
 echo  Close VS and other heavy apps before running.
 echo ============================================================
-echo.
 
-set PROJECT=DSoftStudio.Mediator.Benchmarks
-set CMD=dotnet run --project %PROJECT% -c Release --
-
-echo ============================================================
-echo  Mediator Source Gen (Isolated)
-echo ============================================================
-
-echo [1/9] Mediator (Source Gen) - Send (No Behaviors)
-%CMD% --filter "Benchmarks.MediatorSGSendNoBehaviorsBenchmarks.*"
-
-echo [2/9] Mediator (Source Gen) - Send (Behaviors)
-%CMD% --filter "Benchmarks.MediatorSGSendBenchmarks.*"
-
-echo [3/9] Mediator (Source Gen) - Send (Object)
-%CMD% --filter "Benchmarks.MediatorSGSendObjectBenchmarks.*"
-
-echo [4/9] Mediator (Source Gen) - Publish
-%CMD% --filter "Benchmarks.MediatorSGPublishBenchmarks.*"
-
-echo [5/9] Mediator (Source Gen) - Publish (Object)
-%CMD% --filter "Benchmarks.MediatorSGPublishObjectBenchmarks.*"
-
-echo [6/9] Mediator (Source Gen) - Stream
-%CMD% --filter "Benchmarks.MediatorSGStreamBenchmarks.*"
-
-echo [7/9] Mediator (Source Gen) - Concurrency
-%CMD% --filter "Benchmarks.MediatorSGConcurrencyBenchmarks.*"
-
-echo [8/9] Mediator (Source Gen) - Cold Start
-%CMD% --filter "Benchmarks.MediatorSGColdStartBenchmarks.*"
-
-echo [9/9] Mediator (Source Gen) - Realistic Pipeline
-%CMD% --filter "Benchmarks.MediatorSGRealisticPipelineBenchmarks.*"
+for %%F in (%LIST%) do call :run_tfm %%F
 
 echo.
 echo ============================================================
 echo  All benchmarks complete!
-echo  Results: benchmarks\BenchmarkDotNet.Artifacts\results\
+echo  Results: benchmarks\BenchmarkDotNet.Artifacts\^<tfm^>\results\
 echo ============================================================
 if not defined DSOFT_BENCH_NO_PAUSE pause
+exit /b 0
+
+:run_tfm
+pushd "%~dp0"
+set CMD=dotnet run --project DSoftStudio.Mediator.Benchmarks -c Release -f %~1 --
+
+echo.
+echo ============================================================
+echo  Mediator Source Gen (Isolated) on %~1
+echo ============================================================
+
+echo [1/9] Mediator (Source Gen) - Send (No Behaviors) [%~1]
+%CMD% --filter "Benchmarks.MediatorSGSendNoBehaviorsBenchmarks.*"
+
+echo [2/9] Mediator (Source Gen) - Send (Behaviors) [%~1]
+%CMD% --filter "Benchmarks.MediatorSGSendBenchmarks.*"
+
+echo [3/9] Mediator (Source Gen) - Send (Object) [%~1]
+%CMD% --filter "Benchmarks.MediatorSGSendObjectBenchmarks.*"
+
+echo [4/9] Mediator (Source Gen) - Publish [%~1]
+%CMD% --filter "Benchmarks.MediatorSGPublishBenchmarks.*"
+
+echo [5/9] Mediator (Source Gen) - Publish (Object) [%~1]
+%CMD% --filter "Benchmarks.MediatorSGPublishObjectBenchmarks.*"
+
+echo [6/9] Mediator (Source Gen) - Stream [%~1]
+%CMD% --filter "Benchmarks.MediatorSGStreamBenchmarks.*"
+
+echo [7/9] Mediator (Source Gen) - Concurrency [%~1]
+%CMD% --filter "Benchmarks.MediatorSGConcurrencyBenchmarks.*"
+
+echo [8/9] Mediator (Source Gen) - Cold Start [%~1]
+%CMD% --filter "Benchmarks.MediatorSGColdStartBenchmarks.*"
+
+echo [9/9] Mediator (Source Gen) - Realistic Pipeline [%~1]
+%CMD% --filter "Benchmarks.MediatorSGRealisticPipelineBenchmarks.*"
+
+popd
+exit /b 0

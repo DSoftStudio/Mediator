@@ -4,13 +4,19 @@ using BenchmarkDotNet.Attributes;
 using Microsoft.Extensions.DependencyInjection;
 using DSoftStudio.Mediator;
 using DSoftStudio.Mediator.Abstractions;
+#if !NET11_0_OR_GREATER
+// VS profiler diagnoser — its package is net10-only here (binary-incompatible with the
+// BenchmarkDotNet 0.16 preview the net11 TFM uses).
 using Microsoft.VSDiagnostics;
+#endif
 
 namespace Benchmarks;
 [SimpleJob]
 [RankColumn]
 [Orderer(BenchmarkDotNet.Order.SummaryOrderPolicy.FastestToSlowest)]
+#if !NET11_0_OR_GREATER
 [CPUUsageDiagnoser]
+#endif
 public class DSoftTypedExtensionVsMediatorSGBenchmarks
 {
     private static readonly Ping DsoftMessage = new();

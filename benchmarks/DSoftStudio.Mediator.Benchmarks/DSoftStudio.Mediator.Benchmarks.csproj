@@ -2,7 +2,15 @@
 
   <PropertyGroup>
 	<OutputType>Exe</OutputType>
-	<TargetFramework>net10.0</TargetFramework>
+	<!-- Pick the runtime per run: dotnet run -c Release -f net10.0|net11.0 (or both, one after
+	     the other). net11 jobs get runtime-async via benchmarks\Directory.Build.props — the
+	     conditional CANNOT live in this csproj (BenchmarkDotNet's CsProjGenerator flattens
+	     conditional PropertyGroups into its generated project, leaking the feature into the
+	     net10 job → SYSLIB5007).
+	     net11.0 is added only when the building SDK is 11+ (semver suffix ignored by the
+	     version function), so CI agents with the 10.x SDK build net10-only unchanged. -->
+	<TargetFrameworks>net10.0</TargetFrameworks>
+	<TargetFrameworks Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '11.0'))">net10.0;net11.0</TargetFrameworks>
 	<ImplicitUsings>enable</ImplicitUsings>
 	<Nullable>enable</Nullable>
 	<IsPackable>false</IsPackable>
@@ -11,7 +19,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+    <!-- 0.15.8 does not recognize the .NET 11 preview runtime (GetRuntimeVersion throws
+         NotImplementedException for NotRecognized); net10 stays on 0.15.8 so results remain
+         comparable with the committed baselines. -->
+    <PackageReference Include="BenchmarkDotNet" Version="0.15.8" Condition="'$(TargetFramework)' != 'net11.0'" />
+    <PackageReference Include="BenchmarkDotNet" Version="0.16.0-preview.1" Condition="'$(TargetFramework)' == 'net11.0'" />
     <PackageReference Include="DispatchR.Mediator" Version="2.1.1" />
     <PackageReference Include="Mediator.Abstractions" Version="3.0.1" />
     <PackageReference Include="Mediator.SourceGenerator" Version="3.0.1">
@@ -23,7 +35,9 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.5" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5" />
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.5" />
-    <PackageReference Include="Microsoft.VisualStudio.DiagnosticsHub.BenchmarkDotNetDiagnosers" Version="18.6.37110.2" />
+    <!-- VS profiler integration; its exporter is binary-incompatible with BenchmarkDotNet
+         0.16.0-preview (TypeLoadException: ExportAsync), so it rides along on net10 only. -->
+    <PackageReference Include="Microsoft.VisualStudio.DiagnosticsHub.BenchmarkDotNetDiagnosers" Version="18.6.37110.2" Condition="'$(TargetFramework)' != 'net11.0'" />
     <PackageReference Include="Scriban" Version="7.2.4" />
   </ItemGroup>
 
