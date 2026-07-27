@@ -42,4 +42,4 @@ echo  All benchmarks complete!
 echo  Results: benchmarks\BenchmarkDotNet.Artifacts\results\
 echo  Summary: benchmarks\BENCHMARKS.md
 echo ============================================================
-pause
+if not defined DSOFT_BENCH_NO_PAUSE pause
