@@ -10,7 +10,7 @@
        same per-TFM condition. A conditional PropertyGroup in the csproj does NOT survive: BDN's
        CsProjGenerator flattens it, leaking runtime-async into net10 builds (SYSLIB5007:
        AsyncHelpers is [Experimental] in the net10 corelib). -->
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net11.0'">
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net11.0' AND '$(DSOFT_RUNTIME_ASYNC)' != 'off'">
     <Features>runtime-async=on</Features>
     <LangVersion>preview</LangVersion>
   </PropertyGroup>
