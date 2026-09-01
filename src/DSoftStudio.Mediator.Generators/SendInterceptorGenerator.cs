@@ -93,7 +93,11 @@ public sealed class SendInterceptorGenerator : IIncrementalGenerator
 
             var unique = calls.Distinct().ToList();
             var handlerMap = SendFastPath.BuildUniqueHandlerMap(localHandlerEntries, externalHandlerEntries);
-            var code = GenerateInterceptors(unique, isRelease, handlerMap, emitAggressive);
+
+            // The concrete caches live in MediatorExtensionsGenerator's assembly-suffixed namespace
+            // and are referenced from here, so the two Send call forms share ONE holder.
+            var sanitizedAsm = HandlerDiscovery.SanitizeIdentifier(compilation.AssemblyName ?? "Assembly");
+            var code = GenerateInterceptors(unique, isRelease, handlerMap, emitAggressive, sanitizedAsm);
 
             spc.AddSource(
                 "MediatorInterceptors.g.cs",
@@ -218,7 +222,8 @@ public sealed class SendInterceptorGenerator : IIncrementalGenerator
         List<InterceptCallInfo> calls,
         bool isRelease,
         Dictionary<(string Request, string Response), string> handlerMap,
-        bool emitAggressive)
+        bool emitAggressive,
+        string sanitizedAsm)
     {
         var sb = new StringBuilder(2048);
 
@@ -247,9 +252,14 @@ public sealed class SendInterceptorGenerator : IIncrementalGenerator
             .GroupBy(c => (c.RequestType, c.ResponseType))
             .ToList();
 
-        // Cache classes are file-local siblings of SendInterceptors: collected here, emitted
-        // after the class closes (still inside the namespace).
-        var cacheClasses = new List<(string ClassName, string ReqType, string ResType, string HandlerType)>();
+        // The concrete caches are NOT emitted here. MediatorExtensionsGenerator owns them: its pair
+        // set (local + external + self-handlers) is a superset of the intercepted call sites, so
+        // every cache referenced below exists, and both Send call forms now hit the SAME holder —
+        // which matters because AggressiveDispatch<,>.TryArm is one-shot (AggressiveDispatch.cs:279).
+        // Previously each generator emitted its own `file`-local class, with different index-derived
+        // names in different namespaces, so whichever call form dispatched first consumed the single
+        // arm attempt and the other stayed permanently null.
+        var cachePrefix = "global::DSoftStudio.Mediator.Generated." + sanitizedAsm + ".";
 
         int methodIndex = 0;
         foreach (var group in groups)
@@ -259,11 +269,8 @@ public sealed class SendInterceptorGenerator : IIncrementalGenerator
 
             // ADR-0065 SAFE fast path: unique + nameable concrete handler → concrete-typed cache.
             string? cacheClassName = null;
-            if (handlerMap.TryGetValue((reqType, resType), out var handlerType))
-            {
-                cacheClassName = "__SendConcreteCache_" + methodIndex;
-                cacheClasses.Add((cacheClassName, reqType, resType, handlerType));
-            }
+            if (handlerMap.ContainsKey((reqType, resType)))
+                cacheClassName = cachePrefix + InterceptorHelpers.ConcreteCacheName(reqType, resType);
 
             // Emit [InterceptsLocation] for each call site
             foreach (var call in group)
@@ -294,13 +301,6 @@ public sealed class SendInterceptorGenerator : IIncrementalGenerator
         }
 
         sb.AppendLine("    }");
-
-        foreach (var cache in cacheClasses)
-        {
-            sb.AppendLine();
-            InterceptorHelpers.AppendConcreteCacheClass(
-                sb, cache.ClassName, cache.ReqType, cache.ResType, cache.HandlerType, emitAggressive);
-        }
 
         sb.AppendLine("}");
 

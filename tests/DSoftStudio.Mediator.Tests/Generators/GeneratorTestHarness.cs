@@ -85,13 +85,15 @@ internal static class GeneratorTestHarness
     /// type-inferred call bind, which the interceptor generator then intercepts.
     /// </summary>
     public static (GeneratorRunResult Result, Compilation Output) RunChain<TFirst, TSecond>(
-        string source, bool interceptors = false, bool release = false)
+        string source, bool interceptors = false, bool release = false,
+        Dictionary<string, string>? buildProperties = null)
         where TFirst : IIncrementalGenerator, new()
         where TSecond : IIncrementalGenerator, new()
     {
         var (parse, compilation) = Build(source, interceptors, release);
-        DriverFor(new TFirst(), parse).RunGeneratorsAndUpdateCompilation(compilation, out var afterFirst, out _);
-        var driver = DriverFor(new TSecond(), parse)
+        DriverFor(new TFirst(), parse, buildProperties)
+            .RunGeneratorsAndUpdateCompilation(compilation, out var afterFirst, out _);
+        var driver = DriverFor(new TSecond(), parse, buildProperties)
             .RunGeneratorsAndUpdateCompilation(afterFirst, out var output, out _);
         return (driver.GetRunResult().Results.Single(), output);
     }

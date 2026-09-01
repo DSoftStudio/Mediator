@@ -166,6 +166,26 @@ internal static class InterceptorHelpers
     /// handlers get the same per-(thread, provider) pinning both tiers share).
     /// </para>
     /// </summary>
+    /// <summary>
+    /// The ONE cache-class name for a (request, response) pair, derived from the types so both
+    /// Send emitters compute the same string.
+    /// <para>
+    /// It used to be index-derived, and the two emitters index differently:
+    /// <c>SendInterceptorGenerator</c> by call-site group index, <c>MediatorExtensionsGenerator</c>
+    /// by request index. Emitted <c>file</c>-local in two different files, that produced TWO rival
+    /// holders for the same pair — while <c>AggressiveDispatch&lt;,&gt;.TryArm</c> is one-shot
+    /// (AggressiveDispatch.cs:279). Whichever call form dispatched first consumed the single arm
+    /// attempt and the other holder stayed null forever, so "armed" was a property of which call
+    /// FORM ran first, not of the request type. Same fix ADR-0066 already applied on the Publish
+    /// side (NotificationFastPath.cs:134).
+    /// </para>
+    /// </summary>
+    public static string ConcreteCacheName(string requestType, string responseType)
+        => "__SendConcreteCache_"
+           + HandlerDiscovery.SanitizeIdentifier(requestType)
+           + "_"
+           + HandlerDiscovery.SanitizeIdentifier(responseType);
+
     public static void AppendConcreteCacheClass(
         StringBuilder sb,
         string cacheClassName,
@@ -174,7 +194,10 @@ internal static class InterceptorHelpers
         string handlerType,
         bool emitAggressive = false)
     {
-        sb.Append("    file static class ").AppendLine(cacheClassName);
+        // internal, NOT file-local: MediatorExtensionsGenerator OWNS these classes and
+        // SendInterceptorGenerator references them from its own generated file, so the two call
+        // forms share one holder and one arm attempt. (Mirrors NotificationFastPath.cs:148-149.)
+        sb.Append("    internal static class ").AppendLine(cacheClassName);
         sb.AppendLine("    {");
 
         if (emitAggressive)

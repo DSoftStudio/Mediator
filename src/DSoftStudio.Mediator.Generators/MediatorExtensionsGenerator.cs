@@ -238,14 +238,18 @@ public sealed class MediatorExtensionsGenerator : IIncrementalGenerator
         Dictionary<(string Request, string Response), string> handlerMap,
         bool emitAggressive)
     {
-        // Per-request-type concrete cache classes (ADR-0065 SAFE tier): named by request index so
-        // the typed Send extension and the Send(object) switch case share ONE cache (one TLS pair).
+        // Per-(request, response) concrete cache classes (ADR-0065 SAFE tier). This generator OWNS
+        // them: its pair set (local + external + self-handlers) is a superset of the intercepted
+        // call sites SendInterceptorGenerator sees, so every cache an interceptor needs exists here.
+        // The name is derived from the TYPES (InterceptorHelpers.ConcreteCacheName), not from an
+        // index, so SendInterceptorGenerator computes the same name and references THIS class
+        // instead of emitting a rival file-local one — one holder per pair, one arm attempt.
         var cacheClasses = new List<(string ClassName, string ReqType, string ResType, string HandlerType)>();
-        string? CacheNameFor(int requestIndex, in RequestResponsePair pair)
+        string? CacheNameFor(in RequestResponsePair pair)
         {
             if (!handlerMap.TryGetValue((pair.RequestType, pair.ResponseType), out var handlerType))
                 return null;
-            var name = "__SendConcreteCache_" + requestIndex;
+            var name = InterceptorHelpers.ConcreteCacheName(pair.RequestType, pair.ResponseType);
             if (!cacheClasses.Exists(c => c.ClassName == name))
                 cacheClasses.Add((name, pair.RequestType, pair.ResponseType, handlerType));
             return name;
@@ -285,7 +289,7 @@ public sealed class MediatorExtensionsGenerator : IIncrementalGenerator
         for (int reqIndex = 0; reqIndex < requests.Count; reqIndex++)
         {
             var pair = requests[reqIndex];
-            var cacheClassName = CacheNameFor(reqIndex, pair);
+            var cacheClassName = CacheNameFor(pair);
 
             sb.AppendLine("        /// <summary>");
             sb.AppendLine($"        /// Sends a <see cref=\"{EscapeXml(pair.RequestType)}\"/> through the pipeline. Type-inferred shorthand.");
@@ -344,7 +348,7 @@ public sealed class MediatorExtensionsGenerator : IIncrementalGenerator
                 var pair = requests[i];
                 sb.AppendLine($"                case {pair.RequestType} __r{i}:");
                 sb.AppendLine("                {");
-                EmitSendObjectCaseBody(sb, pair.RequestType, pair.ResponseType, $"__r{i}", "                    ", CacheNameFor(i, pair));
+                EmitSendObjectCaseBody(sb, pair.RequestType, pair.ResponseType, $"__r{i}", "                    ", CacheNameFor(pair));
                 sb.AppendLine("                }");
             }
             sb.AppendLine("                default:");

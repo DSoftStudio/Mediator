@@ -137,8 +137,16 @@ internal static class SendFastPath
     /// dropping any pair with MORE than one distinct implementation: with multiple registrations
     /// MSDI's last-wins winner is a registration-order question the generator cannot answer, so
     /// ambiguous pairs keep the interface-typed <c>HandlerCache</c> tail (fail open). The emitted
-    /// cache's <c>is</c>-typed miss path makes even a wrong compile-time guess safe at runtime —
-    /// this filter just avoids emitting caches that would never hit.
+    /// cache's miss path makes even a wrong compile-time guess safe at runtime — this filter just
+    /// avoids emitting caches that would never hit.
+    /// <para>
+    /// That miss path is an EXACT type test — <c>svc.GetType() == typeof(THandler)</c>
+    /// (<c>InterceptorHelpers.cs:218</c>) — and it has to stay exact. An <c>is</c> test would also
+    /// match a subclass, and a subclass that hides <c>Handle</c> with <c>new</c> would then be
+    /// called through the BASE type's statically-bound implementation: a silent misdispatch.
+    /// Decorators registered at runtime rely on the same exactness to degrade to interface
+    /// dispatch instead of being cached as the concrete handler.
+    /// </para>
     /// </summary>
     public static Dictionary<(string Request, string Response), string> BuildUniqueHandlerMap(
         System.Collections.Immutable.ImmutableArray<HandlerMapEntry> localEntries,

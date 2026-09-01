@@ -1,4 +1,4 @@
-// Copyright (c) DSoftStudio. All rights reserved.
+﻿// Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using DSoftStudio.Mediator.Generators;
@@ -10,7 +10,9 @@ namespace DSoftStudio.Mediator.Tests.Generators;
 /// ADR-0065 SAFE fast path: when a (request, response) pair maps to exactly ONE nameable
 /// concrete handler, the Send emitters (interceptors + typed extensions) emit a file-local
 /// concrete-typed dispatch cache — devirtualizing the final <c>Handle</c> call — with an
-/// <c>is</c>-typed miss path that degrades to interface dispatch for overridden handlers.
+/// EXACT-type (<c>GetType() == typeof(T)</c>, never <c>is</c>) miss path that degrades to
+/// interface dispatch for overridden handlers. Exactness is load-bearing: an <c>is</c> test would
+/// match a subclass that hides <c>Handle</c> with <c>new</c> and silently misdispatch it.
 /// These tests gate the emission rules; runtime behavior is covered by
 /// <c>Integration.SendFastPathIntegrationTests</c>.
 /// </summary>
@@ -39,11 +41,14 @@ public class SendFastPathTests
     [Fact]
     public void Interceptor_Emits_Concrete_Cache_For_Unique_Handler()
     {
-        var (result, output) = GeneratorTestHarness.Run<SendInterceptorGenerator>(
+        var (_, output) = GeneratorTestHarness.RunChain<MediatorExtensionsGenerator, SendInterceptorGenerator>(
             UniqueHandler, interceptors: true, release: true);
 
-        var code = result.AllSource();
-        code.ShouldContain("__SendConcreteCache_0",
+        // Both generators' output: the cache class now lives in MediatorExtensions.g.cs and the
+        // interceptor references it, so assertions about the cache BODY must look at the whole
+        // compilation rather than only the second generator's result.
+        var code = string.Concat(output.SyntaxTrees.Select(t => t.ToString()));
+        code.ShouldContain("__SendConcreteCache_",
             customMessage: "a unique nameable handler must produce the concrete-typed cache");
         code.ShouldContain("svc.GetType() == typeof(global::TestApp.PingHandler)",
             customMessage: "the miss path must EXACT-type-test (never hard-cast, never `is` — subclasses could hide Handle) so user overrides degrade gracefully");
@@ -54,15 +59,56 @@ public class SendFastPathTests
             .Select(d => d.ToString())).ShouldBe("");
     }
 
+    /// <summary>
+    /// REGRESSION: both Send call forms must share ONE concrete-cache class per (request, response).
+    /// <para>
+    /// The name used to be index-derived and the two emitters index differently —
+    /// <c>SendInterceptorGenerator</c> by call-site group, <c>MediatorExtensionsGenerator</c> by
+    /// request — and each emitted its own <c>file</c>-local class, in different namespaces. So a
+    /// pair had TWO rival holders while <c>AggressiveDispatch&lt;,&gt;.TryArm</c> is one-shot
+    /// (AggressiveDispatch.cs:279): whichever call form dispatched first consumed the single arm
+    /// attempt and the other holder stayed null forever. "Armed" was a property of which call FORM
+    /// ran first, not of the request type.
+    /// </para>
+    /// <para>
+    /// Now MediatorExtensionsGenerator OWNS the class (its pair set is a superset of the
+    /// intercepted call sites) and emits it <c>internal</c>; the interceptor references it
+    /// fully-qualified. Same shape ADR-0066 uses on the Publish side.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Both_Send_Emitters_Share_One_Concrete_Cache_Per_Pair()
+    {
+        var (extResult, _) = GeneratorTestHarness.Run<MediatorExtensionsGenerator>(UniqueHandler);
+        var (intResult, _) = GeneratorTestHarness.RunChain<MediatorExtensionsGenerator, SendInterceptorGenerator>(
+            UniqueHandler, interceptors: true, release: true);
+
+        var extensions = extResult.AllSource();
+        var interceptors = intResult.AllSource();
+
+        // Exactly one declaration, and it is the extensions generator's.
+        extensions.ShouldContain("internal static class __SendConcreteCache_",
+            customMessage: "MediatorExtensionsGenerator owns the cache class and must emit it internal, not file-local");
+        interceptors.ShouldNotContain("static class __SendConcreteCache_",
+            customMessage: "SendInterceptorGenerator must reference the shared cache, never declare a rival one");
+
+        // Both name the SAME type for the same pair.
+        const string expected = "__SendConcreteCache_TestApp_Ping_string";
+        extensions.ShouldContain(expected);
+        interceptors.ShouldContain(
+            "global::DSoftStudio.Mediator.Generated.TestAssembly." + expected,
+            customMessage: "the interceptor must reference the shared cache by its fully-qualified name");
+    }
+
     [Fact]
     public void Typed_Extension_Emits_And_Uses_Concrete_Cache()
     {
         var (result, output) = GeneratorTestHarness.Run<MediatorExtensionsGenerator>(UniqueHandler);
 
         var code = result.AllSource();
-        code.ShouldContain("__SendConcreteCache_0.Dispatch(sp, request, cancellationToken)",
+        code.ShouldContain(".Dispatch(sp, request, cancellationToken)",
             customMessage: "the typed Send extension tail must dispatch through the concrete cache");
-        code.ShouldContain("__SendConcreteCache_0.Dispatch(__sp, __r0, cancellationToken)",
+        code.ShouldContain(".Dispatch(__sp, __r0, cancellationToken)",
             customMessage: "the Send(object) switch case must share the SAME cache (one TLS pair per request type)");
         output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).ShouldBeEmpty();
     }
@@ -269,10 +315,10 @@ public class SendFastPathTests
             }
             """;
 
-        var (result, output) = GeneratorTestHarness.Run<SendInterceptorGenerator>(
+        var (result, output) = GeneratorTestHarness.RunChain<MediatorExtensionsGenerator, SendInterceptorGenerator>(
             nullableResponse, interceptors: true, release: true);
 
-        result.AllSource().ShouldContain("__SendConcreteCache_0",
+        result.AllSource().ShouldContain("__SendConcreteCache_",
             customMessage: "a nullable-annotated response type must still get the concrete cache");
         string.Join(" | ", output.GetDiagnostics()
             .Where(d => d.Severity == DiagnosticSeverity.Error)
@@ -282,10 +328,11 @@ public class SendFastPathTests
     [Fact]
     public void Aggressive_Armed_Gate_Is_Emitted_By_Default()
     {
-        var (result, _) = GeneratorTestHarness.Run<SendInterceptorGenerator>(
+        var (_, output) = GeneratorTestHarness.RunChain<MediatorExtensionsGenerator, SendInterceptorGenerator>(
             UniqueHandler, interceptors: true, release: true);
 
-        var code = result.AllSource();
+        // Both generators' output: the cache class (Extensions) plus the interceptor that uses it.
+        var code = string.Concat(output.SyntaxTrees.Select(t => t.ToString()));
         code.ShouldContain(".Armed;",
             customMessage: "the AGGRESSIVE tier is default-ON: the armed-holder gate must be emitted");
         code.ShouldContain("AggressiveDispatch<global::TestApp.Ping, string>",
@@ -295,7 +342,7 @@ public class SendFastPathTests
     [Fact]
     public void DisableAggressive_Knob_Suppresses_Armed_Gate_But_Keeps_Safe_Tier()
     {
-        var (result, output) = GeneratorTestHarness.Run<SendInterceptorGenerator>(
+        var (result, output) = GeneratorTestHarness.RunChain<MediatorExtensionsGenerator, SendInterceptorGenerator>(
             UniqueHandler, interceptors: true, release: true,
             buildProperties: new() { ["DSoftMediatorDisableAggressive"] = "true" });
 
@@ -303,7 +350,7 @@ public class SendFastPathTests
         code.ShouldNotContain(".Armed",
             customMessage: "DSoftMediatorDisableAggressive=true must remove the armed-holder gate entirely");
         code.ShouldNotContain("AggressiveDispatch<");
-        code.ShouldContain("__SendConcreteCache_0",
+        code.ShouldContain("__SendConcreteCache_",
             customMessage: "the SAFE concrete cache must remain — the knob only disables the AGGRESSIVE tier");
         string.Join(" | ", output.GetDiagnostics()
             .Where(d => d.Severity == DiagnosticSeverity.Error)
@@ -319,7 +366,7 @@ public class SendFastPathTests
 
         var code = result.AllSource();
         code.ShouldNotContain(".Armed");
-        code.ShouldContain("__SendConcreteCache_0.Dispatch(sp, request, cancellationToken)");
+        code.ShouldContain(".Dispatch(sp, request, cancellationToken)");
     }
 
     [Fact]
@@ -347,10 +394,10 @@ public class SendFastPathTests
             }
             """;
 
-        var (result, output) = GeneratorTestHarness.Run<SendInterceptorGenerator>(
+        var (result, output) = GeneratorTestHarness.RunChain<MediatorExtensionsGenerator, SendInterceptorGenerator>(
             internalHandler, interceptors: true, release: true);
 
-        result.AllSource().ShouldContain("__SendConcreteCache_0");
+        result.AllSource().ShouldContain("__SendConcreteCache_");
         output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).ShouldBeEmpty(
             "generated cache referencing a same-compilation internal handler must compile");
     }
