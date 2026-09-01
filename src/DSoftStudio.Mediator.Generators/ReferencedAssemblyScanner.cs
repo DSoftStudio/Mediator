@@ -40,6 +40,14 @@ namespace DSoftStudio.Mediator.Generators
         private const string ExceptionHandlerMetadataName = "IRequestExceptionHandler`2";
         private const string StreamPipelineBehaviorMetadataName = "IStreamPipelineBehavior`2";
 
+        // The only constraints the pipeline interfaces themselves declare on TRequest:
+        // IPipelineBehavior -> IRequest<TResponse>, IStreamPipelineBehavior -> IStreamRequest<TResponse>.
+        // (IRequestPostProcessor and IRequestExceptionHandler declare none.) Used by
+        // HasConstraintsBeyondInterface to tell an idiomatic repeat of the interface's own
+        // constraint apart from an extra one that would break closed-generic emission.
+        private const string RequestMetadataName = "IRequest`1";
+        private const string StreamRequestMetadataName = "IStreamRequest`1";
+
         private const string AbstractionsNamespace = "DSoftStudio.Mediator.Abstractions";
         private const string AbstractionsAssemblyName = "DSoftStudio.Mediator.Abstractions";
 
@@ -637,19 +645,73 @@ namespace DSoftStudio.Mediator.Generators
             List<BehaviorTypeInfo> results)
         {
             foreach (var type in ns.GetTypeMembers())
-            {
-                if (type.TypeKind == TypeKind.Class
-                    && !type.IsAbstract
-                    && type.IsGenericType
-                    && type.DeclaredAccessibility == Accessibility.Public)
-                {
-                    TryAddBehaviorInfoFrom(type, results);
-                }
-            }
+                CollectBehaviorsFromTypeTree(type, results, allowInternal: false);
 
             foreach (var child in ns.GetNamespaceMembers())
                 CollectOpenGenericBehaviors(child, results);
         }
+
+        /// <summary>
+        /// Walks a type AND ITS NESTED TYPES, adding every open-generic pipeline behavior found.
+        /// <para>
+        /// Both discovery paths (this scanner for referenced assemblies, and
+        /// <c>MediatorPipelineGenerator.CollectLocalBehaviors</c> for the current compilation) used
+        /// to iterate only <c>INamespaceSymbol.GetTypeMembers()</c> and recurse through
+        /// NAMESPACES — never into nested types. A behavior declared inside a holder class
+        /// (<c>static class Behaviors { public sealed class Logging&lt;,&gt; : IPipelineBehavior&lt;,&gt; }</c>)
+        /// was therefore never discovered, so its open-generic descriptor was never closed and MSDI
+        /// fell back to <c>MakeGenericType</c> — exactly the Native AOT failure this closure exists
+        /// to prevent, silently and with no diagnostic.
+        /// </para>
+        /// <param name="allowInternal">
+        /// <c>true</c> for the current compilation (the generated registry lives in the same
+        /// assembly, so <c>internal</c> types are nameable); <c>false</c> for referenced
+        /// assemblies, where only <c>public</c> types can be named.
+        /// </param>
+        /// </summary>
+        internal static void CollectBehaviorsFromTypeTree(
+            INamedTypeSymbol type,
+            List<BehaviorTypeInfo> results,
+            bool allowInternal)
+        {
+            if (type.TypeKind == TypeKind.Class
+                && !type.IsAbstract
+                && type.IsGenericType
+                && IsNameableBehaviorType(type, allowInternal))
+            {
+                TryAddBehaviorInfoFrom(type, results);
+            }
+
+            foreach (var nested in type.GetTypeMembers())
+                CollectBehaviorsFromTypeTree(nested, results, allowInternal);
+        }
+
+        /// <summary>
+        /// True when the generated registry can write <c>typeof(TheType&lt;,&gt;)</c> for this type.
+        /// Requires the type and EVERY enclosing type to be accessible, and no enclosing type to be
+        /// generic: <c>typeof(Outer&lt;&gt;.Inner&lt;,&gt;)</c> is not legal C#, and
+        /// <c>BaseTypeNameFormat</c> omits generic arguments, so such a name would not compile.
+        /// </summary>
+        private static bool IsNameableBehaviorType(INamedTypeSymbol type, bool allowInternal)
+        {
+            if (!IsAccessibleHere(type.DeclaredAccessibility, allowInternal))
+                return false;
+
+            for (var outer = type.ContainingType; outer is not null; outer = outer.ContainingType)
+            {
+                if (outer.IsGenericType)
+                    return false;
+
+                if (!IsAccessibleHere(outer.DeclaredAccessibility, allowInternal))
+                    return false;
+            }
+
+            return true;
+        }
+
+        private static bool IsAccessibleHere(Accessibility accessibility, bool allowInternal)
+            => accessibility == Accessibility.Public
+               || (allowInternal && accessibility == Accessibility.Internal);
 
         /// <summary>
         /// Checks if a generic type implements any pipeline behavior interface
@@ -686,11 +748,74 @@ namespace DSoftStudio.Mediator.Generators
                 if (type.TypeParameters.Length != 2)
                     continue;
 
+                // A behavior whose type parameters carry constraints BEYOND the ones the pipeline
+                // interface itself declares cannot be closed over every discovered handler pair:
+                // MediatorPipelineGenerator.CloseAllOpenGenericBehaviors emits
+                // typeof(Behavior<Request, Response>) for ALL pairs, so a pair that fails the extra
+                // constraint produces CS0311/CS0315 in the CONSUMER's build — a hard break in code
+                // the consumer never wrote. Skip discovery instead: the open-generic descriptor the
+                // user registered stays in the collection and MSDI resolves it, which is the
+                // behavior that existed before closed-generic emission was introduced.
+                if (HasConstraintsBeyondInterface(type))
+                    continue;
+
                 var baseName = type.ToDisplayString(BaseTypeNameFormat);
                 var openName = baseName + "<,>";
 
                 results.Add(new BehaviorTypeInfo(kind.Value, openName, baseName));
             }
+        }
+
+        /// <summary>
+        /// True when either type parameter of <paramref name="type"/> declares a constraint the
+        /// pipeline interfaces do not already imply.
+        /// <para>
+        /// Allowed (and idiomatic — users repeat the interface's own constraint):
+        /// <c>where TRequest : IRequest&lt;TResponse&gt;</c> and
+        /// <c>where TRequest : IStreamRequest&lt;TResponse&gt;</c>. Everything else — an extra
+        /// marker interface such as <c>IAuditable</c>, a base class, <c>class</c>, <c>struct</c>,
+        /// <c>new()</c>, <c>notnull</c>, <c>unmanaged</c> — makes the behavior un-closable over an
+        /// arbitrary handler pair.
+        /// </para>
+        /// <para>
+        /// Deliberately conservative: it rejects the whole behavior rather than trying to decide
+        /// which pairs satisfy the constraint. Per-pair filtering is the better answer but needs
+        /// request/response SYMBOLS at the emission site, where today only display strings survive
+        /// (HandlerInfo carries strings, not ITypeSymbol).
+        /// </para>
+        /// </summary>
+        private static bool HasConstraintsBeyondInterface(INamedTypeSymbol type)
+        {
+            foreach (var tp in type.TypeParameters)
+            {
+                if (tp.HasValueTypeConstraint
+                    || tp.HasReferenceTypeConstraint
+                    || tp.HasConstructorConstraint
+                    || tp.HasNotNullConstraint
+                    || tp.HasUnmanagedTypeConstraint)
+                {
+                    return true;
+                }
+
+                foreach (var constraint in tp.ConstraintTypes)
+                {
+                    if (constraint is not INamedTypeSymbol named)
+                        return true;
+
+                    var od = named.OriginalDefinition;
+
+                    if (od.ContainingNamespace?.ToDisplayString() != AbstractionsNamespace)
+                        return true;
+
+                    if (od.MetadataName != RequestMetadataName
+                        && od.MetadataName != StreamRequestMetadataName)
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
         internal readonly struct ExternalHandlerInfo(INamedTypeSymbol serviceType, INamedTypeSymbol implementationType)

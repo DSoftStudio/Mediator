@@ -67,6 +67,30 @@ public sealed class AotTimingBehavior<TRequest, TResponse> : IPipelineBehavior<T
     }
 }
 
+// ── Mixed open + closed registration (dedicated types) ────────────
+
+public sealed record AotMixedOrderPing : IRequest<int>;
+
+public sealed class AotMixedOrderPingHandler : IRequestHandler<AotMixedOrderPing, int>
+{
+    public ValueTask<int> Handle(AotMixedOrderPing request, CancellationToken ct) => new(7);
+}
+
+public sealed class AotClosedOnlyBehavior : IPipelineBehavior<AotMixedOrderPing, int>
+{
+    private readonly List<string> _log;
+    public AotClosedOnlyBehavior(List<string> log) => _log = log;
+
+    public async ValueTask<int> Handle(
+        AotMixedOrderPing request, IRequestHandler<AotMixedOrderPing, int> next, CancellationToken ct)
+    {
+        _log.Add("closed:before");
+        var result = await next.Handle(request, ct);
+        _log.Add("closed:after");
+        return result;
+    }
+}
+
 // ── Tests ─────────────────────────────────────────────────────────
 
 /// <summary>
@@ -170,6 +194,46 @@ public class OpenGenericClosureTests
         result.ShouldBe(42);
         // Behaviors execute in registration order (outermost first)
         log.ShouldBe(new[] { "count:before", "timing:before", "timing:after", "count:after" });
+    }
+
+    /// <summary>
+    /// REGRESSION: registration order must hold when open-generic and closed behaviors are MIXED.
+    /// <para>
+    /// <c>CloseAllOpenGenericBehaviors</c> snapshotted <c>services.Count</c> and <c>Add</c>ed the
+    /// closed expansions at the END of the collection, so a behavior registered as an open generic
+    /// always ended up INNERMOST regardless of where the author registered it. That contradicts
+    /// <c>docs/mediator/features/pipeline-behaviors.md</c>: "The first registered behavior is the
+    /// outermost wrapper."
+    /// </para>
+    /// <para>
+    /// The blast radius is exactly this shape — an open behavior registered BEFORE a closed one.
+    /// When the open one is registered last, appending happens to coincide with the authored order,
+    /// which is why <c>MultipleBehaviors_OpenGeneric_OrderPreserved</c> (all-open) never caught it
+    /// and no test mixed the two forms.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task MixedOpenAndClosedBehaviors_PreserveRegistrationOrder()
+    {
+        var log = new List<string>();
+        var services = new ServiceCollection();
+        services.AddMediator().RegisterMediatorHandlers();
+
+        // OPEN registered FIRST -> must be the OUTERMOST wrapper.
+        services.AddTransient(typeof(IPipelineBehavior<,>), typeof(AotCountBehavior<,>));
+        // CLOSED registered SECOND -> must be inner.
+        services.AddTransient<IPipelineBehavior<AotMixedOrderPing, int>, AotClosedOnlyBehavior>();
+
+        services.AddSingleton(log);
+        services.PrecompilePipelines();
+
+        using var provider = services.BuildServiceProvider();
+        var mediator = provider.GetRequiredService<IMediator>();
+
+        var result = await mediator.Send(new AotMixedOrderPing(), TestContext.Current.CancellationToken);
+
+        result.ShouldBe(7);
+        log.ShouldBe(new[] { "count:before", "closed:before", "closed:after", "count:after" });
     }
 
     [Fact]

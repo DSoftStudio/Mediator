@@ -184,26 +184,22 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
     }
 
     /// <summary>
-    /// Walks the current compilation's namespace tree to discover local open-generic
-    /// pipeline behavior types (classes that implement <c>IPipelineBehavior&lt;,&gt;</c>,
-    /// <c>IRequestPostProcessor&lt;,&gt;</c>, <c>IRequestExceptionHandler&lt;,&gt;</c>,
-    /// or <c>IStreamPipelineBehavior&lt;,&gt;</c>).
+    /// Walks the current compilation's namespace tree — and each type's NESTED types — to discover
+    /// local open-generic pipeline behavior types (classes that implement
+    /// <c>IPipelineBehavior&lt;,&gt;</c>, <c>IRequestPostProcessor&lt;,&gt;</c>,
+    /// <c>IRequestExceptionHandler&lt;,&gt;</c>, or <c>IStreamPipelineBehavior&lt;,&gt;</c>).
+    /// <para>
+    /// Shares <see cref="ReferencedAssemblyScanner.CollectBehaviorsFromTypeTree"/> with the
+    /// referenced-assembly scanner so the two discovery paths cannot drift; the only difference is
+    /// that <c>internal</c> types are nameable here (the generated registry is in this assembly).
+    /// </para>
     /// </summary>
     private static void CollectLocalBehaviors(
         INamespaceSymbol ns,
         List<BehaviorTypeInfo> results)
     {
         foreach (var type in ns.GetTypeMembers())
-        {
-            if (type.TypeKind == TypeKind.Class
-                && !type.IsAbstract
-                && type.IsGenericType
-                && (type.DeclaredAccessibility == Accessibility.Public
-                    || type.DeclaredAccessibility == Accessibility.Internal))
-            {
-                ReferencedAssemblyScanner.TryAddBehaviorInfoFrom(type, results);
-            }
-        }
+            ReferencedAssemblyScanner.CollectBehaviorsFromTypeTree(type, results, allowInternal: true);
 
         foreach (var child in ns.GetNamespaceMembers())
             CollectLocalBehaviors(child, results);
@@ -257,11 +253,12 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
         {
             sb.AppendLine();
             sb.AppendLine("            // AOT-safe: close open-generic pipeline behavior registrations in a single O(S) pass.");
-            sb.AppendLine("            // Replaces open-generic ServiceDescriptors with per-handler-pair closed-generic");
-            sb.AppendLine("            // descriptors so DI never calls MakeGenericType (which fails for value-type");
-            sb.AppendLine("            // TResponse under Native AOT when RuntimeFeature.IsDynamicCodeSupported is false).");
+            sb.AppendLine("            // Replaces each open-generic ServiceDescriptor IN PLACE with its per-handler-pair");
+            sb.AppendLine("            // closed-generic descriptors, so DI never calls MakeGenericType (which fails for");
+            sb.AppendLine("            // value-type TResponse under Native AOT when RuntimeFeature.IsDynamicCodeSupported");
+            sb.AppendLine("            // is false) AND the author's registration order — hence outer-to-inner pipeline");
+            sb.AppendLine("            // order — is preserved for pipelines that mix open and closed behaviors.");
             sb.AppendLine("            CloseAllOpenGenericBehaviors(services);");
-            sb.AppendLine("            RemoveOpenGenericBehaviorDescriptors(services);");
             sb.AppendLine();
         }
 
@@ -278,8 +275,6 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
         if (requestBehaviors.Count > 0 && registrations.Count > 0)
         {
             EmitCloseAllOpenGenericBehaviorsMethod(sb, requestBehaviors, registrations);
-            sb.AppendLine();
-            EmitRemoveOpenGenericBehaviorDescriptorsMethod(sb, requestBehaviors);
             sb.AppendLine();
         }
 
@@ -444,9 +439,9 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
 
         // ── AddMediator(Action<MediatorBuilder>) — single entry point (Option B: automatic) ──
         sb.AppendLine("        /// <summary>");
-        sb.AppendLine("        /// Registers all mediator services, discovered handlers, and precompiled pipelines");
-        sb.AppendLine("        /// in a single call. The optional <paramref name=\"configure\"/> lambda allows");
-        sb.AppendLine("        /// registering open-generic behaviors, custom notification publishers, and more.");
+        sb.AppendLine("        /// Registers all mediator services, discovered handlers, and precompiled pipelines,");
+        sb.AppendLine("        /// notifications and streams in a single call. The <paramref name=\"configure\"/> lambda");
+        sb.AppendLine("        /// allows registering open-generic behaviors, custom notification publishers, and more.");
         sb.AppendLine("        /// </summary>");
 
         sb.AppendLine(
@@ -471,6 +466,24 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
         sb.AppendLine("            global::DSoftStudio.Mediator.HandlerLifetimeOptimizer.Apply(services);");
         sb.AppendLine("            MediatorRegistry.RegisterPipelineChains(services);");
         sb.AppendLine("            global::DSoftStudio.Mediator.RequestObjectDispatch.Freeze();");
+
+        // 5. Precompile notifications and streams.
+        //
+        // Without these, this overload silently breaks Publish<T>: NotificationDispatch<T>.Handlers
+        // stays null and NotificationCachedDispatcher.DispatchSequential returns Task.CompletedTask
+        // without dispatching anything (NotificationCachedDispatcher.cs:31-32). Publish(object)
+        // throws instead, so the two Publish overloads disagreed. CreateStream<,> was equally
+        // affected. The docs advertise this overload as doing "everything" and tell users NOT to
+        // mix it with the individual Precompile* calls, so the single-call path must be complete.
+        //
+        // Safe to emit unconditionally: NotificationRegistryExtensions/StreamRegistryExtensions are
+        // emitted by their generators for EVERY compilation (even with zero notification/stream
+        // types — GenerateCode runs with an empty plan list) and land in this same
+        // DSoftStudio.Mediator.Generated.<assembly> namespace, so no using directive is needed.
+        // Both registries are write-once (Interlocked.CompareExchange in NotificationDispatch.cs:35
+        // and StreamDispatch.cs:53/61), so a user who also calls them explicitly is a no-op.
+        sb.AppendLine("            services.PrecompileNotifications();");
+        sb.AppendLine("            services.PrecompileStreams();");
         sb.AppendLine("            return services;");
 
         sb.AppendLine("        }");
@@ -486,8 +499,23 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
     /// <summary>
     /// Emits the <c>CloseAllOpenGenericBehaviors</c> method into the generated source.
     /// Does a single O(S) forward pass over the service collection. For each matched
-    /// open-generic behavior descriptor, emits closed-generic versions for ALL known
-    /// handler pairs inline — no generic method instantiation, no per-handler scanning.
+    /// open-generic behavior descriptor, SPLICES the closed-generic versions in at that
+    /// descriptor's own position — no generic method instantiation, no per-handler scanning.
+    /// <para>
+    /// Splice, not append. The previous version snapshotted <c>services.Count</c> and
+    /// <c>Add</c>ed the closed descriptors at the END of the collection, so a behavior
+    /// registered as an open generic always ended up INNERMOST in the pipeline regardless of
+    /// where the author registered it — contradicting the documented contract
+    /// (docs/mediator/features/pipeline-behaviors.md: "The first registered behavior is the
+    /// outermost wrapper"). The chain is built from the DI resolution order
+    /// (PipelineChainHandler pre-links <c>_behaviors[0]</c> outermost), so descriptor position
+    /// IS execution order. Replacing the open descriptor in place preserves what the author wrote.
+    /// </para>
+    /// <para>
+    /// Removing in place also subsumes the old <c>RemoveOpenGenericBehaviorDescriptors</c> pass,
+    /// which matched on exactly the same guard and ran immediately afterwards — one O(S) pass at
+    /// startup instead of two.
+    /// </para>
     /// </summary>
     private static void EmitCloseAllOpenGenericBehaviorsMethod(
         StringBuilder sb,
@@ -496,52 +524,8 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
     {
         sb.AppendLine("        private static void CloseAllOpenGenericBehaviors(global::Microsoft.Extensions.DependencyInjection.IServiceCollection services)");
         sb.AppendLine("        {");
-        sb.AppendLine("            var count = services.Count;");
-        sb.AppendLine("            for (int i = 0; i < count; i++)");
-        sb.AppendLine("            {");
-        sb.AppendLine("                var d = services[i];");
-        sb.AppendLine("                if (d.ImplementationType is null || !d.ServiceType.IsGenericTypeDefinition)");
-        sb.AppendLine("                    continue;");
-
-        foreach (var b in behaviors)
-        {
-            var serviceOpen = GetOpenServiceTypeName(b.Kind);
-
-            sb.AppendLine();
-            sb.AppendLine($"                if (d.ServiceType == typeof({serviceOpen}) && d.ImplementationType == typeof({b.OpenTypeName}))");
-            sb.AppendLine("                {");
-
-            foreach (var handler in registrations)
-            {
-                var serviceClosed = GetClosedServiceType(b.Kind, handler.RequestType, handler.ResponseType);
-
-                sb.AppendLine("                    services.Add(new global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor(");
-                sb.AppendLine($"                        typeof({serviceClosed}),");
-                sb.AppendLine($"                        typeof({b.BaseTypeName}<{handler.RequestType}, {handler.ResponseType}>),");
-                sb.AppendLine("                        d.Lifetime));");
-            }
-
-            sb.AppendLine("                    continue;");
-            sb.AppendLine("                }");
-        }
-
-        sb.AppendLine("            }");
-        sb.AppendLine("        }");
-    }
-
-    /// <summary>
-    /// Emits the <c>RemoveOpenGenericBehaviorDescriptors</c> method into the generated source.
-    /// After all handler pairs have had their closed-generic descriptors added, this method
-    /// removes the original open-generic descriptors so the DI container never attempts
-    /// <c>MakeGenericType</c>.
-    /// </summary>
-    private static void EmitRemoveOpenGenericBehaviorDescriptorsMethod(
-        StringBuilder sb,
-        List<BehaviorTypeInfo> behaviors)
-    {
-        sb.AppendLine("        private static void RemoveOpenGenericBehaviorDescriptors(global::Microsoft.Extensions.DependencyInjection.IServiceCollection services)");
-        sb.AppendLine("        {");
-        sb.AppendLine("            for (int i = services.Count - 1; i >= 0; i--)");
+        sb.AppendLine("            // services.Count is read live: the loop mutates the collection in place.");
+        sb.AppendLine("            for (int i = 0; i < services.Count; i++)");
         sb.AppendLine("            {");
         sb.AppendLine("                var d = services[i];");
         sb.AppendLine("                if (d.ImplementationType is null || !d.ServiceType.IsGenericTypeDefinition)");
@@ -555,6 +539,26 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
             sb.AppendLine($"                if (d.ServiceType == typeof({serviceOpen}) && d.ImplementationType == typeof({b.OpenTypeName}))");
             sb.AppendLine("                {");
             sb.AppendLine("                    services.RemoveAt(i);");
+
+            var slot = 0;
+            foreach (var handler in registrations)
+            {
+                var serviceClosed = GetClosedServiceType(b.Kind, handler.RequestType, handler.ResponseType);
+
+                sb.AppendLine($"                    services.Insert(i + {slot}, new global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor(");
+                sb.AppendLine($"                        typeof({serviceClosed}),");
+                sb.AppendLine($"                        typeof({b.BaseTypeName}<{handler.RequestType}, {handler.ResponseType}>),");
+                sb.AppendLine("                        d.Lifetime));");
+                slot++;
+            }
+
+            // Advance past the spliced block. With the loop's own i++ this lands on the element
+            // after it. When nothing was inserted (no handler pairs) the net effect is to re-examine
+            // position i, which now holds whatever shifted down into it.
+            var delta = registrations.Count - 1;
+            if (delta != 0)
+                sb.AppendLine($"                    i += {delta};");
+
             sb.AppendLine("                    continue;");
             sb.AppendLine("                }");
         }

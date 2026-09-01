@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using DSoftStudio.Mediator.Generators;
+using Microsoft.CodeAnalysis;
 
 namespace DSoftStudio.Mediator.Tests.Generators;
 
@@ -40,6 +41,190 @@ public class MediatorPipelineGeneratorTests
         code.ShouldContain("GetUser");
     }
 
+    private const string NestedBehaviors = """
+        using System.Threading;
+        using System.Threading.Tasks;
+        using DSoftStudio.Mediator.Abstractions;
+
+        namespace TestApp;
+
+        public record GetUser(int Id) : IRequest<string>;
+
+        public sealed class GetUserHandler : IRequestHandler<GetUser, string>
+        {
+            public ValueTask<string> Handle(GetUser request, CancellationToken ct) => new("u");
+        }
+
+        // Nested inside a NON-generic holder: perfectly registerable, must be discovered.
+        public static class Behaviors
+        {
+            public sealed class Logging<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
+                where TRequest : IRequest<TResponse>
+            {
+                public ValueTask<TResponse> Handle(
+                    TRequest request, IRequestHandler<TRequest, TResponse> next, CancellationToken ct)
+                    => next.Handle(request, ct);
+            }
+
+            // Not nameable from the generated registry.
+            private sealed class Hidden<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
+                where TRequest : IRequest<TResponse>
+            {
+                public ValueTask<TResponse> Handle(
+                    TRequest request, IRequestHandler<TRequest, TResponse> next, CancellationToken ct)
+                    => next.Handle(request, ct);
+            }
+        }
+
+        // Enclosing type is GENERIC: typeof(GenericHolder<>.Inner<,>) is not legal C#.
+        public static class GenericHolder<TMarker>
+        {
+            public sealed class Inner<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
+                where TRequest : IRequest<TResponse>
+            {
+                public ValueTask<TResponse> Handle(
+                    TRequest request, IRequestHandler<TRequest, TResponse> next, CancellationToken ct)
+                    => next.Handle(request, ct);
+            }
+        }
+        """;
+
+    /// <summary>
+    /// REGRESSION: open-generic behaviors declared as NESTED types must be discovered and closed.
+    /// <para>
+    /// Both discovery paths walked <c>INamespaceSymbol.GetTypeMembers()</c> and recursed through
+    /// NAMESPACES only — never into nested types. A behavior inside a holder class was therefore
+    /// invisible, its open-generic descriptor was never closed, and MSDI fell back to
+    /// <c>MakeGenericType</c>: the Native AOT failure this whole closure machinery exists to
+    /// prevent, reached silently and with no diagnostic.
+    /// </para>
+    /// <para>
+    /// Two exclusions are deliberate and asserted here: a <c>private</c> nested type is not
+    /// nameable from the generated registry, and a type whose ENCLOSING type is generic cannot be
+    /// written as an open generic at all — <c>typeof(Holder&lt;&gt;.Inner&lt;,&gt;)</c> is not legal C#,
+    /// and BaseTypeNameFormat omits generic arguments, so emitting it would not compile.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void NestedOpenGenericBehaviors_AreDiscovered_ExceptWhenUnnameable()
+    {
+        var (result, _) = GeneratorTestHarness.Run<MediatorPipelineGenerator>(NestedBehaviors);
+        var code = result.AllSource();
+
+        code.ShouldContain("global::TestApp.Behaviors.Logging<global::TestApp.GetUser, string>",
+            customMessage: "a behavior nested in a non-generic holder must be discovered and closed");
+
+        code.ShouldNotContain("Hidden",
+            customMessage: "a private nested behavior is not nameable from the generated registry");
+        code.ShouldNotContain("GenericHolder",
+            customMessage: "typeof(GenericHolder<>.Inner<,>) is not legal C# — it must be skipped, not emitted");
+    }
+
+    private const string ConstrainedBehavior = """
+        using System.Threading;
+        using System.Threading.Tasks;
+        using DSoftStudio.Mediator.Abstractions;
+
+        namespace TestApp;
+
+        public interface IAuditable { }
+
+        public record GetUser(int Id) : IRequest<string>;
+
+        public sealed class GetUserHandler : IRequestHandler<GetUser, string>
+        {
+            public ValueTask<string> Handle(GetUser request, CancellationToken ct) => new("user");
+        }
+
+        // GetUser does NOT implement IAuditable, so closing this behavior over (GetUser, string)
+        // is a compile error.
+        public sealed class AuditBehavior<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
+            where TRequest : IRequest<TResponse>, IAuditable
+        {
+            public ValueTask<TResponse> Handle(
+                TRequest request, IRequestHandler<TRequest, TResponse> next, CancellationToken ct)
+                => next.Handle(request, ct);
+        }
+        """;
+
+    /// <summary>
+    /// REGRESSION: a behavior whose type parameters carry constraints beyond the ones
+    /// <c>IPipelineBehavior</c> declares must NOT be auto-closed over every handler pair.
+    /// <para>
+    /// Behavior discovery only checked namespace, interface metadata name and arity — never
+    /// constraints — while <c>CloseAllOpenGenericBehaviors</c> emits
+    /// <c>typeof(Behavior&lt;Request, Response&gt;)</c> for ALL known pairs. A behavior constrained
+    /// to, say, <c>IAuditable</c> therefore produced <b>CS0311/CS0315 in the consumer's build</b>,
+    /// in generated code the consumer never wrote and cannot edit.
+    /// </para>
+    /// <para>
+    /// The assertion is on the OUTPUT COMPILATION rather than on emitted text: the symptom users
+    /// hit is a failing build, so that is what the test should reproduce.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ConstrainedBehavior_IsNotClosedOverIncompatibleHandlerPairs()
+    {
+        var (result, output) = GeneratorTestHarness.Run<MediatorPipelineGenerator>(ConstrainedBehavior);
+
+        // Only constraint violations are in scope. The harness drives ONE generator, so the emitted
+        // registry legitimately cannot resolve its sibling generators' extension methods
+        // (RegisterMediatorHandlers / PrecompileNotifications / PrecompileStreams -> CS1061);
+        // that is a property of the isolated harness, not of the generated code in a real build.
+        var constraintErrors = output.GetDiagnostics()
+            .Where(d => d.Severity == DiagnosticSeverity.Error
+                        && (d.Id == "CS0311" || d.Id == "CS0315" || d.Id == "CS0453"))
+            .ToList();
+
+        constraintErrors.ShouldBeEmpty(
+            "a behavior constrained beyond IPipelineBehavior must not be closed over incompatible "
+            + "handler pairs — those closed generics break the consumer's build:\n"
+            + string.Join("\n", constraintErrors.Select(e => e.ToString())));
+
+        // And specifically: no closed AuditBehavior over the incompatible pair.
+        result.AllSource().ShouldNotContain("AuditBehavior<global::TestApp.GetUser");
+    }
+
+    /// <summary>
+    /// REGRESSION: the single-call <c>AddMediator(configure)</c> overload must precompile
+    /// notifications and streams, not only pipelines.
+    /// <para>
+    /// The emitted body used to call only <c>HandlerLifetimeOptimizer.Apply</c> +
+    /// <c>RegisterPipelineChains</c> + <c>RequestObjectDispatch.Freeze</c>. With no custom
+    /// publisher, <c>Mediator.Publish&lt;T&gt;</c> goes through
+    /// <c>NotificationCachedDispatcher.DispatchSequential</c>, which returns
+    /// <c>Task.CompletedTask</c> while <c>NotificationDispatch&lt;T&gt;.Handlers</c> is null — so
+    /// <c>Publish</c> silently dispatched nothing, while <c>Publish(object)</c> threw. The docs
+    /// advertise this overload as doing "everything" and tell users NOT to mix it with the
+    /// individual <c>Precompile*</c> calls, so the single-call path has to be complete.
+    /// </para>
+    /// <para>
+    /// This is asserted on the EMITTED TEXT rather than by publishing through a built provider:
+    /// <c>NotificationRegistry.Register</c> initializes the process-global, write-once
+    /// <c>NotificationDispatch&lt;T&gt;</c> for every notification type in the assembly, so any other
+    /// test that calls <c>PrecompileNotifications()</c> primes that static and a runtime test
+    /// passes whether or not the emitter is correct.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AddMediatorConfigure_AlsoPrecompilesNotificationsAndStreams()
+    {
+        var (result, _) = GeneratorTestHarness.Run<MediatorPipelineGenerator>(RequestHandler);
+        var code = result.AllSource();
+
+        var start = code.IndexOf("IServiceCollection AddMediator(", StringComparison.Ordinal);
+        start.ShouldBeGreaterThan(-1, "the AddMediator(configure) overload should be emitted");
+        var body = code[start..];
+
+        body.ShouldContain("services.PrecompileNotifications();");
+        body.ShouldContain("services.PrecompileStreams();");
+
+        // Order matters: both must run AFTER configure(builder), so a publisher or stream behavior
+        // registered through the builder is visible to the registries.
+        body.IndexOf("configure(builder);", StringComparison.Ordinal)
+            .ShouldBeLessThan(body.IndexOf("services.PrecompileNotifications();", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void RegisterPipeline_FoldsHandlerLifetimeIntoChainLifetime()
     {
@@ -59,8 +244,8 @@ public class MediatorPipelineGeneratorTests
     public void Emits_Aot_Behavior_Closure_For_OpenGeneric_Behavior_And_Processor()
     {
         // A handler PLUS open-generic pipeline components (behavior + pre-processor) triggers the AOT-safe
-        // closure emit (CloseAllOpenGenericBehaviors / RemoveOpenGenericBehaviorDescriptors) for each kind —
-        // the largest previously-uncovered block of the generator.
+        // closure emit (CloseAllOpenGenericBehaviors) for each kind — the largest previously-uncovered
+        // block of the generator.
         const string rich = """
             using System.Threading;
             using System.Threading.Tasks;
@@ -93,8 +278,16 @@ public class MediatorPipelineGeneratorTests
         var code = result.AllSource();
 
         code.ShouldContain("CloseAllOpenGenericBehaviors");
-        code.ShouldContain("RemoveOpenGenericBehaviorDescriptors");
         code.ShouldContain("LoggingBehavior");
+
+        // The closure SPLICES in place — RemoveAt at the open descriptor's index, then Insert of the
+        // closed expansions at that same index — so registration order survives. It must NOT append
+        // (services.Add), which is what pushed open-generic behaviors to the innermost position.
+        code.ShouldContain("services.RemoveAt(i);");
+        code.ShouldContain("services.Insert(i + 0, new global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor(");
+
+        // The separate second pass is gone: removal now happens in place, under the identical guard.
+        code.ShouldNotContain("RemoveOpenGenericBehaviorDescriptors");
     }
 
     [Fact]
