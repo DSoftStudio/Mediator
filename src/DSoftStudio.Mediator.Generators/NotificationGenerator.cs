@@ -1,4 +1,4 @@
-﻿// Copyright (c) DSoftStudio. All rights reserved.
+// Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using System.Collections.Generic;
@@ -14,7 +14,9 @@ namespace DSoftStudio.Mediator.Generators;
 /// <summary>
 /// Incremental source generator that detects all implementations of
 /// INotificationHandler&lt;TNotification&gt; and generates compile-time
-/// dispatch tables that eliminate runtime service enumeration.
+/// dispatch tables that eliminate runtime service enumeration, plus the
+/// ADR-0066 per-notification-type fast-path cache classes (<c>__NotifCache_*</c>:
+/// SAFE concrete tier + default-ON AGGRESSIVE armed fan-out holder).
 /// </summary>
 [Generator]
 public sealed class NotificationGenerator : IIncrementalGenerator
@@ -28,64 +30,65 @@ public sealed class NotificationGenerator : IIncrementalGenerator
             .Select(static (compilation, _) =>
                 compilation.GetTypeByMetadataName(HandlerInterfaceMetadataName) is not null);
 
-        var handlerInfos = context.SyntaxProvider
+        var handlerEntries = context.SyntaxProvider
             .CreateSyntaxProvider(
                 predicate: static (node, _) =>
                     node is ClassDeclarationSyntax { BaseList: not null },
-                transform: static (ctx, ct) => GetHandlerInfo(ctx, ct))
+                transform: static (ctx, ct) => NotificationFastPath.GetLocalEntry(ctx, ct))
             .Where(static info => info is not null)
             .Select(static (info, _) => info!.Value);
 
-        var localCollected = handlerInfos.Collect();
+        var localCollected = handlerEntries.Collect();
 
         // Scan referenced assemblies for INotificationHandler registrations
         var externalHandlers = context.CompilationProvider
             .Select(static (compilation, _) =>
             {
-                var external = ReferencedAssemblyScanner.GetExternalNotificationHandlers(compilation);
+                var external = ReferencedAssemblyScanner.GetExternalNotificationHandlerMap(compilation);
                 var array = external
-                    .Select(e => new NotificationHandlerInfo(e.NotificationType, e.HandlerType))
                     .OrderBy(static h => h.NotificationType)
                     .ThenBy(static h => h.HandlerType)
                     .ToArray();
-                return new EquatableArray<NotificationHandlerInfo>(array);
+                return new EquatableArray<NotificationHandlerEntry>(array);
             });
 
         var assemblyName = context.CompilationProvider
             .Select(static (c, _) => c.AssemblyName ?? "Assembly");
 
+        // ADR-0066: DSoftMediatorDisableAggressive force-OFF knob (armed tier only — SAFE stays).
+        var disableAggressive = context.AnalyzerConfigOptionsProvider
+            .Select(static (options, _) =>
+                options.GlobalOptions.TryGetValue(
+                    "build_property.DSoftMediatorDisableAggressive", out var value)
+                && string.Equals(value, "true", System.StringComparison.OrdinalIgnoreCase));
+
         var combined = localCollected
             .Combine(hasHandlerInterface)
             .Combine(externalHandlers)
-            .Combine(assemblyName);
+            .Combine(assemblyName)
+            .Combine(disableAggressive);
 
         context.RegisterSourceOutput(combined, static (spc, pair) =>
         {
-            var (((localHandlers, interfaceExists), external), asmName) = pair;
+            var ((((localHandlers, interfaceExists), external), asmName), disableAgg) = pair;
 
             if (!interfaceExists && external.Length == 0)
             {
                 spc.AddSource(
                     "NotificationDispatch.g.cs",
                     SourceText.From(
-                        GenerateCode(new List<NotificationHandlerInfo>(), asmName),
+                        GenerateCode(new List<NotificationCachePlan>(), asmName, disableAgg),
                         Encoding.UTF8));
                 return;
             }
 
-            // Merge local + external, deduplicate
-            var localList = localHandlers.IsDefaultOrEmpty
-                ? Enumerable.Empty<NotificationHandlerInfo>()
-                : localHandlers.Distinct();
+            var plans = NotificationFastPath.ComputePlans(
+                localHandlers.IsDefaultOrEmpty
+                    ? Enumerable.Empty<NotificationHandlerEntry>()
+                    : localHandlers,
+                external);
 
-            var registrations = localList
-                .Concat(external)
-                .Distinct()
-                .OrderBy(static h => h.NotificationType)
-                .ThenBy(static h => h.HandlerType)
-                .ToList();
-
-            var code = GenerateCode(registrations, asmName);
+            var code = GenerateCode(plans, asmName, disableAgg);
 
             spc.AddSource(
                 "NotificationDispatch.g.cs",
@@ -93,32 +96,10 @@ public sealed class NotificationGenerator : IIncrementalGenerator
         });
     }
 
-    private static NotificationHandlerInfo? GetHandlerInfo(
-        GeneratorSyntaxContext ctx,
-        CancellationToken ct)
-    {
-        var classDeclaration = (ClassDeclarationSyntax)ctx.Node;
-
-        if (ctx.SemanticModel.GetDeclaredSymbol(classDeclaration, ct)
-            is not INamedTypeSymbol symbol)
-            return null;
-
-        if (symbol.IsAbstract ||
-            symbol.TypeKind != TypeKind.Class ||
-            symbol.TypeParameters.Length > 0)
-            return null;
-
-        if (HandlerDiscovery.IsFileLocal(classDeclaration))
-            return null;
-
-        if (!HandlerDiscovery.TryGetNotificationHandler(
-                symbol, ct, out var notificationType, out var handlerType))
-            return null;
-
-        return new NotificationHandlerInfo(notificationType, handlerType);
-    }
-
-    private static string GenerateCode(List<NotificationHandlerInfo> registrations, string assemblyName)
+    private static string GenerateCode(
+        List<NotificationCachePlan> plans,
+        string assemblyName,
+        bool disableAggressive)
     {
         var sanitizedAsm = HandlerDiscovery.SanitizeIdentifier(assemblyName);
         var sb = new StringBuilder();
@@ -131,12 +112,6 @@ public sealed class NotificationGenerator : IIncrementalGenerator
         sb.AppendLine("namespace DSoftStudio.Mediator");
         sb.AppendLine("{");
 
-        // Group handlers by notification type
-        var groups = registrations
-            .GroupBy(static r => r.NotificationType)
-            .OrderBy(static g => g.Key)
-            .ToList();
-
         // Registry class that populates NotificationDispatch<T>.Handlers
         sb.AppendLine("    /// <summary>");
         sb.AppendLine("    /// Auto-generated notification dispatch registry.");
@@ -144,15 +119,17 @@ public sealed class NotificationGenerator : IIncrementalGenerator
         sb.AppendLine("    /// </summary>");
         sb.AppendLine("    file static class NotificationRegistry");
         sb.AppendLine("    {");
-        sb.AppendLine("        public static void Register()");
+        sb.AppendLine("        public static void Register(global::Microsoft.Extensions.DependencyInjection.IServiceCollection services)");
         sb.AppendLine("        {");
+        if (plans.Count == 0)
+            sb.AppendLine("            _ = services;");
 
-        foreach (var group in groups)
+        foreach (var plan in plans)
         {
-            var handlersInGroup = group.OrderBy(static h => h.HandlerType).ToList();
+            var handlersInGroup = plan.Handlers;
 
-            sb.AppendLine($"            global::DSoftStudio.Mediator.NotificationDispatch<{group.Key}>.TryInitialize(");
-            sb.AppendLine($"                new global::System.Func<global::System.IServiceProvider, global::DSoftStudio.Mediator.Abstractions.INotificationHandler<{group.Key}>>[]");
+            sb.AppendLine($"            global::DSoftStudio.Mediator.NotificationDispatch<{plan.NotificationType}>.TryInitialize(");
+            sb.AppendLine($"                new global::System.Func<global::System.IServiceProvider, global::DSoftStudio.Mediator.Abstractions.INotificationHandler<{plan.NotificationType}>>[]");
             sb.AppendLine("                {");
 
             foreach (var handler in handlersInGroup)
@@ -164,25 +141,40 @@ public sealed class NotificationGenerator : IIncrementalGenerator
             sb.AppendLine();
 
             // AOT-safe Publish(object) dispatch — no MakeGenericType, no Expression.Compile.
-            sb.AppendLine($"            global::DSoftStudio.Mediator.NotificationObjectDispatch.Register<{group.Key}>(");
+            sb.AppendLine($"            global::DSoftStudio.Mediator.NotificationObjectDispatch.Register<{plan.NotificationType}>(");
             sb.AppendLine("                static (notification, sp, publisher, ct) =>");
             sb.AppendLine("                {");
-            sb.AppendLine($"                    var typed = ({group.Key})notification;");
+            sb.AppendLine($"                    var typed = ({plan.NotificationType})notification;");
             sb.AppendLine("                    if (publisher is not null)");
             sb.AppendLine("                    {");
-            sb.AppendLine($"                        var handlers = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetServices<global::DSoftStudio.Mediator.Abstractions.INotificationHandler<{group.Key}>>(sp);");
+            sb.AppendLine($"                        var handlers = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetServices<global::DSoftStudio.Mediator.Abstractions.INotificationHandler<{plan.NotificationType}>>(sp);");
             sb.AppendLine("                        return publisher.Publish(handlers, typed, ct);");
             sb.AppendLine("                    }");
-            sb.AppendLine("                    return global::DSoftStudio.Mediator.NotificationCachedDispatcher.DispatchSequential(typed, sp, ct);");
+            AppendNoPublisherDispatch(sb, plan, disableAggressive, "                    ", "typed");
             sb.AppendLine("                });");
             sb.AppendLine();
+
+            // ADR-0066: eligibility for the AGGRESSIVE armed fan-out. Runs at Precompile time
+            // with the collection in hand; re-verified at arm time (first publish).
+            if (plan.CacheEligible && !disableAggressive)
+            {
+                sb.AppendLine($"            global::DSoftStudio.Mediator.AggressiveNotificationDispatch<{plan.NotificationType}>.SetEligibility(services,");
+                sb.Append("                new global::System.Type[] { ");
+                for (int i = 0; i < handlersInGroup.Length; i++)
+                {
+                    if (i > 0) sb.Append(", ");
+                    sb.Append("typeof(").Append(handlersInGroup[i].HandlerType).Append(')');
+                }
+                sb.AppendLine(" });");
+                sb.AppendLine();
+            }
         }
 
         // Freeze the dispatch table after all registrations.
         sb.AppendLine("            global::DSoftStudio.Mediator.NotificationObjectDispatch.Freeze();");
 
         // Install the source-generated type switch for Publish(object) fast path.
-        if (groups.Count > 0)
+        if (plans.Count > 0)
         {
             sb.AppendLine("            global::DSoftStudio.Mediator.NotificationObjectDispatch.SetGeneratedSwitch(PublishObjectSwitch);");
         }
@@ -192,7 +184,7 @@ public sealed class NotificationGenerator : IIncrementalGenerator
         // ── Publish(object) type switch ──────────────────────────────
         // Eliminates FrozenDictionary lookup + delegate invocation (~1.5 ns saving).
         // Falls back to DispatchFallback for types not known at compile time.
-        if (groups.Count > 0)
+        if (plans.Count > 0)
         {
             sb.AppendLine();
             sb.AppendLine("        private static global::System.Threading.Tasks.Task PublishObjectSwitch(");
@@ -205,17 +197,17 @@ public sealed class NotificationGenerator : IIncrementalGenerator
             sb.AppendLine("            {");
 
             int caseIndex = 0;
-            foreach (var group in groups)
+            foreach (var plan in plans)
             {
                 var varName = $"__n{caseIndex}";
-                sb.AppendLine($"                case {group.Key} {varName}:");
+                sb.AppendLine($"                case {plan.NotificationType} {varName}:");
                 sb.AppendLine("                {");
                 sb.AppendLine("                    if (publisher is not null)");
                 sb.AppendLine("                    {");
-                sb.AppendLine($"                        var __handlers = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetServices<global::DSoftStudio.Mediator.Abstractions.INotificationHandler<{group.Key}>>(sp);");
+                sb.AppendLine($"                        var __handlers = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetServices<global::DSoftStudio.Mediator.Abstractions.INotificationHandler<{plan.NotificationType}>>(sp);");
                 sb.AppendLine($"                        return publisher.Publish(__handlers, {varName}, ct);");
                 sb.AppendLine("                    }");
-                sb.AppendLine($"                    return global::DSoftStudio.Mediator.NotificationCachedDispatcher.DispatchSequential({varName}, sp, ct);");
+                AppendNoPublisherDispatch(sb, plan, disableAggressive, "                    ", varName);
                 sb.AppendLine("                }");
                 caseIndex++;
             }
@@ -241,43 +233,56 @@ public sealed class NotificationGenerator : IIncrementalGenerator
         sb.AppendLine("        public static global::Microsoft.Extensions.DependencyInjection.IServiceCollection PrecompileNotifications(");
         sb.AppendLine("            this global::Microsoft.Extensions.DependencyInjection.IServiceCollection services)");
         sb.AppendLine("        {");
-        sb.AppendLine("            NotificationRegistry.Register();");
+        sb.AppendLine("            NotificationRegistry.Register(services);");
         sb.AppendLine("            return services;");
         sb.AppendLine("        }");
         sb.AppendLine("    }");
-
         sb.AppendLine();
+
+        // ── ADR-0066 fast-path cache classes (internal, NOT file-local: the Publish
+        //    interceptors live in a different generated file and reference them). ──
+        foreach (var plan in plans)
+        {
+            if (plan.CacheEligible)
+                NotificationFastPath.AppendCacheClass(sb, plan, emitAggressive: !disableAggressive);
+        }
+
         sb.AppendLine("} // namespace");
 
         return sb.ToString();
     }
 
     /// <summary>
-    /// Represents a notification handler registration.
+    /// The no-custom-publisher dispatch statement(s): routes through the ADR-0066 cache when the
+    /// plan is eligible (armed gate first, SAFE concrete tier fallback), else today's
+    /// <c>DispatchSequential</c> verbatim.
     /// </summary>
-    internal readonly struct NotificationHandlerInfo : System.IEquatable<NotificationHandlerInfo>
+    private static void AppendNoPublisherDispatch(
+        StringBuilder sb,
+        NotificationCachePlan plan,
+        bool disableAggressive,
+        string indent,
+        string notificationVar)
     {
-        public string NotificationType { get; }
-        public string HandlerType { get; }
-
-        public NotificationHandlerInfo(string notificationType, string handlerType)
+        if (!plan.CacheEligible)
         {
-            NotificationType = notificationType;
-            HandlerType = handlerType;
+            sb.Append(indent).AppendLine($"return global::DSoftStudio.Mediator.NotificationCachedDispatcher.DispatchSequential({notificationVar}, sp, ct);");
+            return;
         }
 
-        public bool Equals(NotificationHandlerInfo other) =>
-            NotificationType == other.NotificationType && HandlerType == other.HandlerType;
-
-        public override bool Equals(object obj) =>
-            obj is NotificationHandlerInfo other && Equals(other);
-
-        public override int GetHashCode()
+        if (!disableAggressive)
         {
-            unchecked
-            {
-                return (NotificationType.GetHashCode() * 397) ^ HandlerType.GetHashCode();
-            }
+            // The object path was ALREADY behind a non-inlinable callvirt boundary (the very
+            // fence M1 needs), so the armed gate buys nothing below net11 and its volatile read
+            // measurably costs ~0.2 ns there — armed-gate routing is net11-only; net10/net8 go
+            // straight to the SAFE concrete tier (probe + unrolled beats the interface loop).
+            sb.AppendLine("#if NET11_0_OR_GREATER");
+            sb.Append(indent).AppendLine($"var __armed = {plan.CacheClassName}.Armed;");
+            sb.Append(indent).AppendLine("if (__armed is not null)");
+            sb.Append(indent).AppendLine($"    return {plan.CacheClassName}.Dispatch(__armed, {notificationVar}, ct);");
+            sb.AppendLine("#endif");
         }
+
+        sb.Append(indent).AppendLine($"return {plan.CacheClassName}.DispatchSafe(sp, {notificationVar}, ct);");
     }
 }

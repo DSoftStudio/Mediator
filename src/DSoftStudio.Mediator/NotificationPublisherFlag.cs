@@ -36,7 +36,7 @@ namespace DSoftStudio.Mediator
         public static void DetectFrom(IServiceProvider serviceProvider)
         {
             if (serviceProvider.GetService(typeof(Abstractions.INotificationPublisher)) is not null)
-                Volatile.Write(ref _hasCustomPublisher, true);
+                PublisherAppeared();
         }
 
         /// <summary>
@@ -44,6 +44,28 @@ namespace DSoftStudio.Mediator
         /// Used when the registration is known at compile time (e.g. generated code).
         /// </summary>
         [EditorBrowsable(EditorBrowsableState.Never)]
-        public static void MarkRegistered() => Volatile.Write(ref _hasCustomPublisher, true);
+        public static void MarkRegistered() => PublisherAppeared();
+
+        /// <summary>
+        /// ADR-0066: a custom publisher changes Publish semantics for every notification type,
+        /// so any ARMED notification fast path must stand down. Disarm happens BEFORE the flag
+        /// write: post-disarm dispatches read a null holder and fall to the slow path; the brief
+        /// window where the flag is still false yields the sequential dispatch every
+        /// pre-registration publish already got. The EventSource write runs outside the latch
+        /// lock (in-proc listener callbacks must never run under it).
+        /// </summary>
+        private static void PublisherAppeared()
+        {
+            var disarmed = AggressiveDispatchLatch.DisarmNotifications();
+            Volatile.Write(ref _hasCustomPublisher, true);
+            if (disarmed > 0)
+                AggressiveDispatchEventSource.Log.AggressivePoisoned("custom-publisher", disarmed);
+        }
+
+        /// <summary>
+        /// Test-only: clears the write-once flag. The flag is process-global; test suites that
+        /// exercise custom publishers need isolation between cases (ADR-0066 eligibility reads it).
+        /// </summary>
+        internal static void ResetForTests() => Volatile.Write(ref _hasCustomPublisher, false);
     }
 }

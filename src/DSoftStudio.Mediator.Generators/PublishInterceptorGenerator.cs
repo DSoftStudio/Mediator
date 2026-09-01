@@ -36,14 +36,26 @@ public sealed class PublishInterceptorGenerator : IIncrementalGenerator
 
         var collected = callSites.Collect();
 
-        // Combine with compilation + analyzer options (for SuppressInterceptors property).
+        // ADR-0066: the SAME handler discovery NotificationGenerator runs — both generators
+        // must reach identical per-type cache verdicts (they cannot communicate otherwise).
+        var handlerEntries = context.SyntaxProvider
+            .CreateSyntaxProvider(
+                predicate: static (node, _) =>
+                    node is ClassDeclarationSyntax { BaseList: not null },
+                transform: static (ctx, ct) => NotificationFastPath.GetLocalEntry(ctx, ct))
+            .Where(static info => info is not null)
+            .Select(static (info, _) => info!.Value)
+            .Collect();
+
+        // Combine with compilation + analyzer options (for the MSBuild knobs).
         var collectedWithCompilation = collected
+            .Combine(handlerEntries)
             .Combine(context.CompilationProvider)
             .Combine(context.AnalyzerConfigOptionsProvider);
 
         context.RegisterSourceOutput(collectedWithCompilation, static (spc, pair) =>
         {
-            var ((calls, compilation), optionsProvider) = pair;
+            var (((calls, localHandlers), compilation), optionsProvider) = pair;
             if (calls.IsDefaultOrEmpty)
                 return;
 
@@ -55,9 +67,22 @@ public sealed class PublishInterceptorGenerator : IIncrementalGenerator
                 return;
             }
 
+            bool disableAggressive = optionsProvider.GlobalOptions.TryGetValue(
+                    "build_property.DSoftMediatorDisableAggressive", out var disable)
+                && string.Equals(disable, "true", System.StringComparison.OrdinalIgnoreCase);
+
+            var plans = NotificationFastPath.ComputePlans(
+                localHandlers.IsDefaultOrEmpty
+                    ? Enumerable.Empty<NotificationHandlerEntry>()
+                    : localHandlers,
+                ReferencedAssemblyScanner.GetExternalNotificationHandlerMap(compilation));
+
+            var planByType = plans.ToDictionary(static p => p.NotificationType, static p => p);
+            var sanitizedAsm = HandlerDiscovery.SanitizeIdentifier(compilation.AssemblyName ?? "Assembly");
+
             bool isRelease = compilation.Options.OptimizationLevel == OptimizationLevel.Release;
             var unique = calls.Distinct().ToList();
-            var code = GenerateInterceptors(unique, isRelease);
+            var code = GenerateInterceptors(unique, isRelease, planByType, sanitizedAsm, disableAggressive);
 
             spc.AddSource(
                 "PublishInterceptors.g.cs",
@@ -169,7 +194,12 @@ public sealed class PublishInterceptorGenerator : IIncrementalGenerator
         return true;
     }
 
-    private static string GenerateInterceptors(List<InterceptCallInfo> calls, bool isRelease)
+    private static string GenerateInterceptors(
+        List<InterceptCallInfo> calls,
+        bool isRelease,
+        Dictionary<string, NotificationCachePlan> planByType,
+        string sanitizedAsm,
+        bool disableAggressive)
     {
         var sb = new StringBuilder(2048);
 
@@ -215,8 +245,25 @@ public sealed class PublishInterceptorGenerator : IIncrementalGenerator
             sb.AppendLine("        {");
             sb.AppendLine("            global::System.ArgumentNullException.ThrowIfNull(notification);");
 
+            // ADR-0066: route through the __NotifCache_* fast path when NotificationGenerator
+            // emitted one for this type (same shared discovery -> same verdict).
+            bool hasCache = planByType.TryGetValue(notifType, out var plan) && plan.CacheEligible;
+            string cacheFqn = hasCache
+                ? $"global::DSoftStudio.Mediator.Generated.{sanitizedAsm}.{plan.CacheClassName}"
+                : string.Empty;
+            bool armedGate = hasCache && !disableAggressive;
+
             if (isRelease)
             {
+                // Armed gate BEFORE the castclass (a non-Mediator publisher threw there anyway;
+                // defensive bodies keep the mock probe FIRST — see the Debug branch).
+                if (armedGate)
+                {
+                    sb.Append("            var __armed = ").Append(cacheFqn).AppendLine(".Armed;");
+                    sb.AppendLine("            if (__armed is not null)");
+                    sb.Append("                return ").Append(cacheFqn).AppendLine(".Dispatch(__armed, notification, cancellationToken);");
+                }
+
                 // Release: branchless castclass — GDV devirtualizes to ~0 ns overhead.
                 sb.AppendLine("            var sp = ((global::DSoftStudio.Mediator.IServiceProviderAccessor)publisher).ServiceProvider;");
             }
@@ -227,6 +274,14 @@ public sealed class PublishInterceptorGenerator : IIncrementalGenerator
                 sb.Append("                return publisher.Publish<");
                 sb.Append(notifType);
                 sb.AppendLine(">(notification, cancellationToken);");
+
+                if (armedGate)
+                {
+                    sb.Append("            var __armed = ").Append(cacheFqn).AppendLine(".Armed;");
+                    sb.AppendLine("            if (__armed is not null)");
+                    sb.Append("                return ").Append(cacheFqn).AppendLine(".Dispatch(__armed, notification, cancellationToken);");
+                }
+
                 sb.AppendLine("            var sp = __spa.ServiceProvider;");
             }
 
@@ -245,9 +300,16 @@ public sealed class PublishInterceptorGenerator : IIncrementalGenerator
             sb.AppendLine("                }");
             sb.AppendLine("            }");
 
-            // Default sequential dispatch with ThreadStatic cached handlers
-            sb.Append("            return global::DSoftStudio.Mediator.NotificationCachedDispatcher.DispatchSequential(notification, sp, cancellationToken);");
-            sb.AppendLine();
+            // ADR-0066 SAFE concrete tier when a cache exists; today's sequential dispatch otherwise.
+            if (hasCache)
+            {
+                sb.Append("            return ").Append(cacheFqn).AppendLine(".DispatchSafe(sp, notification, cancellationToken);");
+            }
+            else
+            {
+                sb.Append("            return global::DSoftStudio.Mediator.NotificationCachedDispatcher.DispatchSequential(notification, sp, cancellationToken);");
+                sb.AppendLine();
+            }
 
             sb.AppendLine("        }");
             sb.AppendLine();

@@ -401,6 +401,47 @@ namespace DSoftStudio.Mediator.Generators
         }
 
         /// <summary>
+        /// ADR-0066: external <c>INotificationHandler&lt;&gt;</c> registrations with the
+        /// direct-dispatch verdict (public implicit <c>Handle</c> on the closed interface,
+        /// non-generic implementation). Same discovery set as
+        /// <see cref="GetExternalNotificationHandlers"/> — only the flag is added.
+        /// </summary>
+        public static List<NotificationHandlerEntry> GetExternalNotificationHandlerMap(
+            Compilation compilation)
+        {
+            var results = new List<NotificationHandlerEntry>();
+
+            foreach (var handler in GetAllExternalHandlers(compilation))
+            {
+                var original = handler.ServiceType.OriginalDefinition;
+
+                if (original.MetadataName != NotificationHandlerMetadataName)
+                    continue;
+
+                var ns = original.ContainingNamespace?.ToDisplayString();
+                if (ns != AbstractionsNamespace)
+                    continue;
+
+                if (handler.ServiceType.TypeArguments.Length < 1)
+                    continue;
+
+                var notificationType = handler.ServiceType.TypeArguments[0]
+                    .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
+
+                var handlerType = handler.ImplementationType
+                    .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
+
+                bool eligible = handler.ImplementationType.TypeParameters.Length == 0
+                    && NotificationFastPath.HasPublicImplicitNotificationHandle(
+                        handler.ImplementationType, handler.ServiceType);
+
+                results.Add(new NotificationHandlerEntry(notificationType, handlerType, eligible));
+            }
+
+            return results;
+        }
+
+        /// <summary>
         /// Returns (requestType, responseType, handlerType) tuples for
         /// <c>IStreamRequestHandler&lt;,&gt;</c> registrations found in referenced assemblies.
         /// </summary>

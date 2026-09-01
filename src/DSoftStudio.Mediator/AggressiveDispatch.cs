@@ -48,6 +48,12 @@ public static class AggressiveDispatchLatch
     private static Action? _disarmCallbacks;
     private static int _armedHolderCount;
 
+    // ADR-0066: notification (Publish) holders form a SECOND disarm group. A container poison
+    // disarms both groups; a custom INotificationPublisher appearing at runtime disarms ONLY
+    // this group (Send holders are unaffected — the publisher changes Publish semantics only).
+    private static Action? _notifDisarmCallbacks;
+    private static int _armedNotifHolderCount;
+
     // Backing values for the aggressive-armed / aggressive-poisoned PollingCounters. They live
     // HERE, not on the EventSource: touching a static field of the EventSource class would run
     // its type initializer, whose construction synchronously notifies every in-proc
@@ -125,6 +131,46 @@ public static class AggressiveDispatchLatch
     }
 
     /// <summary>
+    /// ADR-0066: arms a NOTIFICATION holder (second disarm group). Same latch semantics as
+    /// <see cref="TryArm"/>, but the holder is additionally disarmed when a custom
+    /// <see cref="Abstractions.INotificationPublisher"/> appears at runtime
+    /// (via <see cref="DisarmNotifications"/>).
+    /// </summary>
+    internal static bool TryArmNotification(Action arm, Action disarm)
+    {
+        lock (Gate)
+        {
+            if (_poisoned != 0)
+                return false;
+
+            arm();
+            _notifDisarmCallbacks += disarm;
+            _armedNotifHolderCount++;
+            Interlocked.Increment(ref ArmedCount);
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Disarms ONLY the notification group (Send holders stay armed). Fired when a custom
+    /// publisher registers after arming. Returns the number of holders disarmed; the CALLER
+    /// fires the EventSource write outside the lock.
+    /// </summary>
+    internal static int DisarmNotifications()
+    {
+        lock (Gate)
+        {
+            var callbacks = _notifDisarmCallbacks;
+            var disarmed = _armedNotifHolderCount;
+            _notifDisarmCallbacks = null;
+            _armedNotifHolderCount = 0;
+            Interlocked.Add(ref ArmedCount, -disarmed);
+            callbacks?.Invoke();
+            return disarmed;
+        }
+    }
+
+    /// <summary>
     /// Poisons the tier and disarms every holder, all under <see cref="Gate"/> (the disarm
     /// callbacks are trivial generated <c>Volatile.Write(ref _armed, null)</c> closures — no
     /// user or listener code). Returns the number of holders disarmed; the caller fires the
@@ -134,12 +180,16 @@ public static class AggressiveDispatchLatch
     {
         Volatile.Write(ref _poisoned, 1);
         var callbacks = _disarmCallbacks;
-        var disarmed = _armedHolderCount;
+        var disarmed = _armedHolderCount + _armedNotifHolderCount;
         _disarmCallbacks = null;
         _armedHolderCount = 0;
+        var notifCallbacks = _notifDisarmCallbacks;
+        _notifDisarmCallbacks = null;
+        _armedNotifHolderCount = 0;
         Interlocked.Add(ref ArmedCount, -disarmed);
         Interlocked.Increment(ref PoisonedCount);
         callbacks?.Invoke();
+        notifCallbacks?.Invoke();
         return disarmed;
     }
 
@@ -154,10 +204,14 @@ public static class AggressiveDispatchLatch
             _containerCount = 0;
             _poisoned = 0;
             _armedHolderCount = 0;
-            Interlocked.Exchange(ref ArmedCount, 0); // gauge mirrors _armedHolderCount
+            _armedNotifHolderCount = 0;
+            Interlocked.Exchange(ref ArmedCount, 0); // gauge mirrors the armed-holder counts
             var callbacks = _disarmCallbacks;
             _disarmCallbacks = null;
+            var notifCallbacks = _notifDisarmCallbacks;
+            _notifDisarmCallbacks = null;
             callbacks?.Invoke();
+            notifCallbacks?.Invoke();
             SeenCollections.Clear();
         }
     }
