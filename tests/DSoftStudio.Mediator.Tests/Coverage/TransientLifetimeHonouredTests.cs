@@ -426,4 +426,54 @@ public class TransientLifetimeHonouredTests
         DispatchCacheability.AllowsCaching(scopeA.ServiceProvider, handlerType)
             .ShouldBeFalse("a scope inherits its container's answer");
     }
+
+    [Theory]
+    [InlineData(ServiceLifetime.Scoped)]
+    [InlineData(ServiceLifetime.Transient)]
+    public void SnapshotRegisteredAnythingButSingleton_LosesTheOneAnswerPerContainer(ServiceLifetime wrong)
+    {
+        // WHY the snapshot is registered as a Singleton TYPE, pinned so it survives a tidy-up.
+        //
+        // Measured, running the sibling-provider case at each lifetime -- A registers the handler
+        // Transient, B overrides it Scoped:
+        //
+        //   Singleton   A=fresh  B=cacheable  A-again=fresh      A-scope=fresh      correct
+        //   Scoped      A=fresh  B=cacheable  A-again=fresh      A-scope=cacheable  scope disagrees with its root
+        //   Transient   A=fresh  B=cacheable  A-again=cacheable  A-scope=cacheable  A overwritten outright
+        //
+        // Scoped is the subtle one and the more dangerous: A's ROOT still answers correctly, so a
+        // check against the root would pass, while dispatch actually happens in a scope -- and the
+        // scope captured a sibling container's answer. Only a Singleton is created once per provider
+        // AND shared with every scope of it.
+        IServiceCollection services = new ServiceCollection();
+
+        // Pre-registering wins: AddMediator uses TryAddSingleton, which does not override.
+        services.Add(new ServiceDescriptor(
+            typeof(DispatchLifetimeSnapshot), typeof(DispatchLifetimeSnapshot), wrong));
+
+        services.AddMediator().RegisterMediatorHandlers();
+        services.AddSingleton(new LifeCounter());
+        services.AddSingleton<LifeUnitOfWork>();
+        services.AddTransient<IRequestHandler<LifePing, int>, LifePingHandler>();
+
+        var handlerType = typeof(IRequestHandler<LifePing, int>);
+
+        using var spA = services.BuildServiceProvider();
+        DispatchCacheability.AllowsCaching(spA, handlerType).ShouldBeFalse("A registered it Transient");
+
+        services.AddScoped<IRequestHandler<LifePing, int>, LifePingHandler>();
+        using var spB = services.BuildServiceProvider();
+        DispatchCacheability.AllowsCaching(spB, handlerType).ShouldBeTrue("B registered it Scoped");
+
+        using var scopeA = spA.CreateScope();
+
+        // The point of the test: at these lifetimes A is told, somewhere, that its Transient handler
+        // may be cached. If this ever stops being true the registration has been changed and the
+        // Singleton is no longer load-bearing -- read the table above before deleting this.
+        var leaked = DispatchCacheability.AllowsCaching(scopeA.ServiceProvider, handlerType)
+                     || DispatchCacheability.AllowsCaching(spA, handlerType);
+
+        leaked.ShouldBeTrue(
+            $"{wrong} snapshot must leak the sibling container's answer -- that is why it is Singleton");
+    }
 }
