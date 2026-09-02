@@ -15,6 +15,128 @@ description: "All notable changes to DSoftStudio.Mediator."
 
 # Changelog
 
+## [1.4.0-rc.1] — 2026-09-02
+
+> Companions: `OpenTelemetry` 1.1.0 · `HybridCache` 1.0.9 · `FluentValidation` 1.0.9.
+
+Two changes in this release alter observable behavior. Both are described under **Changed**; read
+those before upgrading.
+
+### Added
+
+- **ADR-0065 — two-tier `Send` fast path.** The generator emits a concrete dispatch cache per
+  (request, response) pair, plus an optional AGGRESSIVE armed holder that returns a Singleton handler
+  directly when the pair provably has no pipeline. The aggressive tier is one-shot, stands down when
+  the pair stops being eligible, and is guarded by a process-wide poison latch.
+- **ADR-0066 — `Publish` fast path.** The same shape for notifications: a generated per-notification
+  cache with an armed holder, and an unrolled dispatch body for groups of up to eight handlers.
+- **Specialized behavior chains.** The generator predicts the exact ordered behavior chain per
+  composition root and emits a purpose-built nest of typed links for it, verified positionally
+  against the resolved instances at construction and falling back to the interface-typed adapter when
+  the prediction does not match. Marginal cost per behavior link drops from 2.09 ns to 0.47 ns.
+- **DSOFT009 — handler skipped because generated code cannot name it.** Discovery previously rejected
+  only `file` types, so a `private` nested handler was registered anyway and the generated file failed
+  to compile — a three-handler fixture produced 502 `CS0122` errors in files the user cannot edit.
+  Unnameable handlers are now skipped and reported at their declaration, with the accessibility change
+  that would include them.
+- **XML documentation in the packages.** No project set `GenerateDocumentationFile`, so a consumer
+  installing from NuGet saw nothing in IntelliSense. Every `Handle`/`Process` on the contracts you
+  implement now documents its parameters, its return, and the shape to write — including why a
+  synchronous handler should return a completed value rather than be marked `async`.
+- **DSOFT010 — pipeline component registered after the pipeline scan.** The scan decides, per request
+  type, whether a chain is built at all; a component registered afterwards never runs, with no
+  exception and no diagnostic. The rule is deliberately narrow — same method body, same service
+  collection, which is the Program.cs shape — because there is no compilation-wide ordering to
+  consult. Everything it cannot see (another method, another assembly) is caught at startup by the
+  `ValidateMediatorHandlers()` check above.
+- **Orphaned-component detection in `ValidateMediatorHandlers()`.** The generated validator now
+  reports pipeline components that are registered but can never run, and Transient components captured
+  by a chain whose lifetime was fixed before they were registered. This is the only check that sees
+  the case across methods, files and assemblies, because it inspects the built container rather than
+  one syntax tree.
+- **Benchmarks.** Multi-targeted `net10.0`/`net11.0` with `runtime-async` on net11, a behavior-count
+  scaling suite, `run-all-benchmarks.cmd`, and `compare-runs.ps1`, which compares two runs by overhead
+  above each suite's own baseline so machine drift cancels out.
+
+### Changed
+
+- **`ParallelNotificationPublisher` now actually runs handlers in parallel.** It used to invoke each
+  handler inline on the calling thread and await the resulting tasks together, so handlers that
+  complete synchronously — the style `INotificationHandler` recommends — never overlapped at all. Each
+  handler is now queued to the thread pool. **This is a behavior change:** handlers under this
+  publisher must be safe to run alongside each other, where before synchronous ones were serialized by
+  accident, and it costs one thread-pool work item per handler. The default dispatch path is
+  unaffected and pays neither.
+- **`IRequestExceptionHandler` now covers pre-processors.** The guard used to wrap only the behavior
+  chain and the terminal handler, so a throw from an `IRequestPreProcessor` — a validation or
+  authorization check, exactly what an exception handler exists to translate — was never shown to one.
+  The pre-processor stage now runs inside the guard. **This is a behavior change:** a pre-processor
+  exception that escaped to the caller before may now be suppressed by a handler that returns a
+  response. Post-processors remain deliberately outside the guard: a response already exists by the
+  time they run, so substituting another would contradict the ones that already observed the first.
+- **Generated source no longer depends on the build machine's locale.** Every ordering site in the
+  generators sorted type-name strings through `Comparer<string>.Default`, which is culture-sensitive.
+  Under `da-DK` "Aa" collates as "Å" and sorts after "Z", so the same commit produced a different
+  dispatch table — and different IL — on a Danish machine than on an English one, defeating
+  deterministic-build verification. All 25 sites now pass `StringComparer.Ordinal`.
+- **One chain-resolution protocol instead of seven copies.** Whether a chain may be cached per
+  (thread, provider) was hand-written as a ternary at four `Send` sites and three stream sites. It now
+  lives inside `PipelineChainCache.Resolve` and `StreamPipelineChainCache.Resolve` — which is also
+  where the stream one was missing it entirely, caching unconditionally and pinning the first instance
+  of a Transient stream chain.
+- **The dispatch decision collapsed into one pre-resolved reference.** `PipelineChainHandler` resolves
+  the observer check and the three-way pipeline mode into a single field at construction, so the
+  common shape is one read and one branch.
+
+### Fixed
+
+- **The dispatch caches now honour the registered lifetime.** Every provider-keyed `[ThreadStatic]`
+  cache stored whatever it resolved, keyed only on the provider. That is right for Singleton and
+  Scoped and wrong for Transient: three `Send` calls of a handler with a Transient dependency
+  constructed that dependency once and shared it, while raw DI on the same provider handed back
+  distinct instances — the opposite of what the library's own documentation promised. Cacheability is
+  now asked of the container.
+- **Each container keeps its own lifetime answer.** The cacheability verdict was a process-global
+  static per closed pair, so the first container to register a Scoped chain latched it on for every
+  container after it. It is now captured per provider by a Singleton `DispatchLifetimeSnapshot`, which
+  is the only lifetime that is built once per provider and shared with all of its scopes.
+- **The lifetime map keeps the collection it reads.** It held the `IServiceCollection` weakly, but a
+  `ServiceCollection` is a local in startup code — any collection between `BuildServiceProvider` and
+  the first request took the target away, the map settled on an empty snapshot, and every
+  provider-keyed cache in the library silently stopped caching for that container, permanently and
+  non-deterministically.
+- **Disposing a scope releases the dispatch caches that held it.** A disposed scope, and every scoped
+  instance it resolved, stayed reachable in thread-local state until the same thread happened to
+  dispatch the same request type against a different provider — for a rarely-served request type, or a
+  pool thread that moves on, never.
+- **An armed holder stands down when its pair stops being eligible.** Losing eligibility was a no-op
+  once the state was `Attempted`, so a pair that had already armed and then had a behavior, processor,
+  exception handler or observer appear kept dispatching straight to the handler: every one of those
+  components silently never ran.
+- **The chain predictor uses the generator-wide nullable display format.** Its private copy omitted
+  the nullable annotation, so a pair with a nullable response emitted a `CS8631` mismatch and never
+  matched a closed registration — no error, just no speedup.
+- **One predicted chain per composition root, not per file**, and duplicate predictions are dropped.
+- **Null-provider guard in the resolve caches.** `ReferenceEquals(null, null)` is true, so a null
+  provider matched the initial null and returned a "cached" null, surfacing later as an unrelated
+  `NullReferenceException`. The stream caches also failed two different ways from the same state; they
+  now throw the same message, which names the missing `PrecompileStreams()` call.
+- **`ParallelNotificationPublisher` no longer abandons started handlers.** A handler that threw
+  *synchronously* escaped the start loop, so the handlers after it never ran and the tasks already
+  started were never awaited — their failures surfaced later as `UnobservedTaskException`.
+- **Documentation corrected against the implementation.** Several published claims did not match the
+  code: notification handlers were documented as running in registration order (the order is by
+  handler type name), stream dispatch was documented as fully deferred (the handler and behavior chain
+  are resolved when `CreateStream` is called), `SequentialNotificationPublisher` was described as the
+  default (no publisher is registered by default), and `PrecompilePipelines()` was described as
+  capturing the component list (it records only whether a chain is needed, and freezes its lifetime).
+
+### Removed
+
+- **`BehaviorLinkRegistry`** — a middle chain-construction tier no generator ever populated. Its
+  dictionary was null in every process and `Link()` fell through to the interface-typed adapter on
+  every call. Per-pair generic static types: 6 → 5.
+
 ## [1.3.0] — 2026-07-08
 
 > Companions: `OpenTelemetry` 1.1.0 · `HybridCache` 1.0.9 · `FluentValidation` 1.0.9.
