@@ -173,7 +173,7 @@ public sealed class MediatorExtensionsGenerator : IIncrementalGenerator
         if (symbol.IsAbstract || symbol.TypeKind != TypeKind.Class)
             return null;
 
-        if (HandlerDiscovery.IsFileLocal(typeDecl))
+        if (!HandlerDiscovery.IsReferenceableFromGeneratedCode(typeDecl, symbol))
             return null;
 
         if (!HandlerDiscovery.TryGetSelfHandlingRequest(symbol, ct, out var detail))
@@ -196,7 +196,7 @@ public sealed class MediatorExtensionsGenerator : IIncrementalGenerator
         if (symbol.IsAbstract || symbol.TypeKind != TypeKind.Class)
             return null;
 
-        if (HandlerDiscovery.IsFileLocal(classDecl))
+        if (!HandlerDiscovery.IsReferenceableFromGeneratedCode(classDecl, symbol))
             return null;
 
         if (!HandlerDiscovery.TryGetRequestHandler(
@@ -218,7 +218,7 @@ public sealed class MediatorExtensionsGenerator : IIncrementalGenerator
         if (symbol.IsAbstract || symbol.TypeKind != TypeKind.Class)
             return null;
 
-        if (HandlerDiscovery.IsFileLocal(classDecl))
+        if (!HandlerDiscovery.IsReferenceableFromGeneratedCode(classDecl, symbol))
             return null;
 
         if (!HandlerDiscovery.TryGetStreamHandler(

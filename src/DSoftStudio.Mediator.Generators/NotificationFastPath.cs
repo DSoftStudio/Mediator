@@ -1,4 +1,4 @@
-// Copyright (c) DSoftStudio. All rights reserved.
+﻿// Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using System.Collections.Generic;
@@ -45,7 +45,7 @@ internal static class NotificationFastPath
             symbol.TypeParameters.Length > 0)
             return null;
 
-        if (HandlerDiscovery.IsFileLocal(classDeclaration))
+        if (!HandlerDiscovery.IsReferenceableFromGeneratedCode(classDeclaration, symbol))
             return null;
 
         if (!HandlerDiscovery.TryGetNotificationHandler(

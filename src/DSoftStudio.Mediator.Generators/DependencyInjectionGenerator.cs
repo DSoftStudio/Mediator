@@ -1,4 +1,4 @@
-// Copyright (c) DSoftStudio. All rights reserved.
+﻿// Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License.
 
 using Microsoft.CodeAnalysis;
@@ -248,7 +248,7 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
             return null;
 
         // File-scoped types (C# 11+) cannot be referenced from generated code.
-        if (HandlerDiscovery.IsFileLocal(classDecl))
+        if (!HandlerDiscovery.IsReferenceableFromGeneratedCode(classDecl, symbol))
             return null;
 
         // Handlers with no constructor parameters are stateless - safe to register as Singleton.
@@ -360,7 +360,7 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
         if (symbol.IsAbstract || symbol.TypeKind != TypeKind.Class)
             return null;
 
-        if (HandlerDiscovery.IsFileLocal(typeDecl))
+        if (!HandlerDiscovery.IsReferenceableFromGeneratedCode(typeDecl, symbol))
             return null;
 
         if (!HandlerDiscovery.TryGetRequestType(symbol, ct, out var requestType, out var responseType))
@@ -381,7 +381,7 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
         if (symbol.IsAbstract || symbol.TypeKind != TypeKind.Class)
             return null;
 
-        if (HandlerDiscovery.IsFileLocal(typeDecl))
+        if (!HandlerDiscovery.IsReferenceableFromGeneratedCode(typeDecl, symbol))
             return null;
 
         if (!HandlerDiscovery.TryGetSelfHandlingRequest(symbol, ct, out var detail))

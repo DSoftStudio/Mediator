@@ -99,7 +99,7 @@ public sealed class StreamGenerator : IIncrementalGenerator
             symbol.TypeParameters.Length > 0)
             return null;
 
-        if (HandlerDiscovery.IsFileLocal(classDecl))
+        if (!HandlerDiscovery.IsReferenceableFromGeneratedCode(classDecl, symbol))
             return null;
 
         if (!HandlerDiscovery.TryGetStreamHandler(

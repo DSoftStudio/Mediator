@@ -170,6 +170,49 @@ namespace DSoftStudio.Mediator.Generators
             return false;
         }
 
+        /// <summary>
+        /// Returns <c>true</c> when generated code can write this declared type's name. Discovery must
+        /// consult this before emitting anything that references the type.
+        /// <para>
+        /// Every discovery point used to check only <see cref="IsFileLocal"/>, which left the other two
+        /// ways a type can be unnameable wide open: a <c>private</c>/<c>protected</c> nested type, and a
+        /// type nested in a generic one (<c>typeof(Outer&lt;&gt;.Inner)</c> is not legal C#). A private
+        /// nested handler — an ordinary shape inside a test fixture — therefore produced hundreds of
+        /// CS0122 errors inside generated files the user cannot edit.
+        /// </para>
+        /// </summary>
+        public static bool IsReferenceableFromGeneratedCode(
+            TypeDeclarationSyntax typeDecl,
+            INamedTypeSymbol symbol)
+            => !IsFileLocal(typeDecl) && IsReferenceableFromGeneratedCode(symbol);
+
+        /// <summary>
+        /// Symbol-only overload: accessibility of the type and of every enclosing type, no generic
+        /// enclosing type, and the same recursively for every type argument — generated code names those
+        /// too, so <c>PublicHandler : IRequestHandler&lt;PrivateNestedPing, int&gt;</c> is just as
+        /// unnameable as a private handler.
+        /// </summary>
+        public static bool IsReferenceableFromGeneratedCode(ITypeSymbol symbol)
+        {
+            if (symbol is IArrayTypeSymbol array)
+                return IsReferenceableFromGeneratedCode(array.ElementType);
+
+            // Type parameters, dynamic, pointers: nothing for the accessibility rules to bite on.
+            if (symbol is not INamedTypeSymbol named)
+                return true;
+
+            if (!ReferencedAssemblyScanner.IsNameableBehaviorType(named, allowInternal: true))
+                return false;
+
+            foreach (var argument in named.TypeArguments)
+            {
+                if (!IsReferenceableFromGeneratedCode(argument))
+                    return false;
+            }
+
+            return true;
+        }
+
         // ── Self-handling request discovery ──────────────────────────────
 
         /// <summary>

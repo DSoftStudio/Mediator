@@ -161,7 +161,7 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
         if (symbol.IsAbstract || symbol.TypeKind != TypeKind.Class || symbol.TypeParameters.Length > 0)
             return null;
 
-        if (HandlerDiscovery.IsFileLocal(typeDecl))
+        if (!HandlerDiscovery.IsReferenceableFromGeneratedCode(typeDecl, symbol))
             return null;
 
         if (!HandlerDiscovery.TryGetSelfHandlingRequest(symbol, ct, out var detail))
@@ -182,7 +182,7 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
             symbol.TypeParameters.Length > 0)
             return null;
 
-        if (HandlerDiscovery.IsFileLocal(classDeclaration))
+        if (!HandlerDiscovery.IsReferenceableFromGeneratedCode(classDeclaration, symbol))
             return null;
 
         if (!HandlerDiscovery.TryGetRequestHandler(

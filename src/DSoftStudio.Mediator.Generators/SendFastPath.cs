@@ -1,4 +1,4 @@
-// Copyright (c) DSoftStudio. All rights reserved.
+﻿// Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using System.Collections.Generic;
@@ -71,8 +71,7 @@ internal static class SendFastPath
         if (symbol.IsGenericType)
             return null;
 
-        // File-scoped types (C# 11+) cannot be referenced from generated code.
-        if (HandlerDiscovery.IsFileLocal(classDecl))
+        if (!HandlerDiscovery.IsReferenceableFromGeneratedCode(classDecl, symbol))
             return null;
 
         if (!HandlerDiscovery.TryGetRequestHandler(symbol, ct, out var requestType, out var responseType))

@@ -1,4 +1,4 @@
-// Copyright (c) DSoftStudio. All rights reserved.
+﻿// Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using Microsoft.CodeAnalysis;
@@ -65,6 +65,21 @@ namespace DSoftStudio.Mediator.Generators
                         + "skipped. To register it, either make the handler public, add [InternalsVisibleTo] from the "
                         + "handler's project to this project, or ensure the handler's project also references the "
                         + "source generator so it emits its own registration code.");
+
+        public static readonly DiagnosticDescriptor InaccessibleHandlerSkipped = new(
+            id: "DSOFT009",
+            title: "Handler skipped: generated code cannot name it",
+            messageFormat: "The {1} '{0}' was skipped because generated registration code cannot name it. "
+                          + "To fix: make it (and every type enclosing it) at least internal, and do not nest it "
+                          + "inside a generic type.",
+            category: "DSoftStudio.Mediator",
+            defaultSeverity: DiagnosticSeverity.Warning,
+            isEnabledByDefault: true,
+            description: "Registration is generated into a separate file in the same assembly, so it can reach a "
+                       + "public or internal type but not a private or protected nested one, and typeof(Outer<>.Inner) "
+                       + "is not legal C# for a type nested in a generic. Such handlers are skipped rather than "
+                       + "emitted, which would produce CS0122 errors in generated files. A skipped handler is not "
+                       + "registered, so dispatching its request throws at runtime.");
 
         public static readonly DiagnosticDescriptor PreferCqrsInterface = new(
             id: "DSOFT006",
