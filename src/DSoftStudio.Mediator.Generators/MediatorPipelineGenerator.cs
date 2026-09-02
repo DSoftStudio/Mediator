@@ -1,6 +1,7 @@
 ﻿// Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -47,8 +48,8 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
                 var external = ReferencedAssemblyScanner.GetExternalPipelineHandlers(compilation);
                 var array = external
                     .Select(e => new HandlerInfo(e.RequestType, e.ResponseType))
-                    .OrderBy(static h => h.RequestType)
-                    .ThenBy(static h => h.ResponseType)
+                    .OrderBy(static h => h.RequestType, StringComparer.Ordinal)
+                    .ThenBy(static h => h.ResponseType, StringComparer.Ordinal)
                     .ToArray();
                 return new EquatableArray<HandlerInfo>(array);
             });
@@ -77,7 +78,7 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
 
                 var array = results
                     .Distinct()
-                    .OrderBy(static b => b.BaseTypeName)
+                    .OrderBy(static b => b.BaseTypeName, StringComparer.Ordinal)
                     .ToArray();
                 return new EquatableArray<BehaviorTypeInfo>(array);
             });
@@ -133,8 +134,8 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
                 .Concat(external)
                 .Concat(selfPairs)
                 .Distinct()
-                .OrderBy(static h => h.RequestType)
-                .ThenBy(static h => h.ResponseType)
+                .OrderBy(static h => h.RequestType, StringComparer.Ordinal)
+                .ThenBy(static h => h.ResponseType, StringComparer.Ordinal)
                 .ToList();
 
             var code = GenerateRegistryCode(uniqueRegistrations, asmName, behaviors, registrations);

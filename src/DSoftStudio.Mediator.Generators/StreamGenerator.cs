@@ -1,6 +1,7 @@
 ﻿// Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -33,8 +34,8 @@ public sealed class StreamGenerator : IIncrementalGenerator
                 var external = ReferencedAssemblyScanner.GetExternalStreamHandlers(compilation);
                 var array = external
                     .Select(e => new StreamHandlerInfo(e.RequestType, e.ResponseType, e.HandlerType))
-                    .OrderBy(static h => h.RequestType)
-                    .ThenBy(static h => h.ResponseType)
+                    .OrderBy(static h => h.RequestType, StringComparer.Ordinal)
+                    .ThenBy(static h => h.ResponseType, StringComparer.Ordinal)
                     .ToArray();
                 return new EquatableArray<StreamHandlerInfo>(array);
             });
@@ -50,7 +51,7 @@ public sealed class StreamGenerator : IIncrementalGenerator
                 var array = results
                     .Where(static b => b.Kind == PipelineInterfaceKind.StreamBehavior)
                     .Distinct()
-                    .OrderBy(static b => b.BaseTypeName)
+                    .OrderBy(static b => b.BaseTypeName, StringComparer.Ordinal)
                     .ToArray();
                 return new EquatableArray<BehaviorTypeInfo>(array);
             });
@@ -72,8 +73,8 @@ public sealed class StreamGenerator : IIncrementalGenerator
             var registrations = localList
                 .Concat(external)
                 .Distinct()
-                .OrderBy(static h => h.RequestType)
-                .ThenBy(static h => h.ResponseType)
+                .OrderBy(static h => h.RequestType, StringComparer.Ordinal)
+                .ThenBy(static h => h.ResponseType, StringComparer.Ordinal)
                 .ToList();
 
             var code = GenerateCode(registrations, asmName, behaviors);

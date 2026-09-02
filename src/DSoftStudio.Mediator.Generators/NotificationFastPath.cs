@@ -1,6 +1,7 @@
 ﻿// Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -113,15 +114,15 @@ internal static class NotificationFastPath
         var merged = localEntries
             .Concat(externalEntries)
             .Distinct()
-            .OrderBy(static e => e.NotificationType)
-            .ThenBy(static e => e.HandlerType)
+            .OrderBy(static e => e.NotificationType, StringComparer.Ordinal)
+            .ThenBy(static e => e.HandlerType, StringComparer.Ordinal)
             .ToList();
 
         var plans = new List<NotificationCachePlan>();
 
-        foreach (var group in merged.GroupBy(static e => e.NotificationType).OrderBy(static g => g.Key))
+        foreach (var group in merged.GroupBy(static e => e.NotificationType).OrderBy(static g => g.Key, StringComparer.Ordinal))
         {
-            var handlers = group.OrderBy(static e => e.HandlerType).ToList();
+            var handlers = group.OrderBy(static e => e.HandlerType, StringComparer.Ordinal).ToList();
 
             bool cacheEligible =
                 handlers.Count <= MaxUnrolledHandlers

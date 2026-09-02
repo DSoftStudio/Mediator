@@ -1,6 +1,7 @@
 ﻿// Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -46,8 +47,8 @@ public sealed class NotificationGenerator : IIncrementalGenerator
             {
                 var external = ReferencedAssemblyScanner.GetExternalNotificationHandlerMap(compilation);
                 var array = external
-                    .OrderBy(static h => h.NotificationType)
-                    .ThenBy(static h => h.HandlerType)
+                    .OrderBy(static h => h.NotificationType, StringComparer.Ordinal)
+                    .ThenBy(static h => h.HandlerType, StringComparer.Ordinal)
                     .ToArray();
                 return new EquatableArray<NotificationHandlerEntry>(array);
             });

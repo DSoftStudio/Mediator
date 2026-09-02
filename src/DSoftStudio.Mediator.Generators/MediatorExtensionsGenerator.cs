@@ -1,6 +1,7 @@
 ﻿// Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -135,7 +136,7 @@ public sealed class MediatorExtensionsGenerator : IIncrementalGenerator
                 .Concat(extReqs)
                 .Concat(selfReqPairs)
                 .Distinct()
-                .OrderBy(static p => p.RequestType)
+                .OrderBy(static p => p.RequestType, StringComparer.Ordinal)
                 .ToList();
 
             var localStrList = localStrs.IsDefaultOrEmpty
@@ -145,7 +146,7 @@ public sealed class MediatorExtensionsGenerator : IIncrementalGenerator
             var streams = localStrList
                 .Concat(extStrs)
                 .Distinct()
-                .OrderBy(static p => p.RequestType)
+                .OrderBy(static p => p.RequestType, StringComparer.Ordinal)
                 .ToList();
 
             var handlerMap = SendFastPath.BuildUniqueHandlerMap(localHandlers, externalHandlers);
