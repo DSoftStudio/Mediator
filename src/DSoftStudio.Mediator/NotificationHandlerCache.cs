@@ -1,4 +1,4 @@
-// Copyright (c) DSoftStudio. All rights reserved.
+﻿// Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using DSoftStudio.Mediator.Abstractions;
@@ -31,7 +31,7 @@ namespace DSoftStudio.Mediator
             IServiceProvider serviceProvider,
             Func<IServiceProvider, INotificationHandler<TNotification>>[] factories)
         {
-            if (ReferenceEquals(_cachedProvider, serviceProvider))
+            if (serviceProvider is not null && ReferenceEquals(_cachedProvider, serviceProvider))
                 return _cachedHandlers!;
 
             var handlers = new INotificationHandler<TNotification>[factories.Length];

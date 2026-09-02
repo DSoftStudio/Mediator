@@ -1,4 +1,4 @@
-// Copyright (c) DSoftStudio. All rights reserved.
+﻿// Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using DSoftStudio.Mediator.Abstractions;
@@ -34,10 +34,15 @@ namespace DSoftStudio.Mediator
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static IStreamRequestHandler<TRequest, TResponse> Resolve(IServiceProvider serviceProvider)
         {
-            if (ReferenceEquals(_cachedProvider, serviceProvider))
+            if (serviceProvider is not null && ReferenceEquals(_cachedProvider, serviceProvider))
                 return _cachedHandler!;
 
-            var handler = StreamDispatch<TRequest, TResponse>.Handler!(serviceProvider);
+            var factory = StreamDispatch<TRequest, TResponse>.Handler
+                ?? throw new InvalidOperationException(
+                    $"Stream handler for {typeof(TRequest).Name} not registered. " +
+                    "Ensure PrecompileStreams() is called during service configuration.");
+
+            var handler = factory(serviceProvider);
             _cachedProvider = serviceProvider;
             _cachedHandler = handler;
             return handler;

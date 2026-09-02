@@ -1,4 +1,4 @@
-// Copyright (c) DSoftStudio. All rights reserved.
+﻿// Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using DSoftStudio.Mediator.Abstractions;
@@ -92,25 +92,28 @@ file sealed class SpecL0 : IRequestHandler<ChainSpecPing, int>
 /// </summary>
 public class SpecializedChainTests
 {
-    private static int _attempts;
-    private static int _matches;
+    // Instance fields, not statics: xUnit builds a fresh instance per test, so two tests can never
+    // see each other's counts even if they were ever run concurrently. The registry itself stays
+    // process-global by design - it mirrors the real runtime - so each test still resets it.
+    private int _attempts;
+    private int _matches;
 
     /// <summary>
     /// The shape the generator will emit: length check, then an EXACT type check per position, then
     /// construction with concrete-typed fields. Any mismatch returns null so the caller falls back.
     /// </summary>
-    private static IRequestHandler<ChainSpecPing, int>? PredictedAbc(
+    private IRequestHandler<ChainSpecPing, int>? PredictedAbc(
         IPipelineBehavior<ChainSpecPing, int>[] behaviors,
         IRequestHandler<ChainSpecPing, int> handler)
     {
-        Interlocked.Increment(ref _attempts);
+        _attempts++;
 
         if (behaviors.Length != 3) return null;
         if (behaviors[0].GetType() != typeof(SpecA)) return null;
         if (behaviors[1].GetType() != typeof(SpecB)) return null;
         if (behaviors[2].GetType() != typeof(SpecC)) return null;
 
-        Interlocked.Increment(ref _matches);
+        _matches++;
 
         return new SpecL0(
             (SpecA)behaviors[0],

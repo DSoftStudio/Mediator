@@ -1,4 +1,4 @@
-// Copyright (c) DSoftStudio. All rights reserved.
+﻿// Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using DSoftStudio.Mediator.Abstractions;
@@ -36,7 +36,7 @@ namespace DSoftStudio.Mediator
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static StreamPipelineChainHandler<TRequest, TResponse>? Resolve(IServiceProvider serviceProvider)
         {
-            if (ReferenceEquals(_cachedProvider, serviceProvider))
+            if (serviceProvider is not null && ReferenceEquals(_cachedProvider, serviceProvider))
                 return _cachedChain;
 
             var chain = serviceProvider.GetService<StreamPipelineChainHandler<TRequest, TResponse>>();

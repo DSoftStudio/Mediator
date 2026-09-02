@@ -14,11 +14,13 @@ namespace DSoftStudio.Mediator
             CancellationToken cancellationToken)
             where TRequest : IStreamRequest<TResponse>
         {
-            var factory = StreamDispatch<TRequest, TResponse>.Handler;
-
-            if (factory == null)
-                throw new InvalidOperationException(
-                    $"Stream handler for {typeof(TRequest).Name} not registered.");
+            // Same message as StreamHandlerCache: both reach this state the same way (PrecompileStreams
+            // never ran), and they used to fail differently — one with a diagnostic, the other with a
+            // bare NRE from a null-forgiving invoke.
+            var factory = StreamDispatch<TRequest, TResponse>.Handler
+                ?? throw new InvalidOperationException(
+                    $"Stream handler for {typeof(TRequest).Name} not registered. " +
+                    "Ensure PrecompileStreams() is called during service configuration.");
 
             var handler = factory(serviceProvider);
 
@@ -35,9 +37,7 @@ namespace DSoftStudio.Mediator
 
             for (int i = behaviors.Length - 1; i >= 0; i--)
             {
-                var currentNext = next;
-                var currentBehavior = behaviors[i];
-                next = new StreamBehaviorHandlerAdapter<TRequest, TResponse>(currentBehavior, currentNext);
+                next = new StreamBehaviorHandlerAdapter<TRequest, TResponse>(behaviors[i], next);
             }
 
             return next.Handle(request, cancellationToken);

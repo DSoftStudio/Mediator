@@ -1,4 +1,4 @@
-// Copyright (c) DSoftStudio. All rights reserved.
+﻿// Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using DSoftStudio.Mediator.Abstractions;
@@ -42,7 +42,9 @@ namespace DSoftStudio.Mediator
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static IRequestHandler<TRequest, TResponse> Resolve(IServiceProvider serviceProvider)
         {
-            if (ReferenceEquals(_cachedProvider, serviceProvider))
+            // The provider must be non-null for the cache to be meaningful: ReferenceEquals(null, null)
+            // is true, so a null provider would hit a "cached" null handler and NRE later, far from here.
+            if (serviceProvider is not null && ReferenceEquals(_cachedProvider, serviceProvider))
                 return _cachedHandler!;
 
             var handler = serviceProvider.GetRequiredService<IRequestHandler<TRequest, TResponse>>();
