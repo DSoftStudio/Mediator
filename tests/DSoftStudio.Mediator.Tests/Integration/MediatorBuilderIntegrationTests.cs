@@ -54,7 +54,12 @@ public sealed class BuilderNotificationHandlerA : INotificationHandler<BuilderNo
 
     public Task Handle(BuilderNotification notification, CancellationToken ct)
     {
-        _log.Add("A");
+        // BuilderNotification is published through ParallelNotificationPublisher, which genuinely
+        // runs handlers on separate threads, so this shared List has to be synchronized — the rule
+        // ParallelNotificationPublisher documents. Without the lock the two Add calls race and the
+        // test fails intermittently.
+        lock (_log)
+            _log.Add("A");
         return Task.CompletedTask;
     }
 }
@@ -66,7 +71,12 @@ public sealed class BuilderNotificationHandlerB : INotificationHandler<BuilderNo
 
     public Task Handle(BuilderNotification notification, CancellationToken ct)
     {
-        _log.Add("B");
+        // BuilderNotification is published through ParallelNotificationPublisher, which genuinely
+        // runs handlers on separate threads, so this shared List has to be synchronized — the rule
+        // ParallelNotificationPublisher documents. Without the lock the two Add calls race and the
+        // test fails intermittently.
+        lock (_log)
+            _log.Add("B");
         return Task.CompletedTask;
     }
 }

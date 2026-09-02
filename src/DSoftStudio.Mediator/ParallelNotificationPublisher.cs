@@ -6,10 +6,23 @@ using DSoftStudio.Mediator.Abstractions;
 namespace DSoftStudio.Mediator
 {
     /// <summary>
-    /// Invokes all notification handlers in parallel using <see cref="Task.WhenAll"/>.
-    /// All handlers start concurrently; awaiting the returned task surfaces the first faulting
-    /// handler's exception (the remaining failures are available on the task's
-    /// <see cref="Task.Exception"/> aggregate) once every handler has completed.
+    /// Runs every notification handler concurrently, awaiting them together with
+    /// <see cref="Task.WhenAll"/>.
+    /// <para>
+    /// Each handler is queued to the thread pool, so handlers run in parallel whether or not they
+    /// suspend — including ones written in the synchronous <c>return Task.CompletedTask</c> style
+    /// that <see cref="INotificationHandler{TNotification}"/> recommends. Handlers must therefore be
+    /// safe to run alongside each other.
+    /// </para>
+    /// <para>
+    /// Every handler is started even when an earlier one fails. Awaiting the returned task surfaces
+    /// the first faulting handler's exception; the remaining failures are available on the task's
+    /// <see cref="Task.Exception"/> aggregate.
+    /// </para>
+    /// <para>
+    /// This is opt-in and costs a thread-pool work item per handler. The default dispatch path runs
+    /// handlers one at a time on the calling thread with no such cost.
+    /// </para>
     /// </summary>
     public sealed class ParallelNotificationPublisher : INotificationPublisher
     {
@@ -29,7 +42,21 @@ namespace DSoftStudio.Mediator
 
             var tasks = new Task[array.Length];
             for (int i = 0; i < array.Length; i++)
-                tasks[i] = array[i].Handle(notification, cancellationToken);
+            {
+                var handler = array[i];
+
+                // Queued rather than invoked inline. Invoking inline would only overlap handlers
+                // that actually suspend: a handler doing synchronous work would run to completion
+                // before the next one started, which is not what this type is named for.
+                //
+                // Task.Run also converts a synchronous throw into a faulted task, so one failing
+                // handler can neither stop the others from starting nor leave an already-started
+                // handler unobserved (an unawaited faulted task surfaces as UnobservedTaskException).
+                //
+                // The token is deliberately NOT passed to Task.Run: every registered handler is
+                // invoked and observes cancellation itself, rather than being dropped before it runs.
+                tasks[i] = Task.Run(() => handler.Handle(notification, cancellationToken));
+            }
 
             return Task.WhenAll(tasks);
         }

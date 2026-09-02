@@ -163,6 +163,44 @@ public class ParallelNotificationPublisherTests
     }
 
     [Fact]
+    public async Task Publish_HandlerThrowsSynchronously_StillStartsTheRemainingHandlers()
+    {
+        var safe = new SafeParallelHandler();
+        var publisher = new ParallelNotificationPublisher();
+
+        // The throwing handler goes FIRST. Its throw is synchronous, not a faulted task: before the
+        // fix it escaped the start loop, so `safe` never ran and anything already started was left
+        // unobserved. Calling Publish must not throw here — the failure belongs on the task.
+        var task = publisher.Publish<ParallelThrowPing>(
+            new INotificationHandler<ParallelThrowPing>[] { new SyncThrowParallelHandler(), safe },
+            new ParallelThrowPing(),
+            TestContext.Current.CancellationToken);
+
+        await Should.ThrowAsync<InvalidOperationException>(async () => await task);
+        safe.CallCount.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Publish_SynchronousHandlers_ActuallyRunConcurrently()
+    {
+        using var gate = new CountdownEvent(2);
+        var a = new SyncOverlapHandler(gate);
+        var b = new SyncOverlapHandler(gate);
+        var publisher = new ParallelNotificationPublisher();
+
+        // Neither handler awaits anything. If the publisher invoked them inline on the calling
+        // thread, the first would block on a gate the second cannot reach until it returns, and the
+        // wait would time out. Passing proves the handlers really are on separate threads.
+        await publisher.Publish<SyncOverlapPing>(
+            new INotificationHandler<SyncOverlapPing>[] { a, b },
+            new SyncOverlapPing(),
+            TestContext.Current.CancellationToken);
+
+        a.SawTheOther.ShouldBeTrue();
+        b.SawTheOther.ShouldBeTrue();
+    }
+
+    [Fact]
     public async Task PublishObject_WithParallelPublisher_InvokesAllHandlers()
     {
         var a = new ParallelHandlerA();
@@ -174,5 +212,31 @@ public class ParallelNotificationPublisherTests
 
         a.CallCount.ShouldBe(1);
         b.CallCount.ShouldBe(1);
+    }
+}
+
+// `file`-scoped so handler discovery skips it: this handler is fed to the publisher directly and
+// must not join the auto-registered set for ParallelThrowPing.
+file sealed class SyncThrowParallelHandler : INotificationHandler<ParallelThrowPing>
+{
+    public Task Handle(ParallelThrowPing notification, CancellationToken ct)
+        => throw new InvalidOperationException("sync boom");
+}
+
+// `file`-scoped so handler discovery skips them: these are fed to the publisher directly and must
+// not join the auto-registered set.
+file sealed record SyncOverlapPing : INotification;
+
+file sealed class SyncOverlapHandler(CountdownEvent gate) : INotificationHandler<SyncOverlapPing>
+{
+    public bool SawTheOther;
+
+    public Task Handle(SyncOverlapPing notification, CancellationToken ct)
+    {
+        // Fully synchronous — no await anywhere. The only way this handler can observe the other
+        // one arriving is if the publisher runs them on different threads.
+        gate.Signal();
+        SawTheOther = gate.Wait(TimeSpan.FromSeconds(10));
+        return Task.CompletedTask;
     }
 }
