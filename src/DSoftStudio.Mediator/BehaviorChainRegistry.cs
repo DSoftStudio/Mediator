@@ -19,7 +19,9 @@ namespace DSoftStudio.Mediator
     /// </para>
     /// <list type="bullet">
     /// <item><description>interface behavior + interface next (today): <b>3.08 ns</b></description></item>
-    /// <item><description>concrete behavior + interface next (<see cref="BehaviorLinkRegistry{TRequest, TResponse}"/>): <b>1.24 ns</b></description></item>
+    /// <item><description>concrete behavior + interface next (measured, not shipped — it needs no
+    /// chain prediction, but at 1.24 ns it recovers only 60% of the gap and was not worth a third
+    /// tier of machinery): <b>1.24 ns</b></description></item>
     /// <item><description>concrete behavior + concrete next (this): <b>0.10 ns</b></description></item>
     /// </list>
     /// <para>
