@@ -29,7 +29,7 @@ public class DSoftSendBenchmarks
 
     // ── Counting behavior for verification ────────────────────────
 
-    private sealed class CountingBehavior<TRequest, TResponse>
+    internal sealed class CountingBehavior<TRequest, TResponse>
         : IPipelineBehavior<TRequest, TResponse>
         where TRequest : IRequest<TResponse>
     {
