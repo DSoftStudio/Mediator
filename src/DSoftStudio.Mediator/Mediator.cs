@@ -47,9 +47,7 @@ namespace DSoftStudio.Mediator
             // when static flag and DI container are out of sync (e.g. test isolation).
             if (RequestDispatch<TRequest, TResponse>.HasPipelineChain)
             {
-                var chain = RequestDispatch<TRequest, TResponse>.IsPipelineChainCacheable
-                    ? PipelineChainCache<TRequest, TResponse>.Resolve(_serviceProvider)
-                    : _serviceProvider.GetService<PipelineChainHandler<TRequest, TResponse>>();
+                var chain = PipelineChainCache<TRequest, TResponse>.Resolve(_serviceProvider);
                 if (chain is not null)
                     return chain.Handle(request, cancellationToken);
             }

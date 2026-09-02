@@ -243,12 +243,9 @@ public sealed class StreamGenerator : IIncrementalGenerator
         sb.AppendLine("            global::DSoftStudio.Mediator.StreamDispatch<TRequest, TResponse>.TryInitializePipeline(");
         sb.AppendLine("                static (request, sp, ct) =>");
         sb.AppendLine("                {");
-        sb.AppendLine("                    // Resolve chain: uses ThreadStatic cache for Scoped/Singleton, GetService for Transient.");
-        sb.AppendLine("                    // Returns null when no behaviors are registered (chain not in DI).");
-        sb.AppendLine("                    var chain = global::DSoftStudio.Mediator.StreamDispatch<TRequest, TResponse>.IsStreamChainCacheable");
-        sb.AppendLine("                        ? global::DSoftStudio.Mediator.StreamPipelineChainCache<TRequest, TResponse>.Resolve(sp)");
-        sb.AppendLine("                        : global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions");
-        sb.AppendLine("                            .GetService<global::DSoftStudio.Mediator.StreamPipelineChainHandler<TRequest, TResponse>>(sp);");
+        sb.AppendLine("                    // Resolve caches per (thread, provider) when the lifetime allows and resolves");
+        sb.AppendLine("                    // fresh when it does not. Returns null when no behaviors are registered.");
+        sb.AppendLine("                    var chain = global::DSoftStudio.Mediator.StreamPipelineChainCache<TRequest, TResponse>.Resolve(sp);");
         sb.AppendLine("                    if (chain is not null)");
         sb.AppendLine("                        return chain.Handle(request, ct);");
         sb.AppendLine("                    // No-behaviors fast path: resolve handler directly, skip chain allocation.");

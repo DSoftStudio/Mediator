@@ -13,8 +13,14 @@ namespace DSoftStudio.Mediator
     /// stream hot path.
     /// <para>
     /// Uses <c>[ThreadStatic]</c> to store the last-resolved stream pipeline chain per thread.
-    /// Only used when <see cref="StreamDispatch{TRequest, TResponse}.IsStreamChainCacheable"/>
-    /// is <see langword="true"/> (Scoped or Singleton lifetime). Transient chains are never cached.
+    /// </para>
+    /// <para>
+    /// <b>Cacheability is decided here, not by the caller.</b> A Transient chain must never be
+    /// cached, and that used to be a
+    /// <see cref="StreamDispatch{TRequest, TResponse}.IsStreamChainCacheable"/> read plus a ternary
+    /// in the emitted dispatch body — duplicated across every stream dispatch body, exactly as it
+    /// was on the Send side (see <see cref="PipelineChainCache{TRequest, TResponse}"/>). It is one
+    /// fact about the pair, settled at registration; it now lives on the miss path, which is cold.
     /// </para>
     /// <para><b>Infrastructure type — not intended for direct use by application code.</b></para>
     /// </summary>
@@ -29,16 +35,37 @@ namespace DSoftStudio.Mediator
         private static StreamPipelineChainHandler<TRequest, TResponse>? _cachedChain;
 
         /// <summary>
-        /// Returns the stream pipeline chain for the given service provider, using the
-        /// thread-local cache when the provider matches. Returns <see langword="null"/> if
-        /// no chain is registered (no-behaviors path). Cost: ~1 ns (cache hit) vs ~10 ns (cache miss).
+        /// Returns the stream pipeline chain for the given service provider, from the thread-local
+        /// cache when this pair may be cached and the cache holds one for this provider. Returns
+        /// <see langword="null"/> when no chain is registered (no-behaviors path).
         /// </summary>
+        /// <para>
+        /// The cacheability check comes FIRST, before the thread-local probe, and that order is
+        /// deliberate. A Transient chain never populates the cache, so probing it first would cost that
+        /// pair a <c>[ThreadStatic]</c> read and a call frame that can only ever miss — and Transient is
+        /// the default lifetime for <c>MediatorBuilder.AddBehavior</c>. This ordering leaves BOTH paths
+        /// with exactly the instruction sequence they had when the decision was emitted into each
+        /// dispatch body; the win is that it is now written once instead of four times.
+        /// </para>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static StreamPipelineChainHandler<TRequest, TResponse>? Resolve(IServiceProvider serviceProvider)
         {
+            // Transient chains get a fresh instance per resolve, so caching one would pin the first and
+            // hand it to every later dispatch on this thread. Resolve it and hand it back uncached.
+            if (!StreamDispatch<TRequest, TResponse>.IsStreamChainCacheable)
+                return serviceProvider.GetService<StreamPipelineChainHandler<TRequest, TResponse>>();
+
+            // The provider must be non-null for the cache to be meaningful: ReferenceEquals(null, null)
+            // is true, so a null provider would hit a "cached" null chain and fail somewhere else.
             if (serviceProvider is not null && ReferenceEquals(_cachedProvider, serviceProvider))
                 return _cachedChain;
 
+            return ResolveSlow(serviceProvider);
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static StreamPipelineChainHandler<TRequest, TResponse>? ResolveSlow(IServiceProvider serviceProvider)
+        {
             var chain = serviceProvider.GetService<StreamPipelineChainHandler<TRequest, TResponse>>();
             _cachedProvider = serviceProvider;
             _cachedChain = chain;

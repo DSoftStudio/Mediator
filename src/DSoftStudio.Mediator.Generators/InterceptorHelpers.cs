@@ -1,4 +1,4 @@
-// Copyright (c) DSoftStudio. All rights reserved.
+﻿// Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using System.Linq;
@@ -112,28 +112,8 @@ internal static class InterceptorHelpers
             sb.Append(indent).AppendLine("var sp = __spa.ServiceProvider;");
         }
 
-        // Zero-delegate dispatch: static bool skips the GetService probe for the
-        // no-behaviors path (~0 ns branch vs ~5 ns failed DI lookup).
-        sb.Append(indent).Append("if (global::DSoftStudio.Mediator.RequestDispatch<")
-          .Append(requestType).Append(", ").Append(responseType)
-          .AppendLine(">.HasPipelineChain)");
-        sb.Append(indent).AppendLine("{");
-
-        // ThreadStatic cache for Scoped/Singleton chains; direct GetService for Transient.
-        sb.Append(i2).Append("var chain = global::DSoftStudio.Mediator.RequestDispatch<")
-          .Append(requestType).Append(", ").Append(responseType)
-          .AppendLine(">.IsPipelineChainCacheable");
-        sb.Append(i3).Append("? global::DSoftStudio.Mediator.PipelineChainCache<")
-          .Append(requestType).Append(", ").Append(responseType)
-          .AppendLine(">.Resolve(sp)");
-        sb.Append(i3).Append(": global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions")
-          .Append(".GetService<global::DSoftStudio.Mediator.PipelineChainHandler<")
-          .Append(requestType).Append(", ").Append(responseType)
-          .AppendLine(">>(sp);");
-
-        sb.Append(i2).AppendLine("if (chain is not null)");
-        sb.Append(i3).AppendLine("return chain.Handle(request, cancellationToken);");
-        sb.Append(indent).AppendLine("}");
+        AppendChainProbe(sb, requestType, responseType, providerVar: "sp", chainVar: "chain", indent,
+            onChainHit: () => sb.Append(i3).AppendLine("return chain.Handle(request, cancellationToken);"));
 
         if (concreteCacheClassName is not null)
         {
@@ -147,6 +127,121 @@ internal static class InterceptorHelpers
               .Append(requestType).Append(", ").Append(responseType)
               .AppendLine(">.Resolve(sp).Handle(request, cancellationToken);");
         }
+    }
+
+    /// <summary>
+    /// Emits the pipeline-chain probe shared by every dispatch body: the <c>HasPipelineChain</c>
+    /// gate, the cache resolve, and the null check. <paramref name="onChainHit"/> writes the
+    /// statements that consume the resolved chain.
+    /// <para>
+    /// The gate stays in the emitted body on purpose: it is a plain static <see langword="bool"/>
+    /// read, and for the overwhelmingly common no-chain pair it costs a predicted not-taken branch
+    /// while skipping the <c>[ThreadStatic]</c> access inside <c>Resolve</c> entirely.
+    /// </para>
+    /// <para>
+    /// Cacheability is NOT probed here. Whether a chain may be cached per (thread, provider) is one
+    /// fact about the pair, settled at registration; <c>PipelineChainCache.Resolve</c> consults it on
+    /// its own cold miss path. Emitting that ternary into the dispatch body — as this used to —
+    /// duplicated the decision across all four bodies and bought nothing.
+    /// </para>
+    /// </summary>
+    private static void AppendChainProbe(
+        StringBuilder sb,
+        string requestType,
+        string responseType,
+        string providerVar,
+        string chainVar,
+        string indent,
+        System.Action onChainHit)
+    {
+        var i2 = indent + "    ";
+
+        sb.Append(indent).Append("if (global::DSoftStudio.Mediator.RequestDispatch<")
+          .Append(requestType).Append(", ").Append(responseType)
+          .AppendLine(">.HasPipelineChain)");
+        sb.Append(indent).AppendLine("{");
+        sb.Append(i2).Append("var ").Append(chainVar)
+          .Append(" = global::DSoftStudio.Mediator.PipelineChainCache<")
+          .Append(requestType).Append(", ").Append(responseType)
+          .Append(">.Resolve(").Append(providerVar).AppendLine(");");
+        sb.Append(i2).Append("if (").Append(chainVar).AppendLine(" is not null)");
+        onChainHit();
+        sb.Append(indent).AppendLine("}");
+    }
+
+    /// <summary>
+    /// Appends the <c>Send(object)</c> dispatch body — the weakly-typed sibling of
+    /// <see cref="AppendSendDispatchBody(StringBuilder, string, string, bool, string, string?, bool)"/>,
+    /// which returns <c>ValueTask&lt;object?&gt;</c> and therefore boxes the response.
+    /// <para>
+    /// Two generators emit this: <c>MediatorExtensionsGenerator</c> (the closed-generic
+    /// <c>Send(object)</c> type switch) and <c>MediatorPipelineGenerator</c> (the AOT-safe
+    /// <c>RequestObjectDispatch</c> delegate, where the types are the open <c>TRequest</c> /
+    /// <c>TResponse</c>). They differ only in identifiers, so both pass their own names here rather
+    /// than keeping two hand-maintained copies of the same protocol.
+    /// </para>
+    /// <para>
+    /// Both call sites must have an <c>AwaitAndBox&lt;T&gt;</c> helper in scope; the sync fast path
+    /// reads <c>.Result</c> directly so a synchronously-completed handler allocates no state machine.
+    /// </para>
+    /// </summary>
+    /// <param name="requestVar">Identifier holding the strongly-typed request.</param>
+    /// <param name="providerVar">Identifier holding the <c>IServiceProvider</c>.</param>
+    /// <param name="ctVar">Identifier holding the <c>CancellationToken</c>.</param>
+    /// <param name="resultVar">Identifier to declare for the un-boxed <c>ValueTask&lt;TResponse&gt;</c>.</param>
+    /// <param name="concreteCacheClassName">ADR-0065 SAFE-tier cache class, or <see langword="null"/>
+    /// to fall back to the interface-typed <c>HandlerCache</c>.</param>
+    public static void AppendSendObjectDispatchBody(
+        StringBuilder sb,
+        string requestType,
+        string responseType,
+        string requestVar,
+        string providerVar,
+        string ctVar,
+        string resultVar,
+        string indent,
+        string? concreteCacheClassName)
+    {
+        var i2 = indent + "    ";
+        var i3 = indent + "        ";
+
+        void AppendBoxingReturn(string at)
+        {
+            sb.Append(at).Append("return ").Append(resultVar).AppendLine(".IsCompletedSuccessfully");
+            sb.Append(at).Append("    ? new global::System.Threading.Tasks.ValueTask<object?>(")
+              .Append(resultVar).AppendLine(".Result)");
+            sb.Append(at).Append("    : AwaitAndBox(").Append(resultVar).AppendLine(");");
+        }
+
+        sb.Append(indent).Append("global::System.Threading.Tasks.ValueTask<").Append(responseType)
+          .Append("> ").Append(resultVar).AppendLine(";");
+
+        AppendChainProbe(sb, requestType, responseType, providerVar, "__chain", indent, onChainHit: () =>
+        {
+            sb.Append(i2).AppendLine("{");
+            sb.Append(i3).Append(resultVar).Append(" = __chain.Handle(").Append(requestVar)
+              .Append(", ").Append(ctVar).AppendLine(");");
+            AppendBoxingReturn(i3);
+            sb.Append(i2).AppendLine("}");
+        });
+
+        if (concreteCacheClassName is not null)
+        {
+            // ADR-0065 SAFE tier: the same concrete cache the typed Send extension uses (shared TLS pair).
+            sb.Append(indent).Append(resultVar).Append(" = ").Append(concreteCacheClassName)
+              .Append(".Dispatch(").Append(providerVar).Append(", ").Append(requestVar)
+              .Append(", ").Append(ctVar).AppendLine(");");
+        }
+        else
+        {
+            sb.Append(indent).Append(resultVar)
+              .Append(" = global::DSoftStudio.Mediator.HandlerCache<")
+              .Append(requestType).Append(", ").Append(responseType)
+              .Append(">.Resolve(").Append(providerVar).Append(").Handle(").Append(requestVar)
+              .Append(", ").Append(ctVar).AppendLine(");");
+        }
+
+        AppendBoxingReturn(indent);
     }
 
     /// <summary>
@@ -304,29 +399,20 @@ internal static class InterceptorHelpers
             sb.Append(indent).AppendLine("var sp = __spa.ServiceProvider;");
         }
 
-        // Behaviors path: check for stream pipeline chain (cached or direct DI)
-        sb.Append(indent).Append("var chain = global::DSoftStudio.Mediator.StreamDispatch<")
+        // Behaviors path: Resolve decides for itself whether this chain may be cached per
+        // (thread, provider) — see StreamPipelineChainCache. Returns null when no chain is registered.
+        sb.Append(indent).Append("var chain = global::DSoftStudio.Mediator.StreamPipelineChainCache<")
           .Append(requestType).Append(", ").Append(responseType)
-          .AppendLine(">.IsStreamChainCacheable");
-        sb.Append(i2).Append("? global::DSoftStudio.Mediator.StreamPipelineChainCache<")
-          .Append(requestType).Append(", ").Append(responseType)
-          .AppendLine(">.Resolve(sp)");
-        sb.Append(i2).Append(": global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions")
-          .Append(".GetService<global::DSoftStudio.Mediator.StreamPipelineChainHandler<")
-          .Append(requestType).Append(", ").Append(responseType)
-          .AppendLine(">>(sp);");
+          .AppendLine(">.Resolve(sp);");
 
         sb.Append(indent).AppendLine("if (chain is not null)");
         sb.Append(i2).AppendLine("return chain.Handle(request, cancellationToken);");
 
-        // No-behaviors fast path: resolve stream handler directly via ThreadStatic cache.
-        // Null guard on Handler factory matches the InvalidOperationException contract.
-        sb.Append(indent).Append("var __shFactory = global::DSoftStudio.Mediator.StreamDispatch<")
-          .Append(requestType).Append(", ").Append(responseType)
-          .AppendLine(">.Handler");
-        sb.Append(i2).Append("?? throw new global::System.InvalidOperationException(\"Stream handler for \" + typeof(")
-          .Append(requestType)
-          .AppendLine(").Name + \" not registered.\");");
+        // No-behaviors fast path: resolve the stream handler directly via its ThreadStatic cache.
+        // Resolve already raises the "not registered" InvalidOperationException — with a message that
+        // also names the PrecompileStreams() fix — when the Handler factory is missing, so the emitted
+        // body does not re-check it. The guard that used to sit here was a third copy of that
+        // contract, read on every stream dispatch to produce a strictly worse exception.
         sb.Append(indent).Append("return global::DSoftStudio.Mediator.StreamHandlerCache<")
           .Append(requestType).Append(", ").Append(responseType)
           .AppendLine(">.Resolve(sp).Handle(request, cancellationToken);");

@@ -1,4 +1,4 @@
-// Copyright (c) DSoftStudio. All rights reserved.
+﻿// Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using System.Collections.Generic;
@@ -421,9 +421,9 @@ public sealed class MediatorExtensionsGenerator : IIncrementalGenerator
         => input.Replace("<", "{").Replace(">", "}");
 
     /// <summary>
-    /// Emits the inline dispatch body for a single request type inside the
-    /// Send(object) type switch. Includes pipeline chain check + handler cache
-    /// + sync fast-path boxing.
+    /// Emits the inline dispatch body for a single request type inside the Send(object) type switch.
+    /// The protocol itself lives in <see cref="InterceptorHelpers.AppendSendObjectDispatchBody"/>,
+    /// shared with the AOT-safe <c>RequestObjectDispatch</c> delegate; only the identifiers differ.
     /// </summary>
     private static void EmitSendObjectCaseBody(
         StringBuilder sb,
@@ -432,32 +432,14 @@ public sealed class MediatorExtensionsGenerator : IIncrementalGenerator
         string varName,
         string indent,
         string? concreteCacheClassName)
-    {
-        sb.Append(indent).AppendLine($"global::System.Threading.Tasks.ValueTask<{responseType}> __vt;");
-        sb.Append(indent).AppendLine($"if (global::DSoftStudio.Mediator.RequestDispatch<{requestType}, {responseType}>.HasPipelineChain)");
-        sb.Append(indent).AppendLine("{");
-        sb.Append(indent).AppendLine($"    var __chain = global::DSoftStudio.Mediator.RequestDispatch<{requestType}, {responseType}>.IsPipelineChainCacheable");
-        sb.Append(indent).AppendLine($"        ? global::DSoftStudio.Mediator.PipelineChainCache<{requestType}, {responseType}>.Resolve(__sp)");
-        sb.Append(indent).AppendLine($"        : global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetService<global::DSoftStudio.Mediator.PipelineChainHandler<{requestType}, {responseType}>>(__sp);");
-        sb.Append(indent).AppendLine("    if (__chain is not null)");
-        sb.Append(indent).AppendLine("    {");
-        sb.Append(indent).AppendLine($"        __vt = __chain.Handle({varName}, cancellationToken);");
-        sb.Append(indent).AppendLine("        return __vt.IsCompletedSuccessfully");
-        sb.Append(indent).AppendLine("            ? new global::System.Threading.Tasks.ValueTask<object?>(__vt.Result)");
-        sb.Append(indent).AppendLine("            : AwaitAndBox(__vt);");
-        sb.Append(indent).AppendLine("    }");
-        sb.Append(indent).AppendLine("}");
-
-        // ADR-0065 SAFE tier: same concrete cache as the typed Send extension (shared TLS pair).
-        if (concreteCacheClassName is not null)
-            sb.Append(indent).AppendLine($"__vt = {concreteCacheClassName}.Dispatch(__sp, {varName}, cancellationToken);");
-        else
-            sb.Append(indent).AppendLine($"__vt = global::DSoftStudio.Mediator.HandlerCache<{requestType}, {responseType}>.Resolve(__sp).Handle({varName}, cancellationToken);");
-
-        sb.Append(indent).AppendLine("return __vt.IsCompletedSuccessfully");
-        sb.Append(indent).AppendLine("    ? new global::System.Threading.Tasks.ValueTask<object?>(__vt.Result)");
-        sb.Append(indent).AppendLine("    : AwaitAndBox(__vt);");
-    }
+        => InterceptorHelpers.AppendSendObjectDispatchBody(
+            sb, requestType, responseType,
+            requestVar: varName,
+            providerVar: "__sp",
+            ctVar: "cancellationToken",
+            resultVar: "__vt",
+            indent,
+            concreteCacheClassName);
 
     // ── Data model ───────────────────────────────────────────────
 

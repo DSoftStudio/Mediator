@@ -427,28 +427,14 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
         sb.AppendLine("                static (request, sp, ct) =>");
         sb.AppendLine("                {");
         sb.AppendLine("                    var typed = (TRequest)request;");
-        sb.AppendLine("                    global::System.Threading.Tasks.ValueTask<TResponse> result;");
-        sb.AppendLine();
-        sb.AppendLine("                    if (global::DSoftStudio.Mediator.RequestDispatch<TRequest, TResponse>.HasPipelineChain)");
-        sb.AppendLine("                    {");
-        sb.AppendLine("                        var chain = global::DSoftStudio.Mediator.RequestDispatch<TRequest, TResponse>.IsPipelineChainCacheable");
-        sb.AppendLine("                            ? global::DSoftStudio.Mediator.PipelineChainCache<TRequest, TResponse>.Resolve(sp)");
-        sb.AppendLine("                            : global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions");
-        sb.AppendLine("                                .GetService<global::DSoftStudio.Mediator.PipelineChainHandler<TRequest, TResponse>>(sp);");
-        sb.AppendLine("                        if (chain is not null)");
-        sb.AppendLine("                        {");
-        sb.AppendLine("                            result = chain.Handle(typed, ct);");
-        sb.AppendLine("                            return result.IsCompletedSuccessfully");
-        sb.AppendLine("                                ? new global::System.Threading.Tasks.ValueTask<object?>(result.Result)");
-        sb.AppendLine("                                : AwaitAndBox(result);");
-        sb.AppendLine("                        }");
-        sb.AppendLine("                    }");
-        sb.AppendLine();
-        sb.AppendLine("                    result = global::DSoftStudio.Mediator.HandlerCache<TRequest, TResponse>");
-        sb.AppendLine("                        .Resolve(sp).Handle(typed, ct);");
-        sb.AppendLine("                    return result.IsCompletedSuccessfully");
-        sb.AppendLine("                        ? new global::System.Threading.Tasks.ValueTask<object?>(result.Result)");
-        sb.AppendLine("                        : AwaitAndBox(result);");
+        InterceptorHelpers.AppendSendObjectDispatchBody(
+            sb, "TRequest", "TResponse",
+            requestVar: "typed",
+            providerVar: "sp",
+            ctVar: "ct",
+            resultVar: "result",
+            indent: "                    ",
+            concreteCacheClassName: null);
         sb.AppendLine("                });");
         sb.AppendLine("        }");
         sb.AppendLine();
