@@ -20,6 +20,11 @@ public static class ServiceCollectionExtensions
         // never serve one container's Singleton to another — dispatch degrades to the SAFE tier.
         AggressiveDispatchLatch.OnContainerRegistered(services);
 
+        // Per-container lifetime snapshot for the provider-keyed dispatch caches. Registered as an
+        // instance so it captures THIS collection; read lazily on first dispatch, by which time the
+        // descriptor list is final. Every container reaches here, so every container gets its own.
+        services.TryAddSingleton(new DispatchLifetimeMap(services));
+
         services.TryAddScoped<IMediator, Mediator>();
         services.TryAddScoped<ISender>(sp => sp.GetRequiredService<IMediator>());
         services.TryAddScoped<IPublisher>(sp => sp.GetRequiredService<IMediator>());

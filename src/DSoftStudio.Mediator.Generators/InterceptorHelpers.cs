@@ -333,7 +333,14 @@ internal static class InterceptorHelpers
         // EXACT-type guard (not `is`): a runtime-registered SUBCLASS of the mapped handler that
         // hides Handle (`new`) would statically bind to the base implementation through the
         // concrete-typed call. Exact match keeps such overrides on interface dispatch.
-        sb.Append("            if (svc.GetType() == typeof(").Append(handlerType).AppendLine("))");
+        // The lifetime verdict is NOT re-derived here. HandlerCache.Resolve, called on the line
+        // above, has already asked this container whether the instance may be reused and stored the
+        // answer for this (thread, provider); IsCacheableFor reads it back. Deriving it a second
+        // time would put one decision in two places and let them drift. Without this check the
+        // concrete tier pinned Transient handlers even after HandlerCache stopped doing so.
+        sb.Append("            if (svc.GetType() == typeof(").Append(handlerType)
+          .Append(") && global::DSoftStudio.Mediator.HandlerCache<").Append(requestType)
+          .Append(", ").Append(responseType).AppendLine(">.IsCacheableFor(sp))");
         sb.AppendLine("            {");
         sb.Append("                var concrete = (").Append(handlerType).AppendLine(")svc;");
         sb.AppendLine("                _cachedProvider = sp;");

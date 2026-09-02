@@ -1,4 +1,4 @@
-// Copyright (c) DSoftStudio. All rights reserved.
+﻿// Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using DSoftStudio.Mediator.Abstractions;
@@ -62,10 +62,19 @@ public class TransientChainCachingTests
     private static ServiceProvider BuildTransientChainProvider<TRequest, THandler>()
         where TRequest : IRequest<int>
         where THandler : class, IRequestHandler<TRequest, int>
+        => BuildChainProvider<TRequest, THandler>(ServiceLifetime.Transient);
+
+    private static ServiceProvider BuildChainProvider<TRequest, THandler>(ServiceLifetime chainLifetime)
+        where TRequest : IRequest<int>
+        where THandler : class, IRequestHandler<TRequest, int>
     {
         var services = new ServiceCollection();
+        services.AddMediator();
         services.AddSingleton<IRequestHandler<TRequest, int>, THandler>();
-        services.AddTransient<PipelineChainHandler<TRequest, int>>();
+        ((IServiceCollection)services).Add(new ServiceDescriptor(
+            typeof(PipelineChainHandler<TRequest, int>),
+            typeof(PipelineChainHandler<TRequest, int>),
+            chainLifetime));
         return services.BuildServiceProvider();
     }
 
@@ -89,10 +98,9 @@ public class TransientChainCachingTests
     public void Resolve_CacheableChain_ReturnsTheSameInstanceForOneProvider()
     {
         // The positive half: without it, a Resolve that never cached anything would also pass the
-        // "fresh instance" test above.
-        RequestDispatch<CacheablePing, int>.MarkPipelineChainCacheable();
-
-        using var sp = BuildTransientChainProvider<CacheablePing, CacheablePingHandler>();
+        // "fresh instance" test above. Caching is the CONTAINER's call now, not a static flag's, so
+        // this container has to register a chain that is genuinely reusable.
+        using var sp = BuildChainProvider<CacheablePing, CacheablePingHandler>(ServiceLifetime.Scoped);
 
         var first = PipelineChainCache<CacheablePing, int>.Resolve(sp);
         var second = PipelineChainCache<CacheablePing, int>.Resolve(sp);
@@ -107,6 +115,7 @@ public class TransientChainCachingTests
         StreamDispatch<UncacheableStream, int>.IsStreamChainCacheable.ShouldBeFalse();
 
         var services = new ServiceCollection();
+        services.AddMediator();
         services.AddSingleton<IStreamRequestHandler<UncacheableStream, int>, UncacheableStreamHandler>();
         services.AddTransient<StreamPipelineChainHandler<UncacheableStream, int>>();
         using var sp = services.BuildServiceProvider();

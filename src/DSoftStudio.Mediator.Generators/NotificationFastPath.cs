@@ -264,7 +264,12 @@ internal static class NotificationFastPath
         sb.AppendLine("            if (factories is null || factories.Length == 0)");
         sb.AppendLine("                return global::System.Threading.Tasks.Task.CompletedTask;");
         sb.Append("            var handlers = global::DSoftStudio.Mediator.NotificationHandlerCache<").Append(n).AppendLine(">.Resolve(sp, factories);");
-        sb.Append("            if (handlers.Length == ").Append(k);
+        // Same rule as the Send concrete tier: NotificationHandlerCache.Resolve has already decided
+        // whether this container lets the array be reused (every handler non-Transient), so read that
+        // verdict rather than re-deriving it. Without it the ArmedSet pinned Transient handlers.
+        sb.Append("            if (global::DSoftStudio.Mediator.NotificationHandlerCache<").Append(n)
+          .AppendLine(">.IsCacheableFor(sp)");
+        sb.Append("                && handlers.Length == ").Append(k);
         for (int i = 0; i < k; i++)
         {
             sb.AppendLine();
@@ -300,8 +305,11 @@ internal static class NotificationFastPath
         sb.AppendLine("                return Dispatch(set, notification, ct);");
         sb.AppendLine("            }");
         sb.AppendLine();
-        sb.AppendLine("            // Override/decorator/subclass detected: interface dispatch, today's semantics.");
-        sb.AppendLine("            return global::DSoftStudio.Mediator.NotificationCachedDispatcher.DispatchSequential(notification, sp, ct);");
+        sb.AppendLine("            // Override/decorator/subclass, or handlers this container registered Transient:");
+        sb.AppendLine("            // interface dispatch over the array ALREADY resolved above. Passing it on matters —");
+        sb.AppendLine("            // the (notification, sp, ct) overload would resolve again, and for a non-reusable");
+        sb.AppendLine("            // array that means constructing every handler a second time for one Publish.");
+        sb.AppendLine("            return global::DSoftStudio.Mediator.NotificationCachedDispatcher.DispatchSequential(handlers, notification, ct);");
         sb.AppendLine("        }");
 
         sb.AppendLine("    }");

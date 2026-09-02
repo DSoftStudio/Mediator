@@ -53,7 +53,7 @@ public class PublishFastPathTests
         // SAFE tier: provider-keyed TLS + exact-GetType verification + graceful demotion.
         source.ShouldContain("DispatchSafe");
         source.ShouldContain("handlers[0].GetType() == typeof(global::TestApp.AuditHandler)");
-        source.ShouldContain("NotificationCachedDispatcher.DispatchSequential(notification, sp, ct);");
+        source.ShouldContain("NotificationCachedDispatcher.DispatchSequential(handlers, notification, ct);");
     }
 
     [Fact]

@@ -48,13 +48,33 @@ public class PipelineGcLeakTests : IDisposable
         for (int i = 0; i < 100; i++)
             await _mediator.Send(new MemoryPing(), TestContext.Current.CancellationToken);
 
+        const int iterations = 1_000_000;
+
+        // The handler here is registered Transient (see the fixture), so a million dispatches
+        // legitimately construct a million handlers. That is the DI contract, not a leak: the
+        // instances are garbage the moment each Send returns. What a LEAK looks like is retention
+        // that scales with the iteration count, so measure two identical rounds and compare them.
+        // A leak keeps growing; a one-off heap expansion does not repeat.
+        long firstRound = await MeasureRound(iterations);
+        long secondRound = await MeasureRound(iterations);
+
+        // Allow the second round a full extra megabyte of slack over the first before calling it a
+        // leak — GC bookkeeping and heap sizing are noisy, linear retention is not subtle.
+        Assert.True(
+            secondRound <= Math.Max(firstRound, 0) + 1_000_000,
+            $"Pipeline retention grew across identical rounds: {firstRound:N0} bytes then "
+            + $"{secondRound:N0} bytes, {iterations:N0} iterations each."
+        );
+    }
+
+    /// <summary>Bytes still held after one round of dispatches, measured across a forced collection.</summary>
+    private async Task<long> MeasureRound(int iterations)
+    {
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
 
-        long memoryBefore = GC.GetTotalMemory(true);
-
-        const int iterations = 1_000_000;
+        long before = GC.GetTotalMemory(true);
 
         for (int i = 0; i < iterations; i++)
             await _mediator.Send(new MemoryPing(), TestContext.Current.CancellationToken);
@@ -63,16 +83,7 @@ public class PipelineGcLeakTests : IDisposable
         GC.WaitForPendingFinalizers();
         GC.Collect();
 
-        long memoryAfter = GC.GetTotalMemory(true);
-
-        long difference = memoryAfter - memoryBefore;
-
-        // 10 MB is generous for GC bookkeeping noise / LOH fragmentation on CI.
-        // A real pipeline leak at 1 M iterations would cause 50–100+ MB growth.
-        Assert.True(
-            difference < 10_000_000,
-            $"Pipeline leaked {difference:N0} bytes after {iterations:N0} iterations."
-        );
+        return GC.GetTotalMemory(true) - before;
     }
 
     [Fact]

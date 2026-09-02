@@ -22,12 +22,21 @@ namespace DSoftStudio.Mediator
     /// was on the Send side (see <see cref="PipelineChainCache{TRequest, TResponse}"/>). It is one
     /// fact about the pair, settled at registration; it now lives on the miss path, which is cold.
     /// </para>
+    /// <para>
+    /// <b>And it is asked of the CONTAINER, not of a static.</b>
+    /// <see cref="StreamDispatch{TRequest, TResponse}.IsStreamChainCacheable"/> is process-global and
+    /// monotonic while a chain lifetime is per container, so the first container to register a Scoped
+    /// or Singleton stream chain latched it on for every container after it. See
+    /// <see cref="PipelineChainCache{TRequest, TResponse}"/> for the full account.
+    /// </para>
     /// <para><b>Infrastructure type — not intended for direct use by application code.</b></para>
     /// </summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public static class StreamPipelineChainCache<TRequest, TResponse>
         where TRequest : IStreamRequest<TResponse>
     {
+        private static readonly Type ServiceType = typeof(StreamPipelineChainHandler<TRequest, TResponse>);
+
         [ThreadStatic]
         private static IServiceProvider? _cachedProvider;
 
@@ -50,15 +59,16 @@ namespace DSoftStudio.Mediator
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static StreamPipelineChainHandler<TRequest, TResponse>? Resolve(IServiceProvider serviceProvider)
         {
-            // Transient chains get a fresh instance per resolve, so caching one would pin the first and
-            // hand it to every later dispatch on this thread. Resolve it and hand it back uncached.
-            if (!StreamDispatch<TRequest, TResponse>.IsStreamChainCacheable)
-                return serviceProvider.GetService<StreamPipelineChainHandler<TRequest, TResponse>>();
-
             // The provider must be non-null for the cache to be meaningful: ReferenceEquals(null, null)
             // is true, so a null provider would hit a "cached" null chain and fail somewhere else.
             if (serviceProvider is not null && ReferenceEquals(_cachedProvider, serviceProvider))
-                return _cachedChain;
+            {
+                var cached = _cachedChain;
+                if (cached is not null)
+                    return cached;
+
+                return serviceProvider.GetService<StreamPipelineChainHandler<TRequest, TResponse>>();
+            }
 
             return ResolveSlow(serviceProvider);
         }
@@ -67,8 +77,12 @@ namespace DSoftStudio.Mediator
         private static StreamPipelineChainHandler<TRequest, TResponse>? ResolveSlow(IServiceProvider serviceProvider)
         {
             var chain = serviceProvider.GetService<StreamPipelineChainHandler<TRequest, TResponse>>();
+
             _cachedProvider = serviceProvider;
-            _cachedChain = chain;
+            _cachedChain = DispatchCacheability.AllowsCaching(serviceProvider, ServiceType)
+                ? chain
+                : null;
+
             return chain;
         }
     }
