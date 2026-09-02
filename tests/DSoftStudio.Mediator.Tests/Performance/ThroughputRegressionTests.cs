@@ -16,6 +16,16 @@ namespace DSoftStudio.Mediator.Tests.Performance;
 /// These tests do NOT replace BenchmarkDotNet for precise measurement —
 /// they are guardrails against order-of-magnitude regressions.
 /// </summary>
+// These tests assert WALL-CLOCK time, so anything else running on the machine is part of the
+// measurement. Inside this assembly the dominant source is the suite itself: xUnit runs collections
+// in parallel across every core, and a stream drain measured against a 100us guardrail was observed
+// at 169us purely from that contention. Disabling parallelization for this collection removes the
+// one source of noise the test can control -- it cannot do anything about load from outside the
+// process, which is why the thresholds stay order-of-magnitude guardrails rather than tight bounds.
+[CollectionDefinition("ThroughputRegression", DisableParallelization = true)]
+public sealed class ThroughputRegressionCollection;
+
+[Collection("ThroughputRegression")]
 public class ThroughputRegressionTests : IDisposable
 {
     private readonly ServiceProvider _provider;
