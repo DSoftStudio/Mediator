@@ -102,6 +102,54 @@ public sealed class LifeBehavior(IServiceProvider sp) : IPipelineBehavior<LifePi
     }
 }
 
+// ── Re-entrant publish ───────────────────────────────────────────────
+
+public record ReNote : INotification;
+
+public sealed class ReLog
+{
+    private int _handled;
+    public int Handled => Volatile.Read(ref _handled);
+    public void Handled1() => Interlocked.Increment(ref _handled);
+
+    /// <summary>One re-entry only: a bare re-publish from the constructor recurses until the stack dies.</summary>
+    public int ReentryBudget = 1;
+}
+
+/// <summary>Publishes the same notification from its own constructor, so it re-enters
+/// NotificationHandlerCache.Resolve before the outer call has stored anything.</summary>
+public sealed class ReHandlerA : INotificationHandler<ReNote>
+{
+    private readonly ReLog? _log;
+
+    // IServiceProvider, not ReLog: ValidateMediatorHandlers walks and resolves every handler in the
+    // assembly, so a fixture with an unregistered dependency breaks unrelated tests.
+    public ReHandlerA(IServiceProvider sp)
+    {
+        _log = sp.GetService<ReLog>();
+
+        if (_log is not null && Interlocked.Decrement(ref _log.ReentryBudget) >= 0)
+            sp.GetRequiredService<IPublisher>().Publish(new ReNote(), CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    public Task Handle(ReNote n, CancellationToken ct)
+    {
+        _log?.Handled1();
+        return Task.CompletedTask;
+    }
+}
+
+public sealed class ReHandlerB(IServiceProvider sp) : INotificationHandler<ReNote>
+{
+    private readonly ReLog? _log = sp.GetService<ReLog>();
+
+    public Task Handle(ReNote n, CancellationToken ct)
+    {
+        _log?.Handled1();
+        return Task.CompletedTask;
+    }
+}
+
 /// <summary>
 /// A Transient registration must survive dispatch: the provider-keyed <c>[ThreadStatic]</c> caches
 /// may reuse an instance only when the container says that instance is reusable.
@@ -277,5 +325,33 @@ public class TransientLifetimeHonouredTests
 
         (counterB.Count - beforeDispatches).ShouldBe(3,
             "B's chain is Transient, so each dispatch must build its own - A's flag is not B's answer");
+    }
+
+    [Fact]
+    public async Task Publish_ReenteredFromAHandlerConstructor_DispatchesEachHandlerOncePerPublish()
+    {
+        // NotificationHandlerCache.Resolve fills its slot only AFTER running the factories, so a
+        // handler constructor that publishes the same notification re-enters Resolve while the outer
+        // call is still resolving. An audit flagged this as "2N instances constructed, N orphaned".
+        //
+        // Measured, it is not: the extra instances are exactly the ones the SECOND publish needs.
+        // What matters is our contract, not the instance count, which belongs to the container -- for
+        // a Scoped registration MS.DI builds one extra handler here, because it is asked for a scoped
+        // service that is still inside its own constructor, and that happens with or without us.
+        var log = new ReLog();
+        var services = new ServiceCollection();
+        services.AddMediator().RegisterMediatorHandlers();
+        services.AddSingleton(log);
+        services.AddTransient<INotificationHandler<ReNote>, ReHandlerA>();
+        services.AddTransient<INotificationHandler<ReNote>, ReHandlerB>();
+        services.PrecompileNotifications();
+
+        using var sp = services.BuildServiceProvider();
+
+        await sp.GetRequiredService<IMediator>().Publish(new ReNote(), TestContext.Current.CancellationToken);
+
+        // Two publishes happened -- the outer one and the one the constructor triggered -- and each
+        // must have reached both handlers exactly once. Neither a dropped nor a doubled dispatch.
+        log.Handled.ShouldBe(4);
     }
 }
