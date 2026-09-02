@@ -224,7 +224,8 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
         System.Collections.Immutable.ImmutableArray<BehaviorRegistration> behaviorRegistrations)
     {
         var sanitizedAsm = HandlerDiscovery.SanitizeIdentifier(assemblyName);
-        var sb = new StringBuilder();
+        // Pre-sized: this emitter routinely produces four figures of lines.
+        var sb = new StringBuilder(8192);
 
         // Predicted behavior chain per pair, from registration syntax. Absent for any pair whose
         // registrations this generator cannot read; present-but-wrong is caught at runtime by the

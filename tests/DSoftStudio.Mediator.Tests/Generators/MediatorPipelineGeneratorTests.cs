@@ -1,4 +1,4 @@
-// Copyright (c) DSoftStudio. All rights reserved.
+﻿// Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using DSoftStudio.Mediator.Generators;
@@ -39,6 +39,77 @@ public class MediatorPipelineGeneratorTests
         code.ShouldContain("RegisterPipelineChains");
         code.ShouldContain("PrecompilePipelines");
         code.ShouldContain("GetUser");
+    }
+
+    private const string NullableResponseChain = """
+        using System.Threading;
+        using System.Threading.Tasks;
+        using DSoftStudio.Mediator.Abstractions;
+        using Microsoft.Extensions.DependencyInjection;
+
+        namespace TestApp;
+
+        public sealed class UserDto { public int Id; }
+
+        public record FindUser(int Id) : IRequest<UserDto?>;
+
+        public sealed class FindUserHandler : IRequestHandler<FindUser, UserDto?>
+        {
+            public ValueTask<UserDto?> Handle(FindUser request, CancellationToken ct)
+                => new((UserDto?)null);
+        }
+
+        public sealed class TraceBehavior<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
+            where TRequest : IRequest<TResponse>
+        {
+            public ValueTask<TResponse> Handle(
+                TRequest request, IRequestHandler<TRequest, TResponse> next, CancellationToken ct)
+                => next.Handle(request, ct);
+        }
+
+        public static class Root
+        {
+            public static void Configure(IServiceCollection services)
+            {
+                // CLOSED registration on purpose: only this path runs the request/response types
+                // through BehaviorRegistrationScanner's own display format. An OPEN registration
+                // closes over HandlerInfo's strings instead and would not exercise the bug at all.
+                services.AddScoped(
+                    typeof(IPipelineBehavior<FindUser, UserDto?>),
+                    typeof(TraceBehavior<FindUser, UserDto?>));
+            }
+        }
+        """;
+
+    /// <summary>
+    /// REGRESSION: the chain predictor must render types with the SAME display format the rest of
+    /// the generator uses — <c>HandlerDiscovery.NullableFullyQualifiedFormat</c>, which carries
+    /// <c>IncludeNullableReferenceTypeModifier</c>.
+    /// <para>
+    /// BehaviorRegistrationScanner declared its own format without that option. That was wrong twice:
+    /// the emitted chain link fields would render a nullable response as <c>global::Ns.UserDto</c>
+    /// instead of <c>global::Ns.UserDto?</c>, producing CS8631 nullability mismatches in the
+    /// consumer's build — the exact failure HandlerDiscovery's own comment says all generators must
+    /// avoid — and closed-registration matching compared those strings against HandlerInfo's, which
+    /// DO carry the annotation, so a nullable pair would silently never match its own registration.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void PredictedChain_RendersNullableResponse_WithAnnotation()
+    {
+        var (result, output) = GeneratorTestHarness.Run<MediatorPipelineGenerator>(NullableResponseChain);
+        var code = result.AllSource();
+
+        code.ShouldContain("__ChainLink0_",
+            customMessage: "the registration is readable, so this pair should get a predicted chain");
+
+        code.ShouldContain("global::TestApp.UserDto?",
+            customMessage: "the nullable annotation must survive into the emitted chain");
+
+        output.GetDiagnostics()
+            .Where(d => d.Severity == DiagnosticSeverity.Error
+                        && (d.Id == "CS8631" || d.Id == "CS0029" || d.Id == "CS1503"))
+            .ShouldBeEmpty("a nullability mismatch in the emitted chain breaks the consumer's build");
     }
 
     private const string NestedBehaviors = """

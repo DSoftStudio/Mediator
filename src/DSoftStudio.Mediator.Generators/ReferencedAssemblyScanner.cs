@@ -605,7 +605,7 @@ namespace DSoftStudio.Mediator.Generators
 
         // ── Display format for base type names (no generic parameters) ──
 
-        private static readonly SymbolDisplayFormat BaseTypeNameFormat = new(
+        internal static readonly SymbolDisplayFormat BaseTypeNameFormat = new(
             globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Included,
             typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
             genericsOptions: SymbolDisplayGenericsOptions.None);

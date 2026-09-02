@@ -123,16 +123,20 @@ internal static class BehaviorRegistrationScanner
     private const string AbstractionsNamespace = "DSoftStudio.Mediator.Abstractions";
     private const string PipelineBehaviorMetadataName = "IPipelineBehavior`2";
 
-    private static readonly SymbolDisplayFormat BaseNameFormat = new(
-        globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Included,
-        typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
-        genericsOptions: SymbolDisplayGenericsOptions.None);
+    // Reuse the generator-wide formats instead of redeclaring them. BaseTypeNameFormat was
+    // byte-identical to what this declared locally, and NullableFullyQualifiedFormat is the one
+    // HandlerDiscovery documents as mandatory: it carries IncludeNullableReferenceTypeModifier, so a
+    // nullable response renders as global::Ns.User? and not global::Ns.User.
+    //
+    // Declaring a different format here was wrong twice over. Emission would produce CS8631
+    // nullability mismatches in the consumer's build, and MATCHING would fail silently: HandlerInfo's
+    // request/response strings come from NullableFullyQualifiedFormat, so a closed registration for a
+    // nullable pair would never compare equal and that pair would quietly lose its predicted chain.
+    private static readonly SymbolDisplayFormat BaseNameFormat =
+        ReferencedAssemblyScanner.BaseTypeNameFormat;
 
-    private static readonly SymbolDisplayFormat FullNameFormat = new(
-        globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Included,
-        typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
-        genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
-        miscellaneousOptions: SymbolDisplayMiscellaneousOptions.UseSpecialTypes);
+    private static readonly SymbolDisplayFormat FullNameFormat =
+        HandlerDiscovery.NullableFullyQualifiedFormat;
 
     /// <summary>Cheap syntactic pre-filter for the incremental pipeline's predicate.</summary>
     public static bool IsCandidate(SyntaxNode node)
