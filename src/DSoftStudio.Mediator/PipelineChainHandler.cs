@@ -168,7 +168,8 @@ namespace DSoftStudio.Mediator
         /// Cold path taken only when a dispatch observer is registered. Splits idle (registered but nothing
         /// listening → run the dispatch unobserved) from active (wrap the dispatch in an observation scope).
         /// <para>
-        /// <see cref="MethodImplOptions.NoInlining"/> keeps the <c>IsActive</c> interface call and its branches
+        /// <see cref="System.Runtime.CompilerServices.MethodImplOptions.NoInlining"/> keeps the <c>IsActive</c>
+        /// interface call and its branches
         /// OUT of <see cref="Handle"/>, so the hot path stays a single null check that inlines cleanly into the
         /// cached dispatch. (The measured difference vs. inlining IsActive into Handle is within benchmark
         /// noise; keeping it out is simply the cheaper-to-reason-about, robust-across-JITs default.)
@@ -240,13 +241,19 @@ namespace DSoftStudio.Mediator
                 return HandleWithProcessors(request, cancellationToken);
 
             if (_exceptionHandlers.Length > 0)
-                return HandleWithExceptionHandlers(request, cancellationToken);
+                return PreAndCoreGuarded(request, cancellationToken);
 
             return HandleBehaviorsOnly(request, cancellationToken);
         }
 
         private ValueTask<TResponse> HandleWithProcessors(TRequest request, CancellationToken cancellationToken)
         {
+            // With exception handlers registered the pre-processors have to run INSIDE the guard, so
+            // that whole stage moves to PreAndCoreGuarded. The body below is the unguarded shape, left
+            // exactly as it was, so pipelines without exception handlers are untouched.
+            if (_exceptionHandlers.Length > 0)
+                return HandleWithProcessorsGuarded(request, cancellationToken);
+
             // Sync fast path: if all pre-processors complete synchronously,
             // execute core + post-processors without async state machine.
             for (int i = 0; i < _preProcessors.Length; i++)
@@ -256,9 +263,7 @@ namespace DSoftStudio.Mediator
                     return HandleWithProcessorsAsync(request, i, task, cancellationToken);
             }
 
-            var coreResult = _exceptionHandlers.Length > 0
-                ? HandleWithExceptionHandlers(request, cancellationToken)
-                : HandleBehaviorsOnly(request, cancellationToken);
+            var coreResult = HandleBehaviorsOnly(request, cancellationToken);
 
             if (_postProcessors.Length == 0)
                 return coreResult;
@@ -290,9 +295,9 @@ namespace DSoftStudio.Mediator
                     await task.ConfigureAwait(false);
             }
 
-            var response = _exceptionHandlers.Length > 0
-                ? await HandleWithExceptionHandlers(request, cancellationToken).ConfigureAwait(false)
-                : await HandleBehaviorsOnly(request, cancellationToken).ConfigureAwait(false);
+            // Unguarded path only: HandleWithProcessors diverts to HandleWithProcessorsGuarded before
+            // it can reach here when exception handlers are registered.
+            var response = await HandleBehaviorsOnly(request, cancellationToken).ConfigureAwait(false);
 
             for (int i = 0; i < _postProcessors.Length; i++)
             {
@@ -335,10 +340,61 @@ namespace DSoftStudio.Mediator
             return response;
         }
 
-        private async ValueTask<TResponse> HandleWithExceptionHandlers(TRequest request, CancellationToken cancellationToken)
+        /// <summary>
+        /// Guarded twin of <see cref="HandleWithProcessors"/>, taken when exception handlers are
+        /// registered. The pre-processor stage and the core move into <see cref="PreAndCoreGuarded"/>;
+        /// the post-processor stage stays OUTSIDE the guard.
+        /// <para>
+        /// Post-processors are deliberately not covered. They run once a response already exists, so
+        /// letting an exception handler substitute a different one part-way through would leave the
+        /// post-processors that already ran having observed a response that is not the one returned.
+        /// A post-processor throw therefore propagates, exactly as it did before.
+        /// </para>
+        /// </summary>
+        private ValueTask<TResponse> HandleWithProcessorsGuarded(TRequest request, CancellationToken cancellationToken)
+        {
+            var coreResult = PreAndCoreGuarded(request, cancellationToken);
+
+            if (_postProcessors.Length == 0)
+                return coreResult;
+
+            if (!coreResult.IsCompletedSuccessfully)
+                return AwaitCoreAndRunPostProcessors(request, coreResult, cancellationToken);
+
+            var response = coreResult.Result;
+            for (int i = 0; i < _postProcessors.Length; i++)
+            {
+                var task = _postProcessors[i].Process(request, response, cancellationToken);
+                if (!task.IsCompletedSuccessfully)
+                    return AwaitPostProcessorAndContinue(request, response, i, task, cancellationToken);
+            }
+
+            return new ValueTask<TResponse>(response);
+        }
+
+        /// <summary>
+        /// Runs the pre-processors and the core (behaviors + terminal handler) inside the
+        /// exception-handler guard. Handlers are consulted in registration order and the first one to
+        /// call <c>SetHandled</c> wins; if none does, the original exception is rethrown with its
+        /// stack intact.
+        /// <para>
+        /// The pre-processors sit inside the guard on purpose: a validation or authorization
+        /// pre-processor that throws is precisely the case an exception handler exists to translate.
+        /// When no pre-processor is registered the loop is empty and this is exactly what the
+        /// behaviors-and-handler guard always did.
+        /// </para>
+        /// </summary>
+        private async ValueTask<TResponse> PreAndCoreGuarded(TRequest request, CancellationToken cancellationToken)
         {
             try
             {
+                for (int i = 0; i < _preProcessors.Length; i++)
+                {
+                    var task = _preProcessors[i].Process(request, cancellationToken);
+                    if (!task.IsCompletedSuccessfully)
+                        await task.ConfigureAwait(false);
+                }
+
                 return await HandleBehaviorsOnly(request, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex)
