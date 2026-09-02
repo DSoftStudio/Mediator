@@ -3,6 +3,7 @@
 
 using DSoftStudio.Mediator.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
+using System.Runtime.CompilerServices;
 
 namespace DSoftStudio.Mediator.Tests.Coverage;
 
@@ -475,5 +476,47 @@ public class TransientLifetimeHonouredTests
 
         leaked.ShouldBeTrue(
             $"{wrong} snapshot must leak the sibling container's answer -- that is why it is Singleton");
+    }
+
+    /// <summary>Builds a provider and drops the collection, exactly as startup code does: the
+    /// ServiceCollection is a local that dies when configuration returns.</summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static ServiceProvider BuildAndDropTheCollection()
+    {
+        var services = new ServiceCollection();
+        services.AddMediator().RegisterMediatorHandlers();
+        services.AddSingleton(new LifeCounter());
+        services.AddSingleton<LifeUnitOfWork>();
+        services.AddScoped<IRequestHandler<LifePing, int>, LifePingHandler>();
+        return services.BuildServiceProvider();
+    }
+
+    [Fact]
+    public void CollectionCollectedBeforeFirstDispatch_StillAnswersCorrectly()
+    {
+        // The lifetime map reads the collection lazily, on the first dispatch. It once held that
+        // collection WEAKLY so as not to pin the descriptor list -- and a collection is a local in
+        // startup code, so any GC landing between BuildServiceProvider and the first request took the
+        // target away. The map then settled on an EMPTY snapshot, which answers "not cacheable" for
+        // everything: every provider-keyed cache in the library silently stopped caching, for good,
+        // and only sometimes, depending on GC timing.
+        //
+        // It surfaced in a third-party benchmark suite, where BenchmarkDotNet collects between
+        // iterations so it happened almost every run: a Scoped handler reported not-cacheable while
+        // DI was handing back the same instance, and the measurements were of an uncached mediator.
+        using var sp = BuildAndDropTheCollection();
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        var handlerType = typeof(IRequestHandler<LifePing, int>);
+
+        DispatchCacheability.AllowsCaching(sp, handlerType).ShouldBeTrue(
+            "a Scoped handler is reusable whether or not the collection survived");
+
+        // And the container agrees, which is the point: the map must report what DI does.
+        sp.GetRequiredService<IRequestHandler<LifePing, int>>()
+            .ShouldBeSameAs(sp.GetRequiredService<IRequestHandler<LifePing, int>>());
     }
 }

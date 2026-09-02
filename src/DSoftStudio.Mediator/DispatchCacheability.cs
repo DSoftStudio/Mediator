@@ -120,20 +120,20 @@ namespace DSoftStudio.Mediator
     {
         private readonly object _gate = new();
 
-        // WEAK on purpose. The map has to be able to re-read the collection — one collection built
-        // into two providers with registrations added in between is the ASP0000-shaped pattern this
-        // library already documents for the aggressive tier, and a snapshot taken for the first
-        // provider describes the second one wrongly. But holding the collection strongly would pin
-        // every descriptor, and their implementation instances, for the life of the container. A weak
-        // reference gives both: while anyone can still mutate the collection we can see the mutation,
-        // and once nobody can reach it any more there is nothing left to invalidate.
-        private readonly WeakReference<IServiceCollection> _services;
+        // STRONG, and it has to be. This was a WeakReference so the map would not pin the descriptor
+        // list, and the snapshot is taken lazily on the first dispatch — so whenever a garbage
+        // collection landed in between, which is most of the time given the collection is a local in
+        // startup code, the target was gone and the map settled on an EMPTY snapshot. Empty answers
+        // "not cacheable" for everything, so every provider-keyed cache in the library silently
+        // stopped caching, permanently, and non-deterministically. Measured in a third-party
+        // benchmark: a Scoped handler reported AllowsCaching=false while DI was handing back the same
+        // instance. Retaining a List<ServiceDescriptor> for the life of the container is the price.
+        private readonly IServiceCollection _services;
 
         private FrozenDictionary<Type, bool>? _snapshot;
         private int _snapshotCount = -1;
 
-        public DispatchLifetimeMap(IServiceCollection services)
-            => _services = new WeakReference<IServiceCollection>(services);
+        public DispatchLifetimeMap(IServiceCollection services) => _services = services;
 
         /// <summary>
         /// The lifetimes as the collection reads right now, rebuilding first if it has changed.
@@ -156,9 +156,7 @@ namespace DSoftStudio.Mediator
         /// count.
         /// </para>
         /// </summary>
-        private bool IsStale()
-            => _services.TryGetTarget(out var services)
-               && services.Count != Volatile.Read(ref _snapshotCount);
+        private bool IsStale() => _services.Count != Volatile.Read(ref _snapshotCount);
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         private FrozenDictionary<Type, bool> BuildSnapshot()
@@ -169,16 +167,7 @@ namespace DSoftStudio.Mediator
                 if (existing is not null && !IsStale())
                     return existing;
 
-                if (!_services.TryGetTarget(out var services))
-                {
-                    // Unreachable collection: nothing can change it any more, so whatever we have is
-                    // final. An empty snapshot answers "not cacheable" for everything, which is the
-                    // safe direction.
-                    var settled = existing ?? FrozenDictionary<Type, bool>.Empty;
-                    Volatile.Write(ref _snapshot, settled);
-                    return settled;
-                }
-
+                var services = _services;
                 var builder = new Dictionary<Type, bool>(services.Count);
 
                 // Last registration wins, matching how GetRequiredService resolves — so assign
