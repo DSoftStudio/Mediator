@@ -295,3 +295,87 @@ public class AggressiveDispatchTests
         disarmed.ShouldBeTrue("poisoning must fire every registered disarm callback");
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════
+//  BLK-1: losing eligibility must stand an ARMED holder down
+// ═══════════════════════════════════════════════════════════════════
+
+public sealed record BlkPing(int N) : IRequest<string>;
+
+public sealed class BlkPingHandler : IRequestHandler<BlkPing, string>
+{
+    public ValueTask<string> Handle(BlkPing request, CancellationToken ct) => new("blk");
+}
+
+/// <summary>
+/// The AGGRESSIVE holder returns the Singleton handler DIRECTLY, bypassing the pipeline chain.
+/// That is only correct while the pair genuinely has no pipeline. If a later registration scan
+/// reports the pair ineligible — a behavior, processor, exception handler or dispatch observer
+/// appeared — an armed holder must stand down, or every one of those components silently never
+/// runs and the dispatch looks perfectly healthy.
+/// <para>
+/// SetEligibility used to do <c>CompareExchange(_state, Ineligible, Eligible)</c>, which is a
+/// no-op once the state is Attempted, and never touched the holder. The stand-down had to be
+/// added before any re-planning step could reach this state.
+/// </para>
+/// </summary>
+[Collection("AggressiveDispatch")]
+public class AggressiveEligibilityStandDownTests
+{
+    [Fact]
+    public void ArmedHolder_StandsDown_WhenPairStopsBeingEligible()
+    {
+        AggressiveDispatchLatch.ResetForTests();
+        AggressiveDispatch<BlkPing, string>.ResetForTests();
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IRequestHandler<BlkPing, string>, BlkPingHandler>();
+
+        AggressiveDispatchLatch.OnContainerRegistered(services);
+        AggressiveDispatch<BlkPing, string>.SetEligibility(services, eligible: true);
+
+        var armed = false;
+        var disarmed = false;
+
+        AggressiveDispatch<BlkPing, string>
+            .TryArm(new BlkPingHandler(), () => armed = true, () => disarmed = true)
+            .ShouldBeTrue("a Singleton handler with no pipeline is eligible and must arm");
+
+        armed.ShouldBeTrue();
+        disarmed.ShouldBeFalse();
+
+        // A later scan finds a pipeline for this pair.
+        AggressiveDispatch<BlkPing, string>.SetEligibility(services, eligible: false);
+
+        disarmed.ShouldBeTrue(
+            "an armed holder that stays armed after losing eligibility skips the whole chain");
+
+        AggressiveDispatchLatch.ResetForTests();
+        AggressiveDispatch<BlkPing, string>.ResetForTests();
+    }
+
+    [Fact]
+    public void StandDown_IsTerminal_ALaterEligibleScanCannotReArm()
+    {
+        AggressiveDispatchLatch.ResetForTests();
+        AggressiveDispatch<BlkPing, string>.ResetForTests();
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IRequestHandler<BlkPing, string>, BlkPingHandler>();
+
+        AggressiveDispatchLatch.OnContainerRegistered(services);
+        AggressiveDispatch<BlkPing, string>.SetEligibility(services, eligible: true);
+        AggressiveDispatch<BlkPing, string>.TryArm(new BlkPingHandler(), () => { }, () => { });
+
+        AggressiveDispatch<BlkPing, string>.SetEligibility(services, eligible: false);
+
+        // Returning to plain Ineligible would let this grant arming again; Disarmed is terminal.
+        AggressiveDispatch<BlkPing, string>.SetEligibility(services, eligible: true);
+
+        AggressiveDispatch<BlkPing, string>.ShouldAttemptArm.ShouldBeFalse(
+            "arming is one-shot: a pair that stood down must never arm again in this process");
+
+        AggressiveDispatchLatch.ResetForTests();
+        AggressiveDispatch<BlkPing, string>.ResetForTests();
+    }
+}

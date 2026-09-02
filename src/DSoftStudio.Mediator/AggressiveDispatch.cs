@@ -1,4 +1,4 @@
-// Copyright (c) DSoftStudio. All rights reserved.
+﻿// Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using System.ComponentModel;
@@ -240,10 +240,18 @@ public static class AggressiveDispatchLatch
 public static class AggressiveDispatch<TRequest, TResponse>
     where TRequest : IRequest<TResponse>
 {
-    private const int Ineligible = 0, Eligible = 1, Attempted = 2;
+    // Disarmed is TERMINAL and distinct from Ineligible: losing eligibility after an arm must
+    // stand the holder down AND make sure a later scan can never grant eligibility back, which a
+    // plain return to Ineligible would allow.
+    private const int Ineligible = 0, Eligible = 1, Attempted = 2, Disarmed = 3;
 
     private static int _state;
     private static IServiceCollection? _services;
+
+    // This pair's own stand-down, remembered at arm time. The process latch keeps a global disarm
+    // list for container poison; this one is for the targeted case where THIS pair stops being
+    // eligible while the rest of the process is untouched.
+    private static Action? _disarm;
 
     /// <summary>
     /// Records this type's eligibility, computed by the generated registration scan.
@@ -254,9 +262,22 @@ public static class AggressiveDispatch<TRequest, TResponse>
     {
         if (!eligible || AggressiveDispatchLatch.IsPoisoned)
         {
-            // Never regress Attempted -> Ineligible: the one-shot semantics stay one-shot.
-            Interlocked.CompareExchange(ref _state, Ineligible, Eligible);
             _services = null;
+
+            // If this pair was already ARMED, it must stand down. A later scan reporting it
+            // ineligible means a pipeline now exists for it — and an armed holder returns the
+            // handler directly, bypassing the chain, so every behavior would silently never run.
+            // Moving to the terminal Disarmed state also prevents a subsequent eligible scan from
+            // granting arming again, which a plain return to Ineligible would have allowed.
+            if (Interlocked.CompareExchange(ref _state, Disarmed, Attempted) == Attempted)
+            {
+                var disarm = Interlocked.Exchange(ref _disarm, null);
+                disarm?.Invoke();
+                return;
+            }
+
+            // Not armed: never regress a state other than Eligible, so one-shot stays one-shot.
+            Interlocked.CompareExchange(ref _state, Ineligible, Eligible);
             return;
         }
 
@@ -302,6 +323,9 @@ public static class AggressiveDispatch<TRequest, TResponse>
         if (!AggressiveDispatchLatch.TryArm(arm, disarm))
             return false;
 
+        // Remember the stand-down so SetEligibility can fire it for THIS pair alone.
+        Volatile.Write(ref _disarm, disarm);
+
         // Fired OUTSIDE the latch lock (in-proc EventListener callbacks must never run under
         // it), so a concurrent poison can land in between — re-check and skip rather than
         // record an arm AFTER the poison that already disarmed this very holder. A poison can
@@ -318,5 +342,6 @@ public static class AggressiveDispatch<TRequest, TResponse>
     {
         _state = Ineligible;
         _services = null;
+        _disarm = null;
     }
 }
