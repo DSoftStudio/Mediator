@@ -1,6 +1,7 @@
 // Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
+using System.Runtime.CompilerServices;
 using DSoftStudio.Mediator.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using DSoftStudio.Mediator;
@@ -12,6 +13,23 @@ public sealed record MemoryPing : IRequest<int>;
 
 public sealed class MemoryPingHandler : IRequestHandler<MemoryPing, int>
 {
+    /// <summary>
+    /// Armed only for the retention test, and null otherwise, so an ordinary dispatch pays a single
+    /// static read. Every constructed handler adds itself, which is what lets the test assert both
+    /// how many were built and whether any survived.
+    /// </summary>
+    internal static List<WeakReference>? Instances;
+
+    public MemoryPingHandler()
+    {
+        var sink = Instances;
+        if (sink is not null)
+        {
+            lock (sink)
+                sink.Add(new WeakReference(this));
+        }
+    }
+
     public ValueTask<int> Handle(MemoryPing request, CancellationToken cancellationToken)
         => new(1);
 }
@@ -39,51 +57,80 @@ public class PipelineGcLeakTests : IDisposable
         _mediator = _provider.GetRequiredService<IMediator>();
     }
 
-    public void Dispose() => _provider.Dispose();
-
-    [Fact]
-    public async Task Send_MillionRequests_NoPipelineMemoryLeak()
+    public void Dispose()
     {
-        // Warm pipeline
-        for (int i = 0; i < 100; i++)
-            await _mediator.Send(new MemoryPing(), TestContext.Current.CancellationToken);
-
-        const int iterations = 1_000_000;
-
-        // The handler here is registered Transient (see the fixture), so a million dispatches
-        // legitimately construct a million handlers. That is the DI contract, not a leak: the
-        // instances are garbage the moment each Send returns. What a LEAK looks like is retention
-        // that scales with the iteration count, so measure two identical rounds and compare them.
-        // A leak keeps growing; a one-off heap expansion does not repeat.
-        long firstRound = await MeasureRound(iterations);
-        long secondRound = await MeasureRound(iterations);
-
-        // Allow the second round a full extra megabyte of slack over the first before calling it a
-        // leak — GC bookkeeping and heap sizing are noisy, linear retention is not subtle.
-        Assert.True(
-            secondRound <= Math.Max(firstRound, 0) + 1_000_000,
-            $"Pipeline retention grew across identical rounds: {firstRound:N0} bytes then "
-            + $"{secondRound:N0} bytes, {iterations:N0} iterations each."
-        );
+        MemoryPingHandler.Instances = null;
+        _provider.Dispose();
     }
 
-    /// <summary>Bytes still held after one round of dispatches, measured across a forced collection.</summary>
-    private async Task<long> MeasureRound(int iterations)
+    /// <summary>
+    /// A Transient handler must be constructed once per dispatch and retained by nothing afterwards.
+    /// <para>
+    /// This used to dispatch a million requests and compare <c>GC.GetTotalMemory(true)</c> across two
+    /// identical rounds. That instrument does not work here, for two separate reasons. It reads the
+    /// whole PROCESS heap, which the other 500-odd tests are mutating in parallel — measured swings of
+    /// tens of megabytes against a one-megabyte tolerance, which is where the intermittent failures
+    /// came from. And comparing two identical rounds cancels any retention that is CONSTANT per
+    /// dispatch, which is precisely the shape of both bugs this file exists to guard: pinning one
+    /// handler, or holding one disposed scope. Reverting either fix left the old assertion passing.
+    /// </para>
+    /// <para>
+    /// Liveness measures retention directly instead, and is immune to what other tests allocate: no
+    /// other thread can make THESE weak references reachable. Both assertions are load-bearing — see
+    /// the comments on each.
+    /// </para>
+    /// <para>
+    /// What this test uniquely covers is ACCUMULATION PER DISPATCH — something holding one more
+    /// reference for every request that goes through. Nothing else in the suite sees that shape:
+    /// <c>TransientLifetimeHonouredTests.Send_ExplicitlyTransientHandler_IsConstructedPerDispatch</c>
+    /// dispatches three times, and <c>ScopeReleasedOnDisposeTests</c> tracks a single instance. Those
+    /// two are what actually guard the pinning and disposed-scope regressions; do not fold this one
+    /// into them, and do not shrink the dispatch count to a handful.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Send_ManyRequests_ConstructsAHandlerPerDispatch_AndRetainsNone()
     {
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
+        const int dispatches = 1_000;
 
-        long before = GC.GetTotalMemory(true);
+        var tracked = await DispatchAndTrackHandlers(dispatches);
 
-        for (int i = 0; i < iterations; i++)
-            await _mediator.Send(new MemoryPing(), TestContext.Current.CancellationToken);
+        FullGc();
 
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
+        // The COUNT catches pinning (the bug fixed in 7d0fac7): a cache that ignores the registered
+        // Transient lifetime constructs ONE handler and reuses it, so this reads 1 instead of N.
+        // Note there is deliberately no warm-up before tracking is armed — a warm-up would move that
+        // single construction outside the window, leaving the set empty and making the liveness
+        // assertion below true for the wrong reason.
+        tracked.Count.ShouldBe(dispatches);
 
-        return GC.GetTotalMemory(true) - before;
+        // The LIVENESS catches retention: anything on the dispatch path still holding a handler it
+        // built keeps it reachable across a full collection.
+        tracked.Count(reference => reference.IsAlive).ShouldBe(0);
+    }
+
+    /// <summary>
+    /// Dispatches in its own <c>NoInlining</c> frame: in a Debug build the JIT keeps locals alive to
+    /// the end of the enclosing method, so tracking in the test body would report the test's own frame
+    /// as retention.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private async Task<List<WeakReference>> DispatchAndTrackHandlers(int dispatches)
+    {
+        var sink = new List<WeakReference>(dispatches);
+        MemoryPingHandler.Instances = sink;
+
+        try
+        {
+            for (int i = 0; i < dispatches; i++)
+                await _mediator.Send(new MemoryPing(), TestContext.Current.CancellationToken);
+        }
+        finally
+        {
+            MemoryPingHandler.Instances = null;
+        }
+
+        return sink;
     }
 
     [Fact]
@@ -93,9 +140,7 @@ public class PipelineGcLeakTests : IDisposable
 
         var weakRef = ResolveSendAndTrackHandler();
 
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
+        FullGc();
 
         Assert.False(
             weakRef.IsAlive,
@@ -103,6 +148,7 @@ public class PipelineGcLeakTests : IDisposable
         );
     }
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private WeakReference ResolveSendAndTrackHandler()
     {
         using var scope = _provider.CreateScope();
@@ -113,5 +159,12 @@ public class PipelineGcLeakTests : IDisposable
         mediator.Send(new MemoryPing()).GetAwaiter().GetResult();
 
         return new WeakReference(handler);
+    }
+
+    private static void FullGc()
+    {
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
     }
 }
