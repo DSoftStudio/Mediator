@@ -43,8 +43,9 @@ namespace DSoftStudio.Mediator
 
         // Tri-state, read together with _cachedProvider:
         //   provider matches + chain non-null -> reusable, this is the chain
-        //   provider matches + chain null     -> Transient here, or this container has no chain for
-        //                                        the pair: resolve fresh, do not re-ask the container
+        //   provider matches + chain null + Absent   -> this container has no chain for the pair:
+        //                                                answer null without asking again
+        //   provider matches + chain null             -> Transient here: resolve fresh every time
         //   provider differs                  -> cold: ask the container and remember the verdict
         [ThreadStatic]
         private static DispatchCacheSlot<PipelineChainHandler<TRequest, TResponse>>? _slot;
@@ -67,6 +68,12 @@ namespace DSoftStudio.Mediator
                 if (cached is not null)
                     return cached;
 
+                // This container has no chain for the pair. Asking again can only return null, and a
+                // GetService that always fails is not free: before this branch existed, every dispatch
+                // through such a container paid one, permanently.
+                if (slot.Absent)
+                    return null;
+
                 return serviceProvider.GetService<PipelineChainHandler<TRequest, TResponse>>();
             }
 
@@ -79,23 +86,29 @@ namespace DSoftStudio.Mediator
             var chain = serviceProvider.GetService<PipelineChainHandler<TRequest, TResponse>>();
 
             Store(serviceProvider,
-                DispatchCacheability.AllowsCaching(serviceProvider, ServiceType) ? chain : null);
+                chain is not null && DispatchCacheability.AllowsCaching(serviceProvider, ServiceType) ? chain : null,
+                absent: chain is null);
 
             return chain;
         }
 
         /// <summary>
         /// Fills this thread's slot and registers it with the provider, so disposing that scope can
-        /// empty it from whatever thread does the disposing. A null <paramref name="value"/> records
-        /// "this container registered the service Transient" — resolve fresh, but do not ask again.
+        /// empty it from whatever thread does the disposing. A null <paramref name="value"/> with
+        /// <paramref name="absent"/> false records "this container registered the chain Transient" —
+        /// resolve fresh each time; with it true, "this container has no chain" — stop asking.
         /// </summary>
-        private static void Store(IServiceProvider serviceProvider, PipelineChainHandler<TRequest, TResponse>? value)
+        private static void Store(
+            IServiceProvider serviceProvider,
+            PipelineChainHandler<TRequest, TResponse>? value,
+            bool absent)
         {
             var slot = _slot ??= new DispatchCacheSlot<PipelineChainHandler<TRequest, TResponse>>();
 
-            // Value before Provider: a reader that interleaves sees a slot whose provider does not
-            // match yet, never one that matches with a stale value.
+            // Contents before Provider: a reader that interleaves sees a slot whose provider does not
+            // match yet, never one that matches with stale contents.
             slot.Value = value;
+            slot.Absent = absent;
             slot.Provider = serviceProvider;
 
             DispatchCacheReleaser.Track(serviceProvider, slot);

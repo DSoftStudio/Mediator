@@ -34,9 +34,18 @@ namespace DSoftStudio.Mediator
         /// <summary>
         /// The cached instance, or <see langword="null"/> when this provider registered the service
         /// Transient. A non-null <see cref="Provider"/> with a null value is the "known not reusable
-        /// here" state: resolve fresh, but do not ask the container about it again.
+        /// here" state: resolve fresh each time.
         /// </summary>
         public TValue? Value;
+
+        /// <summary>
+        /// <see langword="true"/> when <see cref="Provider"/> has NO such service at all — as opposed
+        /// to having registered it Transient. Both leave <see cref="Value"/> null, and conflating them
+        /// is expensive: an absent service was re-resolved from the container on EVERY dispatch,
+        /// forever, to be told null again. Only the optional caches (the pipeline chains) set this;
+        /// for a handler, absence is an error rather than a state.
+        /// </summary>
+        public bool Absent;
 
         /// <inheritdoc />
         public void ReleaseIf(IServiceProvider provider)
@@ -44,10 +53,16 @@ namespace DSoftStudio.Mediator
             if (!ReferenceEquals(Provider, provider))
                 return;
 
-            // Order matters: drop the value first, then the key. A thread reading between the two
+            // Order matters: drop the contents first, then the key. A thread reading between the
             // writes sees a matching provider with a null value, which is the "resolve fresh" state —
             // correct, just slower for one dispatch.
+            //
+            // Absent MUST be cleared here. A released slot is reused by whichever provider next
+            // occupies it, and one that still claimed "absent" would report "no chain" for a
+            // container that has one — a behavior silently skipped, which is the exact class of bug
+            // this slot indirection exists to prevent.
             Value = null;
+            Absent = false;
             Provider = null;
         }
     }

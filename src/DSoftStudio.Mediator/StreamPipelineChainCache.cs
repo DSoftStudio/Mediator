@@ -67,6 +67,13 @@ namespace DSoftStudio.Mediator
                 if (cached is not null)
                     return cached;
 
+                // This container has no chain for the pair. Nothing gates this call the way
+                // RequestDispatch.HasPipelineChain gates the request side, so before this branch
+                // existed EVERY CreateStream of a pair with no stream behaviors — the common case —
+                // paid a GetService that could only ever return null.
+                if (slot.Absent)
+                    return null;
+
                 return serviceProvider.GetService<StreamPipelineChainHandler<TRequest, TResponse>>();
             }
 
@@ -79,23 +86,29 @@ namespace DSoftStudio.Mediator
             var chain = serviceProvider.GetService<StreamPipelineChainHandler<TRequest, TResponse>>();
 
             Store(serviceProvider,
-                DispatchCacheability.AllowsCaching(serviceProvider, ServiceType) ? chain : null);
+                chain is not null && DispatchCacheability.AllowsCaching(serviceProvider, ServiceType) ? chain : null,
+                absent: chain is null);
 
             return chain;
         }
 
         /// <summary>
         /// Fills this thread's slot and registers it with the provider, so disposing that scope can
-        /// empty it from whatever thread does the disposing. A null <paramref name="value"/> records
-        /// "this container registered the service Transient" — resolve fresh, but do not ask again.
+        /// empty it from whatever thread does the disposing. A null <paramref name="value"/> with
+        /// <paramref name="absent"/> false records "this container registered the chain Transient" —
+        /// resolve fresh each time; with it true, "this container has no chain" — stop asking.
         /// </summary>
-        private static void Store(IServiceProvider serviceProvider, StreamPipelineChainHandler<TRequest, TResponse>? value)
+        private static void Store(
+            IServiceProvider serviceProvider,
+            StreamPipelineChainHandler<TRequest, TResponse>? value,
+            bool absent)
         {
             var slot = _slot ??= new DispatchCacheSlot<StreamPipelineChainHandler<TRequest, TResponse>>();
 
-            // Value before Provider: a reader that interleaves sees a slot whose provider does not
-            // match yet, never one that matches with a stale value.
+            // Contents before Provider: a reader that interleaves sees a slot whose provider does not
+            // match yet, never one that matches with stale contents.
             slot.Value = value;
+            slot.Absent = absent;
             slot.Provider = serviceProvider;
 
             DispatchCacheReleaser.Track(serviceProvider, slot);
