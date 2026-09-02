@@ -62,7 +62,52 @@ namespace DSoftStudio.Mediator
             if (serviceProvider is null || serviceType is null)
                 return false;
 
-            return serviceProvider.GetService<DispatchLifetimeMap>()?.AllowsCaching(serviceType) == true;
+            return serviceProvider.GetService<DispatchLifetimeSnapshot>()?.AllowsCaching(serviceType) == true;
+        }
+    }
+
+    /// <summary>
+    /// One container's answer, taken once and never revised.
+    /// <para>
+    /// Registered as a Singleton TYPE, which is what makes it per container: the DI container builds
+    /// one per provider, and every scope of that provider resolves the same one. A scope and its root
+    /// therefore always agree, and two providers built from one collection do not.
+    /// </para>
+    /// <para>
+    /// That last part is the whole point. <see cref="DispatchLifetimeMap"/> is registered as an
+    /// INSTANCE, so it is shared by every provider built from the same collection, and it holds one
+    /// snapshot. Reading through it directly meant the second provider's rebuild overwrote the first
+    /// provider's answer: measured, a provider whose handler really was Transient reported "fresh",
+    /// then reported "cacheable" once a sibling provider with a Scoped registration had read the map —
+    /// and would have pinned that Transient handler. Capturing the snapshot per provider ends that.
+    /// </para>
+    /// <para>
+    /// Taken on first use, which is the first dispatch. Configuring a collection FURTHER after
+    /// building a provider from it, and only then dispatching on that older provider, still reads the
+    /// newer registrations — there is no hook at BuildServiceProvider to capture instead, and mutating
+    /// a collection a provider was already built from is the ASP0000-shaped pattern this library
+    /// documents for the aggressive tier.
+    /// </para>
+    /// </summary>
+    internal sealed class DispatchLifetimeSnapshot(DispatchLifetimeMap map)
+    {
+        private readonly FrozenDictionary<Type, bool> _lifetimes = map.Current();
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public bool AllowsCaching(Type serviceType)
+        {
+            if (_lifetimes.TryGetValue(serviceType, out bool cacheable))
+                return cacheable;
+
+            // A closed generic can be served by an open-generic registration, e.g.
+            // AddTransient(typeof(IRequestHandler<,>), typeof(GenericHandler<,>)) — the closed type
+            // is never a key. Fall back to the definition so those registrations are not forced
+            // onto the uncached path.
+            if (serviceType.IsConstructedGenericType
+                && _lifetimes.TryGetValue(serviceType.GetGenericTypeDefinition(), out cacheable))
+                return cacheable;
+
+            return false;
         }
     }
 
@@ -90,25 +135,14 @@ namespace DSoftStudio.Mediator
         public DispatchLifetimeMap(IServiceCollection services)
             => _services = new WeakReference<IServiceCollection>(services);
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool AllowsCaching(Type serviceType)
+        /// <summary>
+        /// The lifetimes as the collection reads right now, rebuilding first if it has changed.
+        /// Called once per built provider, by <see cref="DispatchLifetimeSnapshot"/>'s constructor.
+        /// </summary>
+        public FrozenDictionary<Type, bool> Current()
         {
             var snapshot = Volatile.Read(ref _snapshot);
-            if (snapshot is null || IsStale())
-                snapshot = BuildSnapshot();
-
-            if (snapshot.TryGetValue(serviceType, out bool cacheable))
-                return cacheable;
-
-            // A closed generic can be served by an open-generic registration, e.g.
-            // AddTransient(typeof(IRequestHandler<,>), typeof(GenericHandler<,>)) — the closed type
-            // is never a key. Fall back to the definition so those registrations are not forced
-            // onto the uncached path.
-            if (serviceType.IsConstructedGenericType
-                && snapshot.TryGetValue(serviceType.GetGenericTypeDefinition(), out cacheable))
-                return cacheable;
-
-            return false;
+            return snapshot is null || IsStale() ? BuildSnapshot() : snapshot;
         }
 
         /// <summary>

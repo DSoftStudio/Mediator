@@ -25,6 +25,11 @@ public static class ServiceCollectionExtensions
         // descriptor list is final. Every container reaches here, so every container gets its own.
         services.TryAddSingleton(new DispatchLifetimeMap(services));
 
+        // A Singleton TYPE, not an instance: the container builds one per provider and shares it with
+        // every scope, so each container captures its own answer instead of racing its siblings for
+        // the one snapshot the collection-scoped map holds.
+        services.TryAddSingleton<DispatchLifetimeSnapshot>();
+
         // Scoped, and resolved by Mediator's constructor so it exists in every scope that dispatches.
         // Its disposal is the signal that lets the dispatch caches drop this scope: a [ThreadStatic]
         // cannot be written by another thread, and the thread that filled a slot is rarely the one

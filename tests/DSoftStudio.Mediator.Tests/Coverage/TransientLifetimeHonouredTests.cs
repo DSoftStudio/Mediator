@@ -390,4 +390,40 @@ public class TransientLifetimeHonouredTests
         DispatchCacheability.AllowsCaching(spB, typeof(IRequestHandler<LifePing, int>))
             .ShouldBeFalse("B's registration must be read, not A's frozen snapshot");
     }
+
+    [Fact]
+    public void TwoProvidersFromOneCollection_EachKeepItsOwnAnswer()
+    {
+        // Sibling providers must not overwrite each other. DispatchLifetimeMap is registered as an
+        // INSTANCE, so every provider built from a collection shares it, and it holds ONE snapshot.
+        // Reading through it directly meant the second provider's rebuild replaced the first's answer:
+        // A reported "fresh" for its Transient handler, then reported "cacheable" once B had read the
+        // map -- and would have pinned it. The answer is captured per provider instead.
+        var services = new ServiceCollection();
+        services.AddMediator().RegisterMediatorHandlers();
+        services.AddSingleton(new LifeCounter());
+        services.AddSingleton<LifeUnitOfWork>();
+        services.AddTransient<IRequestHandler<LifePing, int>, LifePingHandler>();
+
+        using var spA = services.BuildServiceProvider();
+
+        var handlerType = typeof(IRequestHandler<LifePing, int>);
+        DispatchCacheability.AllowsCaching(spA, handlerType)
+            .ShouldBeFalse("A registered the handler Transient");
+
+        // Same collection, handler overridden to Scoped, rebuilt into a sibling provider.
+        services.AddScoped<IRequestHandler<LifePing, int>, LifePingHandler>();
+        using var spB = services.BuildServiceProvider();
+
+        DispatchCacheability.AllowsCaching(spB, handlerType)
+            .ShouldBeTrue("B registered the handler Scoped");
+
+        DispatchCacheability.AllowsCaching(spA, handlerType)
+            .ShouldBeFalse("B reading the map must not change what A is told");
+
+        // And a scope agrees with the root it came from, because the snapshot is a Singleton.
+        using var scopeA = spA.CreateScope();
+        DispatchCacheability.AllowsCaching(scopeA.ServiceProvider, handlerType)
+            .ShouldBeFalse("a scope inherits its container's answer");
+    }
 }
