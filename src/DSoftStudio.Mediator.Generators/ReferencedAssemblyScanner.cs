@@ -1,4 +1,4 @@
-// Copyright (c) DSoftStudio. All rights reserved.
+﻿// Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using Microsoft.CodeAnalysis;
@@ -692,7 +692,7 @@ namespace DSoftStudio.Mediator.Generators
         /// generic: <c>typeof(Outer&lt;&gt;.Inner&lt;,&gt;)</c> is not legal C#, and
         /// <c>BaseTypeNameFormat</c> omits generic arguments, so such a name would not compile.
         /// </summary>
-        private static bool IsNameableBehaviorType(INamedTypeSymbol type, bool allowInternal)
+        internal static bool IsNameableBehaviorType(INamedTypeSymbol type, bool allowInternal)
         {
             if (!IsAccessibleHere(type.DeclaredAccessibility, allowInternal))
                 return false;
