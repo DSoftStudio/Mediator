@@ -310,16 +310,26 @@ internal static class InterceptorHelpers
             sb.AppendLine();
         }
 
-        sb.AppendLine("        [global::System.ThreadStatic] private static global::System.IServiceProvider? _cachedProvider;");
-        sb.Append("        [global::System.ThreadStatic] private static ").Append(handlerType).AppendLine("? _cachedHandler;");
+        // One slot object instead of two [ThreadStatic] fields: one thread-local lookup on the hot
+        // path instead of two, and — the reason it exists — a slot CAN be emptied by the thread that
+        // disposes the scope, which a [ThreadStatic] never can. Without that, this cache kept the
+        // disposed scope and everything it resolved reachable until this same thread happened to
+        // dispatch this same request type again against a different provider.
+        sb.Append("        [global::System.ThreadStatic] private static global::DSoftStudio.Mediator.DispatchCacheSlot<")
+          .Append(handlerType).AppendLine(">? _slot;");
         sb.AppendLine();
         sb.AppendLine("        [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]");
         sb.Append("        internal static global::System.Threading.Tasks.ValueTask<").Append(responseType)
           .Append("> Dispatch(global::System.IServiceProvider sp, ").Append(requestType)
           .AppendLine(" request, global::System.Threading.CancellationToken cancellationToken)");
         sb.AppendLine("        {");
-        sb.AppendLine("            if (global::System.Object.ReferenceEquals(_cachedProvider, sp))");
-        sb.AppendLine("                return _cachedHandler!.Handle(request, cancellationToken);");
+        sb.AppendLine("            var __slot = _slot;");
+        sb.AppendLine("            if (__slot is not null && global::System.Object.ReferenceEquals(__slot.Provider, sp))");
+        sb.AppendLine("            {");
+        sb.AppendLine("                var __h = __slot.Value;");
+        sb.AppendLine("                if (__h is not null)");
+        sb.AppendLine("                    return __h.Handle(request, cancellationToken);");
+        sb.AppendLine("            }");
         sb.AppendLine("            return ResolveSlow(sp, request, cancellationToken);");
         sb.AppendLine("        }");
         sb.AppendLine();
@@ -343,8 +353,10 @@ internal static class InterceptorHelpers
           .Append(", ").Append(responseType).AppendLine(">.IsCacheableFor(sp))");
         sb.AppendLine("            {");
         sb.Append("                var concrete = (").Append(handlerType).AppendLine(")svc;");
-        sb.AppendLine("                _cachedProvider = sp;");
-        sb.AppendLine("                _cachedHandler = concrete;");
+        sb.AppendLine("                var __s = _slot ??= new global::DSoftStudio.Mediator.DispatchCacheSlot<" + handlerType + ">();");
+        sb.AppendLine("                __s.Value = concrete;");
+        sb.AppendLine("                __s.Provider = sp;");
+        sb.AppendLine("                global::DSoftStudio.Mediator.DispatchCacheReleaser.Track(sp, __s);");
 
         if (emitAggressive)
         {

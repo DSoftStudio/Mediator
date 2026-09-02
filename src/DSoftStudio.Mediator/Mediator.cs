@@ -25,6 +25,11 @@ namespace DSoftStudio.Mediator
             _serviceProvider = serviceProvider;
             _notificationPublisher = serviceProvider.GetService<INotificationPublisher>();
 
+            // Resolving it is the whole point: it is Scoped, so this hands the container an
+            // IDisposable tied to THIS scope, whose disposal releases the dispatch cache slots that
+            // would otherwise keep the scope alive. Once per scope, off any hot path.
+            serviceProvider.GetService<MediatorScopeRelease>();
+
             // Set the global static flag once so interceptors can skip the per-call
             // GetService<INotificationPublisher> probe (~2-3 ns saved per Publish call).
             if (_notificationPublisher is not null)

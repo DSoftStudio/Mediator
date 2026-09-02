@@ -25,11 +25,32 @@ public static class ServiceCollectionExtensions
         // descriptor list is final. Every container reaches here, so every container gets its own.
         services.TryAddSingleton(new DispatchLifetimeMap(services));
 
+        // Scoped, and resolved by Mediator's constructor so it exists in every scope that dispatches.
+        // Its disposal is the signal that lets the dispatch caches drop this scope: a [ThreadStatic]
+        // cannot be written by another thread, and the thread that filled a slot is rarely the one
+        // that disposes the scope.
+        services.TryAddScoped<MediatorScopeRelease>();
+
         services.TryAddScoped<IMediator, Mediator>();
         services.TryAddScoped<ISender>(sp => sp.GetRequiredService<IMediator>());
         services.TryAddScoped<IPublisher>(sp => sp.GetRequiredService<IMediator>());
 
         return services;
     }
+}
+
+/// <summary>
+/// Empties the provider-keyed dispatch cache slots belonging to a scope when that scope is disposed.
+/// <para>
+/// Registered Scoped and instantiated from <see cref="Mediator"/>'s constructor, so every scope that
+/// dispatches gets one and the container disposes it with the scope. Without it a slot keeps the
+/// disposed scope — and every scoped instance it resolved — reachable until the thread that filled
+/// the slot happens to dispatch the same request type again against a different provider, which for a
+/// rarely-used request type or a pool thread that moves on is never.
+/// </para>
+/// </summary>
+internal sealed class MediatorScopeRelease(IServiceProvider serviceProvider) : IDisposable
+{
+    public void Dispose() => DispatchCacheReleaser.ReleaseFor(serviceProvider);
 }
 

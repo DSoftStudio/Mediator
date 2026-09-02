@@ -159,11 +159,12 @@ Use `[ThreadStatic]` fields to cache handler and pipeline chain resolutions per 
 ### Rationale
 - Eliminates ~10 ns `GetRequiredService` call on every `Send()` for Scoped/Singleton handlers.
 - `[ThreadStatic]` is lock-free, zero-allocation, and CPU cache friendly.
-- Only used when `IsPipelineChainCacheable` is true (Scoped/Singleton). Transient chains always resolve fresh.
+- Cacheability is asked of the **container**, not of a process-global static: `AddMediator` registers a per-container lifetime snapshot, and each cache consults it once per (thread, provider). A static flag is one per closed generic pair and therefore shared by every container in the process, so the first container to register a Scoped or Singleton chain used to declare that pair cacheable for containers that had registered it Transient.
+- Transient registrations always resolve fresh. That includes handlers: a handler with a Transient dependency is registered Transient (see §4), and caching it would share that dependency across dispatches.
 
 ### Consequences
 - Thread hops after `await` cause a single cache miss (no correctness issue).
-- Memory overhead: one cached reference per thread per handler type.
+- Memory overhead: one cached reference per thread per handler type — but that reference **roots the provider it was resolved from, and through it every scoped instance that provider resolved**. A `[ThreadStatic]` cannot be written by another thread, so nothing could release it: the slot was emptied only when that same thread next dispatched that same type against a different provider, which for a rarely-served request type or a pool thread that moves on is never. The caches now hold a `DispatchCacheSlot<T>`, and the scope's disposal empties it via `DispatchCacheReleaser` from whichever thread disposes the scope.
 
 ---
 

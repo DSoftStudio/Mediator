@@ -30,12 +30,10 @@ namespace DSoftStudio.Mediator
     public static class StreamHandlerCache<TRequest, TResponse>
         where TRequest : IStreamRequest<TResponse>
     {
-        [ThreadStatic]
-        private static IServiceProvider? _cachedProvider;
 
         // Tri-state: see HandlerCache<,> for the protocol.
         [ThreadStatic]
-        private static IStreamRequestHandler<TRequest, TResponse>? _cachedHandler;
+        private static DispatchCacheSlot<IStreamRequestHandler<TRequest, TResponse>>? _slot;
 
         /// <summary>
         /// Returns the stream handler for the given service provider, from the thread-local cache
@@ -45,9 +43,10 @@ namespace DSoftStudio.Mediator
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static IStreamRequestHandler<TRequest, TResponse> Resolve(IServiceProvider serviceProvider)
         {
-            if (serviceProvider is not null && ReferenceEquals(_cachedProvider, serviceProvider))
+            var slot = _slot;
+            if (serviceProvider is not null && slot is not null && ReferenceEquals(slot.Provider, serviceProvider))
             {
-                var cached = _cachedHandler;
+                var cached = slot.Value;
                 if (cached is not null)
                     return cached;
 
@@ -62,16 +61,13 @@ namespace DSoftStudio.Mediator
         {
             var handler = Create(serviceProvider);
 
-            _cachedProvider = serviceProvider;
-
             // Ask about the CONCRETE type, not IStreamRequestHandler<,>: StreamDispatch's factory is
             // emitted as GetRequiredService<TheHandler>(sp), and the generator registers that
             // concrete type separately with the matching lifetime ("Notification and stream dispatch
             // tables resolve by CONCRETE type" - DependencyInjectionGenerator). Asking about the
             // interface would read a descriptor this path never resolves.
-            _cachedHandler = DispatchCacheability.AllowsCaching(serviceProvider, handler.GetType())
-                ? handler
-                : null;
+            Store(serviceProvider,
+                DispatchCacheability.AllowsCaching(serviceProvider, handler.GetType()) ? handler : null);
 
             return handler;
         }
@@ -84,6 +80,23 @@ namespace DSoftStudio.Mediator
                     "Ensure PrecompileStreams() is called during service configuration.");
 
             return factory(serviceProvider);
+        }
+
+        /// <summary>
+        /// Fills this thread's slot and registers it with the provider, so disposing that scope can
+        /// empty it from whatever thread does the disposing. A null <paramref name="value"/> records
+        /// "this container registered the service Transient" — resolve fresh, but do not ask again.
+        /// </summary>
+        private static void Store(IServiceProvider serviceProvider, IStreamRequestHandler<TRequest, TResponse>? value)
+        {
+            var slot = _slot ??= new DispatchCacheSlot<IStreamRequestHandler<TRequest, TResponse>>();
+
+            // Value before Provider: a reader that interleaves sees a slot whose provider does not
+            // match yet, never one that matches with a stale value.
+            slot.Value = value;
+            slot.Provider = serviceProvider;
+
+            DispatchCacheReleaser.Track(serviceProvider, slot);
         }
     }
 }

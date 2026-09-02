@@ -37,11 +37,9 @@ namespace DSoftStudio.Mediator
     {
         private static readonly Type ServiceType = typeof(StreamPipelineChainHandler<TRequest, TResponse>);
 
-        [ThreadStatic]
-        private static IServiceProvider? _cachedProvider;
 
         [ThreadStatic]
-        private static StreamPipelineChainHandler<TRequest, TResponse>? _cachedChain;
+        private static DispatchCacheSlot<StreamPipelineChainHandler<TRequest, TResponse>>? _slot;
 
         /// <summary>
         /// Returns the stream pipeline chain for the given service provider, from the thread-local
@@ -59,11 +57,13 @@ namespace DSoftStudio.Mediator
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static StreamPipelineChainHandler<TRequest, TResponse>? Resolve(IServiceProvider serviceProvider)
         {
-            // The provider must be non-null for the cache to be meaningful: ReferenceEquals(null, null)
+            // The provider must be non-null: a RELEASED slot has a null Provider, and
+            // ReferenceEquals(null, null)
             // is true, so a null provider would hit a "cached" null chain and fail somewhere else.
-            if (serviceProvider is not null && ReferenceEquals(_cachedProvider, serviceProvider))
+            var slot = _slot;
+            if (serviceProvider is not null && slot is not null && ReferenceEquals(slot.Provider, serviceProvider))
             {
-                var cached = _cachedChain;
+                var cached = slot.Value;
                 if (cached is not null)
                     return cached;
 
@@ -78,12 +78,27 @@ namespace DSoftStudio.Mediator
         {
             var chain = serviceProvider.GetService<StreamPipelineChainHandler<TRequest, TResponse>>();
 
-            _cachedProvider = serviceProvider;
-            _cachedChain = DispatchCacheability.AllowsCaching(serviceProvider, ServiceType)
-                ? chain
-                : null;
+            Store(serviceProvider,
+                DispatchCacheability.AllowsCaching(serviceProvider, ServiceType) ? chain : null);
 
             return chain;
+        }
+
+        /// <summary>
+        /// Fills this thread's slot and registers it with the provider, so disposing that scope can
+        /// empty it from whatever thread does the disposing. A null <paramref name="value"/> records
+        /// "this container registered the service Transient" — resolve fresh, but do not ask again.
+        /// </summary>
+        private static void Store(IServiceProvider serviceProvider, StreamPipelineChainHandler<TRequest, TResponse>? value)
+        {
+            var slot = _slot ??= new DispatchCacheSlot<StreamPipelineChainHandler<TRequest, TResponse>>();
+
+            // Value before Provider: a reader that interleaves sees a slot whose provider does not
+            // match yet, never one that matches with a stale value.
+            slot.Value = value;
+            slot.Provider = serviceProvider;
+
+            DispatchCacheReleaser.Track(serviceProvider, slot);
         }
     }
 }

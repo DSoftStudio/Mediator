@@ -33,24 +33,23 @@ namespace DSoftStudio.Mediator
     public static class NotificationHandlerCache<TNotification>
         where TNotification : INotification
     {
-        [ThreadStatic]
-        private static IServiceProvider? _cachedProvider;
 
         // Tri-state, read together with _cachedProvider:
         //   provider matches + array non-null -> every handler is reusable, this is the array
         //   provider matches + array null     -> at least one handler is Transient here
         //   provider differs                  -> cold: ask the container and remember the verdict
         [ThreadStatic]
-        private static INotificationHandler<TNotification>[]? _cachedHandlers;
+        private static DispatchCacheSlot<INotificationHandler<TNotification>[]>? _slot;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static INotificationHandler<TNotification>[] Resolve(
             IServiceProvider serviceProvider,
             Func<IServiceProvider, INotificationHandler<TNotification>>[] factories)
         {
-            if (serviceProvider is not null && ReferenceEquals(_cachedProvider, serviceProvider))
+            var slot = _slot;
+            if (serviceProvider is not null && slot is not null && ReferenceEquals(slot.Provider, serviceProvider))
             {
-                var cached = _cachedHandlers;
+                var cached = slot.Value;
                 if (cached is not null)
                     return cached;
 
@@ -70,9 +69,12 @@ namespace DSoftStudio.Mediator
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsCacheableFor(IServiceProvider serviceProvider)
-            => serviceProvider is not null
-               && ReferenceEquals(_cachedProvider, serviceProvider)
-               && _cachedHandlers is not null;
+        {
+            var slot = _slot;
+            return slot is not null
+                   && ReferenceEquals(slot.Provider, serviceProvider)
+                   && slot.Value is not null;
+        }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static INotificationHandler<TNotification>[] ResolveSlow(
@@ -81,8 +83,7 @@ namespace DSoftStudio.Mediator
         {
             var handlers = Create(serviceProvider, factories);
 
-            _cachedProvider = serviceProvider;
-            _cachedHandlers = AllReusable(serviceProvider, handlers) ? handlers : null;
+            Store(serviceProvider, AllReusable(serviceProvider, handlers) ? handlers : null);
 
             return handlers;
         }
@@ -109,6 +110,23 @@ namespace DSoftStudio.Mediator
             }
 
             return true;
+        }
+
+        /// <summary>
+        /// Fills this thread's slot and registers it with the provider, so disposing that scope can
+        /// empty it from whatever thread does the disposing. A null <paramref name="value"/> records
+        /// "this container registered the service Transient" — resolve fresh, but do not ask again.
+        /// </summary>
+        private static void Store(IServiceProvider serviceProvider, INotificationHandler<TNotification>[]? value)
+        {
+            var slot = _slot ??= new DispatchCacheSlot<INotificationHandler<TNotification>[]>();
+
+            // Value before Provider: a reader that interleaves sees a slot whose provider does not
+            // match yet, never one that matches with a stale value.
+            slot.Value = value;
+            slot.Provider = serviceProvider;
+
+            DispatchCacheReleaser.Track(serviceProvider, slot);
         }
     }
 }

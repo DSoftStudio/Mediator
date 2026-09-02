@@ -188,8 +188,12 @@ internal static class NotificationFastPath
             sb.AppendLine();
         }
 
-        sb.AppendLine("        [global::System.ThreadStatic] private static global::System.IServiceProvider? _tlsProvider;");
-        sb.AppendLine("        [global::System.ThreadStatic] private static ArmedSet? _tlsSet;");
+        // One slot instead of two [ThreadStatic] fields — one thread-local lookup on the hot path,
+        // and a slot the scope's disposal can empty from another thread. A [ThreadStatic] cannot be
+        // written by anyone but its own thread, so this cache used to keep the disposed scope, its
+        // handlers and their scoped dependencies reachable until this thread published this same
+        // notification again against a different provider.
+        sb.AppendLine("        [global::System.ThreadStatic] private static global::DSoftStudio.Mediator.DispatchCacheSlot<ArmedSet>? _slot;");
         sb.AppendLine();
 
         // ── Unrolled statically-devirtualized dispatch (armed AND safe-hit paths). ──
@@ -249,7 +253,8 @@ internal static class NotificationFastPath
         sb.Append("        internal static global::System.Threading.Tasks.Task DispatchSafe(global::System.IServiceProvider sp, ")
           .Append(n).AppendLine(" notification, global::System.Threading.CancellationToken ct)");
         sb.AppendLine("        {");
-        sb.AppendLine("            var s = object.ReferenceEquals(_tlsProvider, sp) ? _tlsSet : null;");
+        sb.AppendLine("            var __slot = _slot;");
+        sb.AppendLine("            var s = __slot is not null && object.ReferenceEquals(__slot.Provider, sp) ? __slot.Value : null;");
         sb.AppendLine("            if (s is not null)");
         sb.AppendLine("                return Dispatch(s, notification, ct);");
         sb.AppendLine("            return ResolveSlow(sp, notification, ct);");
@@ -284,8 +289,10 @@ internal static class NotificationFastPath
             sb.Append('(').Append(handlers[i].HandlerType).Append(")handlers[").Append(i).Append(']');
         }
         sb.AppendLine(");");
-        sb.AppendLine("                _tlsProvider = sp;");
-        sb.AppendLine("                _tlsSet = set;");
+        sb.AppendLine("                var __s = _slot ??= new global::DSoftStudio.Mediator.DispatchCacheSlot<ArmedSet>();");
+        sb.AppendLine("                __s.Value = set;");
+        sb.AppendLine("                __s.Provider = sp;");
+        sb.AppendLine("                global::DSoftStudio.Mediator.DispatchCacheReleaser.Track(sp, __s);");
         if (emitAggressive)
         {
             sb.Append("                if (global::DSoftStudio.Mediator.AggressiveNotificationDispatch<").Append(n).AppendLine(">.ShouldAttemptArm)");

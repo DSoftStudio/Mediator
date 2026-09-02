@@ -42,15 +42,13 @@ namespace DSoftStudio.Mediator
     {
         private static readonly Type ServiceType = typeof(IRequestHandler<TRequest, TResponse>);
 
-        [ThreadStatic]
-        private static IServiceProvider? _cachedProvider;
 
         // Tri-state, read together with _cachedProvider:
         //   provider matches + handler non-null -> cacheable, this is the instance
         //   provider matches + handler null     -> this provider registered the pair Transient
         //   provider differs                    -> cold: ask the container and remember the verdict
         [ThreadStatic]
-        private static IRequestHandler<TRequest, TResponse>? _cachedHandler;
+        private static DispatchCacheSlot<IRequestHandler<TRequest, TResponse>>? _slot;
 
         /// <summary>
         /// Returns the handler for the given service provider, from the thread-local cache when the
@@ -60,11 +58,13 @@ namespace DSoftStudio.Mediator
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static IRequestHandler<TRequest, TResponse> Resolve(IServiceProvider serviceProvider)
         {
-            // The provider must be non-null for the cache to be meaningful: ReferenceEquals(null, null)
+            // The provider must be non-null: a RELEASED slot has a null Provider, and
+            // ReferenceEquals(null, null)
             // is true, so a null provider would hit a "cached" null handler and NRE later, far from here.
-            if (serviceProvider is not null && ReferenceEquals(_cachedProvider, serviceProvider))
+            var slot = _slot;
+            if (serviceProvider is not null && slot is not null && ReferenceEquals(slot.Provider, serviceProvider))
             {
-                var cached = _cachedHandler;
+                var cached = slot.Value;
                 if (cached is not null)
                     return cached;
 
@@ -87,21 +87,39 @@ namespace DSoftStudio.Mediator
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsCacheableFor(IServiceProvider serviceProvider)
-            => serviceProvider is not null
-               && ReferenceEquals(_cachedProvider, serviceProvider)
-               && _cachedHandler is not null;
+        {
+            var slot = _slot;
+            return slot is not null
+                   && ReferenceEquals(slot.Provider, serviceProvider)
+                   && slot.Value is not null;
+        }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static IRequestHandler<TRequest, TResponse> ResolveSlow(IServiceProvider serviceProvider)
         {
             var handler = serviceProvider.GetRequiredService<IRequestHandler<TRequest, TResponse>>();
 
-            _cachedProvider = serviceProvider;
-            _cachedHandler = DispatchCacheability.AllowsCaching(serviceProvider, ServiceType)
-                ? handler
-                : null;
+            Store(serviceProvider,
+                DispatchCacheability.AllowsCaching(serviceProvider, ServiceType) ? handler : null);
 
             return handler;
+        }
+
+        /// <summary>
+        /// Fills this thread's slot and registers it with the provider, so disposing that scope can
+        /// empty it from whatever thread does the disposing. A null <paramref name="value"/> records
+        /// "this container registered the service Transient" — resolve fresh, but do not ask again.
+        /// </summary>
+        private static void Store(IServiceProvider serviceProvider, IRequestHandler<TRequest, TResponse>? value)
+        {
+            var slot = _slot ??= new DispatchCacheSlot<IRequestHandler<TRequest, TResponse>>();
+
+            // Value before Provider: a reader that interleaves sees a slot whose provider does not
+            // match yet, never one that matches with a stale value.
+            slot.Value = value;
+            slot.Provider = serviceProvider;
+
+            DispatchCacheReleaser.Track(serviceProvider, slot);
         }
     }
 }
