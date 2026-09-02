@@ -1,11 +1,59 @@
-# Generates benchmarks/BENCHMARKS.md from BenchmarkDotNet result files.
+﻿# Generates benchmarks/BENCHMARKS.md from BenchmarkDotNet result files.
 # Called automatically by run-all-benchmarks.cmd after all benchmarks complete.
 # "All Libraries" sections are assembled by concatenating isolated per-library tables.
 
 param(
-    [string]$ResultsDir = (Join-Path $PSScriptRoot "BenchmarkDotNet.Artifacts\results"),
-    [string]$OutputFile = (Join-Path $PSScriptRoot "BENCHMARKS.md")
+    # Which run to read. The runners write per target framework -- see the "Results:" line they
+    # echo -- and this script used to default to the flat directory they wrote to BEFORE the repo
+    # multi-targeted. Left alone it regenerated an older run and looked like it had worked.
+    [string]$Tfm = "",
+    [string]$ResultsDir = "",
+    [string]$OutputFile = ""
 )
+
+$artifacts = Join-Path $PSScriptRoot "BenchmarkDotNet.Artifacts"
+
+if (-not $ResultsDir) {
+    if ($Tfm) {
+        $ResultsDir = Join-Path $artifacts "$Tfm\results"
+    }
+    else {
+        # No TFM given: take the most recently written per-TFM run, falling back to the flat
+        # directory so an older layout still generates something rather than silently nothing.
+        $candidates = @(Get-ChildItem -Path $artifacts -Directory -ErrorAction SilentlyContinue |
+            Where-Object { Test-Path (Join-Path $_.FullName "results") } |
+            ForEach-Object {
+                $r = Join-Path $_.FullName "results"
+                $newest = Get-ChildItem -Path $r -Filter "*-report-github.md" -ErrorAction SilentlyContinue |
+                    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+                if ($newest) { [pscustomobject]@{ Tfm = $_.Name; Dir = $r; When = $newest.LastWriteTime } }
+            } | Sort-Object When -Descending)
+
+        if ($candidates.Count -gt 0) {
+            $Tfm = $candidates[0].Tfm
+            $ResultsDir = $candidates[0].Dir
+        }
+        else {
+            $ResultsDir = Join-Path $artifacts "results"
+        }
+    }
+}
+
+if (-not $OutputFile) {
+    # One file per TFM, named after it, so two runs cannot silently overwrite each other.
+    $OutputFile = if ($Tfm -and $Tfm -ne "net10.0") {
+        Join-Path $PSScriptRoot "BENCHMARKS-$Tfm.md"
+    } else {
+        Join-Path $PSScriptRoot "BENCHMARKS.md"
+    }
+}
+
+if (-not (Test-Path $ResultsDir)) {
+    Write-Error "No results directory: $ResultsDir. Run benchmarks\run-all-benchmarks.cmd first."
+    exit 1
+}
+
+Write-Host "Reading: $ResultsDir"
 
 # ── Per-library isolated sections (each ran in its own process) ──────────
 $titleMap = [ordered]@{
@@ -19,6 +67,7 @@ $titleMap = [ordered]@{
     "Benchmarks.DSoftConcurrencyBenchmarks"             = "DSoft - Concurrency"
     "Benchmarks.DSoftColdStartBenchmarks"               = "DSoft - Cold Start"
     "Benchmarks.DSoftRealisticPipelineBenchmarks"         = "DSoft - Realistic Pipeline"
+    "Benchmarks.DSoftBehaviorScalingBenchmarks"          = "DSoft - Behavior Scaling"
     # ── MediatR ───────────────────────────────────────────────────
     "Benchmarks.MediatRSendNoBehaviorsBenchmarks"       = "MediatR - Send (No Behaviors)"
     "Benchmarks.MediatRSendBenchmarks"                  = "MediatR - Send (Behaviors)"
@@ -185,6 +234,8 @@ function Remap-Row([string]$row, [string[]]$srcCols, [string[]]$superCols) {
 $sb = [System.Text.StringBuilder]::new()
 [void]$sb.AppendLine("# Benchmarks")
 [void]$sb.AppendLine()
+if ($Tfm) { [void]$sb.AppendLine("Target framework: ``$Tfm``") }
+[void]$sb.AppendLine()
 
 if ($envInfo) {
     [void]$sb.AppendLine("``````")
@@ -284,7 +335,7 @@ if ($found -eq 0) {
 [void]$sb.AppendLine("benchmarks\run-all-benchmarks.cmd")
 [void]$sb.AppendLine("``````")
 [void]$sb.AppendLine()
-[void]$sb.AppendLine("Results are saved to ``benchmarks/BenchmarkDotNet.Artifacts/results/``.")
+[void]$sb.AppendLine("Results are saved to ``benchmarks/BenchmarkDotNet.Artifacts/<tfm>/results/``.")
 
 $sb.ToString() | Set-Content $OutputFile -Encoding UTF8 -NoNewline
 Write-Host "Generated: $OutputFile ($found sections)"

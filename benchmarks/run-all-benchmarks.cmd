@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 setlocal
 rem Usage: run-all-benchmarks.cmd [net10.0^|net11.0^|all]   (default: all)
 rem
@@ -23,6 +23,14 @@ call "%~dp0run-dsoft-benchmarks.cmd" %TFMS%
 call "%~dp0run-mediatr-benchmarks.cmd" %TFMS%
 call "%~dp0run-mediator-sg-benchmarks.cmd" %TFMS%
 call "%~dp0run-dispatchr-benchmarks.cmd" %TFMS%
+
+rem Regenerate the summary, once per TFM. generate-benchmarks-md.ps1 says it is called from here
+rem and it no longer was, so BENCHMARKS.md kept describing whatever run last touched the old flat
+rem artifacts directory.
+if /i "%TFMS%"=="all" (set "GENLIST=net10.0 net11.0") else (set "GENLIST=%TFMS%")
+for %%G in (%GENLIST%) do (
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0generate-benchmarks-md.ps1" -Tfm %%G
+)
 
 popd
 echo.
