@@ -1,4 +1,4 @@
-// Copyright (c) DSoftStudio. All rights reserved.
+﻿// Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using DSoftStudio.Mediator.Abstractions;
@@ -54,23 +54,67 @@ namespace DSoftStudio.Mediator
             IPipelineBehavior<TRequest, TResponse>[] behaviors,
             IRequestHandler<TRequest, TResponse> handler);
 
-        // Written during registration, read from scope construction.
-        private static ChainFactory? _factory;
-
-        /// <summary>Registers the generated chain factory. Called from generated registration code.</summary>
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        public static void Register(ChainFactory factory) => Volatile.Write(ref _factory, factory);
+        // One candidate per composition root, accumulated during registration and read from scope
+        // construction. A single file can build several IServiceCollection instances with DIFFERENT
+        // chains for the same pair, so a single slot would let the last registration silently discard
+        // the others. Published as a whole array; never mutated after publication.
+        private static ChainFactory[]? _factories;
 
         /// <summary>
-        /// Returns the specialized chain when one is registered AND its verification passes;
-        /// <see langword="null"/> otherwise, meaning the caller should build the chain link by link.
+        /// Registers one candidate chain factory. Called from generated registration code, once per
+        /// predicted composition root.
+        /// </summary>
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public static void Register(ChainFactory factory)
+        {
+            var current = Volatile.Read(ref _factories);
+
+            ChainFactory[] next;
+            if (current is null)
+            {
+                next = [factory];
+            }
+            else
+            {
+                // Idempotent: PrecompilePipelines may run more than once over the same collection.
+                foreach (var existing in current)
+                {
+                    if (existing == factory)
+                        return;
+                }
+
+                next = new ChainFactory[current.Length + 1];
+                Array.Copy(current, next, current.Length);
+                next[current.Length] = factory;
+            }
+
+            Volatile.Write(ref _factories, next);
+        }
+
+        /// <summary>
+        /// Returns the first candidate whose verification passes against the resolved instances, or
+        /// <see langword="null"/> when none matches — meaning the caller should build link by link.
+        /// Runs once per DI scope, so trying a handful of candidates is free.
         /// </summary>
         internal static IRequestHandler<TRequest, TResponse>? TryBuild(
             IPipelineBehavior<TRequest, TResponse>[] behaviors,
             IRequestHandler<TRequest, TResponse> handler)
-            => Volatile.Read(ref _factory)?.Invoke(behaviors, handler);
+        {
+            var factories = Volatile.Read(ref _factories);
+            if (factories is null)
+                return null;
 
-        /// <summary>Test-only: the factory is process-global, so suites need isolation between cases.</summary>
-        internal static void ResetForTests() => Volatile.Write(ref _factory, null);
+            foreach (var factory in factories)
+            {
+                var chain = factory(behaviors, handler);
+                if (chain is not null)
+                    return chain;
+            }
+
+            return null;
+        }
+
+        /// <summary>Test-only: the table is process-global, so suites need isolation between cases.</summary>
+        internal static void ResetForTests() => Volatile.Write(ref _factories, null);
     }
 }

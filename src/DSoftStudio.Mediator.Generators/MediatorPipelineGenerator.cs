@@ -229,15 +229,17 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
         // Predicted behavior chain per pair, from registration syntax. Absent for any pair whose
         // registrations this generator cannot read; present-but-wrong is caught at runtime by the
         // emitted factory's exact-type verification. Either way the fallback is today's per-link chain.
-        var predictedChains = new Dictionary<(string Request, string Response), List<string>>();
+        var predictedChains = new Dictionary<(string Request, string Response), List<List<string>>>();
         if (!behaviorRegistrations.IsDefaultOrEmpty)
         {
             foreach (var handler in registrations)
             {
-                var predicted = BehaviorRegistrationScanner.PredictChain(
+                var predicted = BehaviorRegistrationScanner.PredictChains(
                     behaviorRegistrations, handler.RequestType, handler.ResponseType);
 
-                if (predicted is { Count: > 0 })
+                predicted.RemoveAll(static c => c.Count == 0);
+
+                if (predicted.Count > 0)
                     predictedChains[(handler.RequestType, handler.ResponseType)] = predicted;
             }
         }
@@ -296,14 +298,20 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
             sb.AppendLine(
                 $"            RegisterPipeline<{handler.RequestType}, {handler.ResponseType}>(services);");
 
-            if (predictedChains.ContainsKey((handler.RequestType, handler.ResponseType)))
+            if (predictedChains.TryGetValue((handler.RequestType, handler.ResponseType), out var candidates))
             {
                 var suffix = HandlerDiscovery.SanitizeIdentifier(handler.RequestType)
                              + "_" + HandlerDiscovery.SanitizeIdentifier(handler.ResponseType);
 
-                sb.AppendLine(
-                    $"            global::DSoftStudio.Mediator.BehaviorChainRegistry<{handler.RequestType}, {handler.ResponseType}>"
-                    + $".Register(__ChainFactory_{suffix}.Build);");
+                // One candidate per composition root. The registry tries them in order and keeps the
+                // first whose exact-type verification passes, so a file that builds several containers
+                // for the same pair gets the right chain in each.
+                for (int c = 0; c < candidates.Count; c++)
+                {
+                    sb.AppendLine(
+                        $"            global::DSoftStudio.Mediator.BehaviorChainRegistry<{handler.RequestType}, {handler.ResponseType}>"
+                        + $".Register(__ChainFactory{c}_{suffix}.Build);");
+                }
             }
         }
 
@@ -452,7 +460,10 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
         // Specialized chains live in this same namespace and file: they are `file`-local, and
         // RegisterPipelineChains above references their factories by simple name.
         foreach (var entry in predictedChains)
-            EmitSpecializedChain(sb, entry.Key.Request, entry.Key.Response, entry.Value);
+        {
+            for (int c = 0; c < entry.Value.Count; c++)
+                EmitSpecializedChain(sb, entry.Key.Request, entry.Key.Response, entry.Value[c], c);
+        }
 
         sb.AppendLine("}");
         sb.AppendLine();
@@ -634,9 +645,10 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
         StringBuilder sb,
         string requestType,
         string responseType,
-        List<string> chain)
+        List<string> chain,
+        int candidateIndex)
     {
-        var suffix = HandlerDiscovery.SanitizeIdentifier(requestType)
+        var suffix = candidateIndex + "_" + HandlerDiscovery.SanitizeIdentifier(requestType)
                      + "_" + HandlerDiscovery.SanitizeIdentifier(responseType);
 
         var handlerIface =
@@ -673,7 +685,7 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
 
         // Verifying factory.
         sb.AppendLine();
-        sb.AppendLine($"    file static class __ChainFactory_{suffix}");
+        sb.AppendLine($"    file static class __ChainFactory{suffix}");
         sb.AppendLine("    {");
         sb.AppendLine($"        internal static {handlerIface}? Build(");
         sb.AppendLine($"            global::DSoftStudio.Mediator.Abstractions.IPipelineBehavior<{requestType}, {responseType}>[] behaviors,");

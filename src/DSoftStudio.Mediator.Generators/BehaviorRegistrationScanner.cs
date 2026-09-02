@@ -41,9 +41,17 @@ internal readonly struct BehaviorRegistration : System.IEquatable<BehaviorRegist
 
     public int Position { get; }
 
+    /// <summary>
+    /// Identity of the IServiceCollection this call registers into, as "file:declarationOffset" of the
+    /// receiver symbol. One composition root has one key; a file that builds SEVERAL collections — the
+    /// shape DSoftSendBenchmarks uses, three containers for the same pair — produces several, and their
+    /// registrations must never be merged into one predicted chain.
+    /// </summary>
+    public string ReceiverKey { get; }
+
     public BehaviorRegistration(
         string implTypeName, bool isOpenGeneric, string requestType, string responseType,
-        string filePath, int position)
+        string filePath, int position, string receiverKey)
     {
         ImplTypeName = implTypeName;
         IsOpenGeneric = isOpenGeneric;
@@ -51,6 +59,7 @@ internal readonly struct BehaviorRegistration : System.IEquatable<BehaviorRegist
         ResponseType = responseType;
         FilePath = filePath;
         Position = position;
+        ReceiverKey = receiverKey;
     }
 
     public bool Equals(BehaviorRegistration other)
@@ -59,7 +68,8 @@ internal readonly struct BehaviorRegistration : System.IEquatable<BehaviorRegist
            && RequestType == other.RequestType
            && ResponseType == other.ResponseType
            && FilePath == other.FilePath
-           && Position == other.Position;
+           && Position == other.Position
+           && ReceiverKey == other.ReceiverKey;
 
     public override bool Equals(object obj) => obj is BehaviorRegistration o && Equals(o);
 
@@ -74,6 +84,7 @@ internal readonly struct BehaviorRegistration : System.IEquatable<BehaviorRegist
             h = (h * 31) + (ResponseType?.GetHashCode() ?? 0);
             h = (h * 31) + (FilePath?.GetHashCode() ?? 0);
             h = (h * 31) + Position;
+            h = (h * 31) + (ReceiverKey?.GetHashCode() ?? 0);
             return h;
         }
     }
@@ -143,10 +154,32 @@ internal static class BehaviorRegistrationScanner
 
         var path = invocation.SyntaxTree.FilePath;
         var pos = invocation.SpanStart;
+        var receiver = ReceiverKeyOf(ctx, invocation, ct);
 
         return name == "AddOpenBehavior"
-            ? ResolveAddOpenBehavior(ctx, invocation, method, path, pos, ct)
-            : ResolveAddServiceDescriptor(ctx, invocation, method, path, pos, ct);
+            ? ResolveAddOpenBehavior(ctx, invocation, method, path, pos, receiver, ct)
+            : ResolveAddServiceDescriptor(ctx, invocation, method, path, pos, receiver, ct);
+    }
+
+    /// <summary>
+    /// Stable identity for the receiver of the registration call — the IServiceCollection (or the
+    /// MediatorBuilder, which wraps one). Uses the DECLARATION site of the symbol, so two locals both
+    /// named "services" in different blocks are distinct, which is exactly the case that must not be
+    /// merged. Falls back to the receiver's source text when there is no symbol to anchor to.
+    /// </summary>
+    private static string ReceiverKeyOf(
+        GeneratorSyntaxContext ctx, InvocationExpressionSyntax invocation, CancellationToken ct)
+    {
+        var receiver = ((MemberAccessExpressionSyntax)invocation.Expression).Expression;
+        var symbol = ctx.SemanticModel.GetSymbolInfo(receiver, ct).Symbol;
+
+        if (symbol is not null && symbol.Locations.Length > 0)
+        {
+            var loc = symbol.Locations[0];
+            return loc.SourceTree?.FilePath + ":" + loc.SourceSpan.Start;
+        }
+
+        return receiver.ToString();
     }
 
     /// <summary>
@@ -155,7 +188,7 @@ internal static class BehaviorRegistrationScanner
     /// </summary>
     private static BehaviorRegistration? ResolveAddOpenBehavior(
         GeneratorSyntaxContext ctx, InvocationExpressionSyntax invocation, IMethodSymbol method,
-        string path, int pos, CancellationToken ct)
+        string path, int pos, string receiver, CancellationToken ct)
     {
         if (method.ContainingType?.ToDisplayString() != "DSoftStudio.Mediator.MediatorBuilder")
             return null;
@@ -169,7 +202,7 @@ internal static class BehaviorRegistrationScanner
 
         return ImplementsPipelineBehavior(impl.OriginalDefinition) && IsNameable(impl.OriginalDefinition)
             ? new BehaviorRegistration(
-                impl.OriginalDefinition.ToDisplayString(BaseNameFormat), true, "", "", path, pos)
+                impl.OriginalDefinition.ToDisplayString(BaseNameFormat), true, "", "", path, pos, receiver)
             : null;
     }
 
@@ -178,7 +211,7 @@ internal static class BehaviorRegistrationScanner
     /// </summary>
     private static BehaviorRegistration? ResolveAddServiceDescriptor(
         GeneratorSyntaxContext ctx, InvocationExpressionSyntax invocation, IMethodSymbol method,
-        string path, int pos, CancellationToken ct)
+        string path, int pos, string receiver, CancellationToken ct)
     {
         // Closed generic: AddScoped<IPipelineBehavior<Req,Res>, Impl>()
         if (method.TypeArguments.Length == 2
@@ -188,7 +221,7 @@ internal static class BehaviorRegistrationScanner
             && IsNameable(closedImpl))
         {
             return new BehaviorRegistration(
-                closedImpl.ToDisplayString(FullNameFormat), false, req, res, path, pos);
+                closedImpl.ToDisplayString(FullNameFormat), false, req, res, path, pos, receiver);
         }
 
         // Open generic: AddScoped(typeof(IPipelineBehavior<,>), typeof(Impl<,>))
@@ -208,7 +241,7 @@ internal static class BehaviorRegistrationScanner
                    && ImplementsPipelineBehavior(implType.OriginalDefinition)
                    && IsNameable(implType.OriginalDefinition)
                 ? new BehaviorRegistration(
-                    implType.OriginalDefinition.ToDisplayString(BaseNameFormat), true, "", "", path, pos)
+                    implType.OriginalDefinition.ToDisplayString(BaseNameFormat), true, "", "", path, pos, receiver)
                 : null;
         }
 
@@ -216,7 +249,7 @@ internal static class BehaviorRegistrationScanner
         if (IsClosedPipelineBehavior(svcType, out var creq, out var cres) && IsNameable(implType))
         {
             return new BehaviorRegistration(
-                implType.ToDisplayString(FullNameFormat), false, creq, cres, path, pos);
+                implType.ToDisplayString(FullNameFormat), false, creq, cres, path, pos, receiver);
         }
 
         return null;
@@ -273,56 +306,80 @@ internal static class BehaviorRegistrationScanner
     }
 
     /// <summary>
-    /// Builds the predicted ordered chain for one (request, response) pair, or null when no prediction
-    /// should be made.
+    /// Builds the predicted ordered chains for one (request, response) pair — one per composition
+    /// root, since a file may build several IServiceCollection instances and their registrations are
+    /// different chains, not one long one.
     /// <para>
-    /// Open-generic registrations apply to every pair; closed ones only to their own. Order is source
-    /// order, which is the container's order because the closure splices in place.
+    /// Grouping by receiver matters in practice: DSoftSendBenchmarks builds THREE collections for the
+    /// same pair, and merging them predicted a 13-link chain that could never match any of the three.
+    /// The factory returned null on every dispatch and 13 link types were emitted for nothing.
     /// </para>
     /// <para>
-    /// Bails out (returns null, so the pair keeps per-link construction) when the registrations that
-    /// would form the chain are spread across MORE THAN ONE FILE. Source position only orders within a
-    /// file, and the relative order of two composition-root files is a build-time fact this generator
-    /// cannot see. A composition root in one file is the overwhelmingly common shape; anything else
-    /// simply does not get the specialized tier.
+    /// Order within a group is source order, which is the container's order because
+    /// CloseAllOpenGenericBehaviors splices closed descriptors in at the open descriptor's index.
+    /// Groups whose registrations span more than one FILE are dropped: source position only orders
+    /// within a file, and the relative order of two files is not something a generator can see.
     /// </para>
     /// </summary>
-    public static List<string>? PredictChain(
+    public static List<List<string>> PredictChains(
         IEnumerable<BehaviorRegistration> registrations,
         string requestType,
         string responseType)
     {
-        var applicable = new List<BehaviorRegistration>();
+        var groups = new Dictionary<string, List<BehaviorRegistration>>();
 
         foreach (var r in registrations)
         {
-            if (r.IsOpenGeneric
-                || (r.RequestType == requestType && r.ResponseType == responseType))
+            if (!r.IsOpenGeneric
+                && (r.RequestType != requestType || r.ResponseType != responseType))
             {
-                applicable.Add(r);
+                continue;
             }
+
+            if (!groups.TryGetValue(r.ReceiverKey, out var list))
+            {
+                list = new List<BehaviorRegistration>();
+                groups[r.ReceiverKey] = list;
+            }
+
+            list.Add(r);
         }
 
-        if (applicable.Count == 0)
-            return null;
+        var result = new List<List<string>>();
 
-        var file = applicable[0].FilePath;
-        foreach (var r in applicable)
+        foreach (var group in groups.Values)
         {
-            if (r.FilePath != file)
-                return null;
+            if (group.Count == 0)
+                continue;
+
+            var file = group[0].FilePath;
+            var singleFile = true;
+
+            foreach (var r in group)
+            {
+                if (r.FilePath != file)
+                {
+                    singleFile = false;
+                    break;
+                }
+            }
+
+            if (!singleFile)
+                continue;
+
+            group.Sort(static (a, b) => a.Position.CompareTo(b.Position));
+
+            var chain = new List<string>(group.Count);
+            foreach (var r in group)
+            {
+                chain.Add(r.IsOpenGeneric
+                    ? r.ImplTypeName + "<" + requestType + ", " + responseType + ">"
+                    : r.ImplTypeName);
+            }
+
+            result.Add(chain);
         }
 
-        applicable.Sort(static (a, b) => a.Position.CompareTo(b.Position));
-
-        var chain = new List<string>(applicable.Count);
-        foreach (var r in applicable)
-        {
-            chain.Add(r.IsOpenGeneric
-                ? r.ImplTypeName + "<" + requestType + ", " + responseType + ">"
-                : r.ImplTypeName);
-        }
-
-        return chain;
+        return result;
     }
 }
