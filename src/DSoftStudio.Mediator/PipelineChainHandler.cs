@@ -75,12 +75,34 @@ namespace DSoftStudio.Mediator
                 _behaviors.Length, _preProcessors.Length,
                 _postProcessors.Length, _exceptionHandlers.Length);
 
-            // Pre-link behavior chain: adapter0 → adapter1 → ... → handler.
-            // Built once at construction (per scope). Zero mutable state on hot path.
+            // Pre-link the behavior chain once, here, per DI scope. Zero mutable state on the hot path.
+            //
+            // Three tiers, best first, each falling back to the next:
+            //
+            //  1. BehaviorChainRegistry — one generated type per link, with BOTH the behavior and the
+            //     next link stored in concrete-typed fields. Every call in the chain binds statically,
+            //     so a pass-through behavior inlines away entirely. Requires the generator to have
+            //     predicted the exact ordered chain; the factory re-verifies the resolved instances and
+            //     returns null if the prediction was wrong.
+            //  2. BehaviorLinkRegistry — one generated type per behavior type, concrete behavior field
+            //     but interface-typed next. Always available, order-independent.
+            //  3. BehaviorHandlerAdapter — both fields interface-typed. What this always used to build.
+            _prelinkedChain = BehaviorChainRegistry<TRequest, TResponse>.TryBuild(_behaviors, _handler)
+                              ?? BuildPerLinkChain();
+        }
+
+        /// <summary>
+        /// Tier 2/3 chain build: one link per behavior, innermost first. Each link is the generated
+        /// concrete-behavior link when <see cref="BehaviorLinkRegistry{TRequest, TResponse}"/> knows the
+        /// behavior's exact runtime type, and <see cref="BehaviorHandlerAdapter{TRequest, TResponse}"/>
+        /// otherwise. Runs only when the fully specialized chain is unavailable or did not verify.
+        /// </summary>
+        private IRequestHandler<TRequest, TResponse> BuildPerLinkChain()
+        {
             IRequestHandler<TRequest, TResponse> chain = _handler;
             for (int i = _behaviors.Length - 1; i >= 0; i--)
-                chain = new BehaviorHandlerAdapter<TRequest, TResponse>(_behaviors[i], chain);
-            _prelinkedChain = chain;
+                chain = BehaviorLinkRegistry<TRequest, TResponse>.Link(_behaviors[i], chain);
+            return chain;
         }
 
         /// <summary>
