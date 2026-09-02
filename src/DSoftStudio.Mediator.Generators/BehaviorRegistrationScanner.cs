@@ -381,9 +381,51 @@ internal static class BehaviorRegistrationScanner
                     : r.ImplTypeName);
             }
 
-            result.Add(chain);
+            if (!AlreadyPredicted(result, chain))
+                result.Add(chain);
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// True when an identical ordered chain has already been predicted for this pair.
+    /// <para>
+    /// Two composition roots can predict the same chain — most often because a root registers one
+    /// extra behavior the generator cannot NAME (a private nested type, say), so what is left of it
+    /// is character-for-character another root's chain. Emitting both produces two byte-identical
+    /// factories and two full sets of link classes, and costs every OTHER root an extra failed
+    /// verification before it reaches its own candidate.
+    /// </para>
+    /// <para>
+    /// Dropping the duplicate cannot change which chains match. BehaviorChainRegistry.TryBuild
+    /// verifies candidates against the RESOLVED behaviors and takes the first that passes, so two
+    /// identical candidates pass on exactly the same inputs and the second could never be reached.
+    /// The root whose extra behavior went unnamed still falls back, as it must — its runtime chain is
+    /// longer than anything predicted for it.
+    /// </para>
+    /// </summary>
+    private static bool AlreadyPredicted(List<List<string>> predicted, List<string> chain)
+    {
+        foreach (var existing in predicted)
+        {
+            if (existing.Count != chain.Count)
+                continue;
+
+            var same = true;
+            for (int i = 0; i < chain.Count; i++)
+            {
+                if (!string.Equals(existing[i], chain[i], System.StringComparison.Ordinal))
+                {
+                    same = false;
+                    break;
+                }
+            }
+
+            if (same)
+                return true;
+        }
+
+        return false;
     }
 }

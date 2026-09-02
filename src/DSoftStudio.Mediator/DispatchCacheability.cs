@@ -29,12 +29,14 @@ namespace DSoftStudio.Mediator
     /// answers for itself.
     /// </para>
     /// <para>
-    /// <b>Why it reads the collection lazily.</b> The map captures the
+    /// <b>Why it re-reads the collection.</b> The map captures the
     /// <see cref="IServiceCollection"/> at <c>AddMediator</c> time but does not read it until the
     /// first dispatch, which is necessarily after <c>BuildServiceProvider()</c>. By then the
     /// descriptor list is final, so a handler the user re-registered AFTER <c>AddMediator</c> — the
     /// documented way to override an auto-detected lifetime, last registration wins — is seen with
-    /// the lifetime the provider actually honours.
+    /// the lifetime the provider actually honours. It also re-reads when the collection has grown since,
+    /// so one collection built into two providers with registrations added in between describes each
+    /// of them correctly rather than freezing the first one's answer for both.
     /// </para>
     /// <para><b>Infrastructure type — not intended for direct use by application code.</b></para>
     /// </summary>
@@ -73,18 +75,27 @@ namespace DSoftStudio.Mediator
     {
         private readonly object _gate = new();
 
-        // Held only until the first read, then dropped so the map does not pin the descriptor list
-        // (and everything the descriptors' implementation instances reference) for the life of the
-        // provider.
-        private IServiceCollection? _services;
-        private FrozenDictionary<Type, bool>? _snapshot;
+        // WEAK on purpose. The map has to be able to re-read the collection — one collection built
+        // into two providers with registrations added in between is the ASP0000-shaped pattern this
+        // library already documents for the aggressive tier, and a snapshot taken for the first
+        // provider describes the second one wrongly. But holding the collection strongly would pin
+        // every descriptor, and their implementation instances, for the life of the container. A weak
+        // reference gives both: while anyone can still mutate the collection we can see the mutation,
+        // and once nobody can reach it any more there is nothing left to invalidate.
+        private readonly WeakReference<IServiceCollection> _services;
 
-        public DispatchLifetimeMap(IServiceCollection services) => _services = services;
+        private FrozenDictionary<Type, bool>? _snapshot;
+        private int _snapshotCount = -1;
+
+        public DispatchLifetimeMap(IServiceCollection services)
+            => _services = new WeakReference<IServiceCollection>(services);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool AllowsCaching(Type serviceType)
         {
-            var snapshot = Volatile.Read(ref _snapshot) ?? BuildSnapshot();
+            var snapshot = Volatile.Read(ref _snapshot);
+            if (snapshot is null || IsStale())
+                snapshot = BuildSnapshot();
 
             if (snapshot.TryGetValue(serviceType, out bool cacheable))
                 return cacheable;
@@ -100,29 +111,54 @@ namespace DSoftStudio.Mediator
             return false;
         }
 
+        /// <summary>
+        /// <see langword="true"/> when the collection has gained or lost registrations since the
+        /// snapshot was taken.
+        /// <para>
+        /// Counting is enough. Descriptors are also REPLACED in place — <c>HandlerLifetimeOptimizer</c>
+        /// raises a handler's lifetime that way — but that runs during registration, before any
+        /// provider exists and therefore before any dispatch could have taken a snapshot. What a
+        /// snapshot can miss is a container configured further and rebuilt, and that always changes the
+        /// count.
+        /// </para>
+        /// </summary>
+        private bool IsStale()
+            => _services.TryGetTarget(out var services)
+               && services.Count != Volatile.Read(ref _snapshotCount);
+
         [MethodImpl(MethodImplOptions.NoInlining)]
         private FrozenDictionary<Type, bool> BuildSnapshot()
         {
             lock (_gate)
             {
                 var existing = Volatile.Read(ref _snapshot);
-                if (existing is not null)
+                if (existing is not null && !IsStale())
                     return existing;
 
-                var services = _services;
-                var builder = new Dictionary<Type, bool>(services?.Count ?? 0);
-
-                if (services is not null)
+                if (!_services.TryGetTarget(out var services))
                 {
-                    // Last registration wins, matching how GetRequiredService resolves — so assign
-                    // unconditionally and let later descriptors overwrite earlier ones.
-                    foreach (var descriptor in services)
-                        builder[descriptor.ServiceType] = descriptor.Lifetime != ServiceLifetime.Transient;
+                    // Unreachable collection: nothing can change it any more, so whatever we have is
+                    // final. An empty snapshot answers "not cacheable" for everything, which is the
+                    // safe direction.
+                    var settled = existing ?? FrozenDictionary<Type, bool>.Empty;
+                    Volatile.Write(ref _snapshot, settled);
+                    return settled;
                 }
 
+                var builder = new Dictionary<Type, bool>(services.Count);
+
+                // Last registration wins, matching how GetRequiredService resolves — so assign
+                // unconditionally and let later descriptors overwrite earlier ones.
+                foreach (var descriptor in services)
+                    builder[descriptor.ServiceType] = descriptor.Lifetime != ServiceLifetime.Transient;
+
                 var snapshot = builder.ToFrozenDictionary();
+
+                // Count before snapshot: a reader that interleaves then sees a stale count against the
+                // OLD snapshot and rebuilds once more, which is wasteful but never wrong. The reverse
+                // order would let it accept the new snapshot under the old count.
+                Volatile.Write(ref _snapshotCount, services.Count);
                 Volatile.Write(ref _snapshot, snapshot);
-                _services = null;
                 return snapshot;
             }
         }

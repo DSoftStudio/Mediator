@@ -354,4 +354,40 @@ public class TransientLifetimeHonouredTests
         // must have reached both handlers exactly once. Neither a dropped nor a doubled dispatch.
         log.Handled.ShouldBe(4);
     }
+
+    [Fact]
+    public async Task OneCollection_RebuiltAfterOverridingAHandler_DoesNotReuseTheFirstAnswer()
+    {
+        // The ASP0000-shaped case: ONE collection built into TWO providers, with registrations added
+        // in between. The lifetime snapshot is taken on the first dispatch, so provider A's answer
+        // would otherwise be frozen in and handed to provider B, whose registrations differ.
+        var services = new ServiceCollection();
+        services.AddMediator().RegisterMediatorHandlers();
+        services.AddSingleton(new LifeCounter());
+        services.AddSingleton<LifeUnitOfWork>();
+        services.AddScoped<IRequestHandler<LifePing, int>, LifePingHandler>();
+
+        // Provider A: a Scoped handler is legitimately reusable. Dispatch once so the snapshot is
+        // taken while that is the winning registration.
+        using (var spA = services.BuildServiceProvider())
+        {
+            await spA.GetRequiredService<IMediator>()
+                .Send(new LifePing(), TestContext.Current.CancellationToken);
+
+            DispatchCacheability.AllowsCaching(spA, typeof(IRequestHandler<LifePing, int>))
+                .ShouldBeTrue("A registered the handler Scoped");
+        }
+
+        // Same collection, handler overridden with a Transient registration, rebuilt.
+        services.AddTransient<IRequestHandler<LifePing, int>, LifePingHandler>();
+
+        using var spB = services.BuildServiceProvider();
+
+        var h1 = spB.GetRequiredService<IRequestHandler<LifePing, int>>();
+        var h2 = spB.GetRequiredService<IRequestHandler<LifePing, int>>();
+        h2.ShouldNotBeSameAs(h1, "provider B really did register the handler Transient");
+
+        DispatchCacheability.AllowsCaching(spB, typeof(IRequestHandler<LifePing, int>))
+            .ShouldBeFalse("B's registration must be read, not A's frozen snapshot");
+    }
 }

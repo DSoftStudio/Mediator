@@ -403,4 +403,78 @@ public class MediatorPipelineGeneratorTests
         code.ShouldContain("MediatorRegistry");
         code.ShouldContain("PrecompilePipelines");
     }
+
+    /// <summary>
+    /// Two composition roots whose NAMEABLE behaviour lists are identical must yield ONE predicted
+    /// chain, not two byte-identical ones.
+    /// <para>
+    /// The shape is not contrived: a root registers one extra behaviour the generator cannot name — a
+    /// private nested type, which chain prediction correctly skips — and what remains of that root is
+    /// character-for-character the next root's chain. DSoftSendBenchmarks hit exactly this. The
+    /// duplicate is not wrong, but it emits a second factory and a second full set of link classes,
+    /// and costs every other root a failed verification before it reaches its own candidate.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void PredictedChains_AreDeduplicated_AcrossRootsThatPredictTheSameChain()
+    {
+        const string twoRootsSameChain = """
+            using System.Threading;
+            using System.Threading.Tasks;
+            using DSoftStudio.Mediator.Abstractions;
+            using Microsoft.Extensions.DependencyInjection;
+
+            namespace TestApp;
+
+            public record Ping(int Id) : IRequest<string>;
+
+            public sealed class PingHandler : IRequestHandler<Ping, string>
+            {
+                public ValueTask<string> Handle(Ping request, CancellationToken ct) => new("ok");
+            }
+
+            public sealed class TraceBehavior : IPipelineBehavior<Ping, string>
+            {
+                public ValueTask<string> Handle(
+                    Ping request, IRequestHandler<Ping, string> next, CancellationToken ct)
+                    => next.Handle(request, ct);
+            }
+
+            public static class RootA
+            {
+                // One extra behaviour the generator cannot name, so what it predicts for this root is
+                // exactly RootB's chain.
+                private sealed class CountingBehavior : IPipelineBehavior<Ping, string>
+                {
+                    public ValueTask<string> Handle(
+                        Ping request, IRequestHandler<Ping, string> next, CancellationToken ct)
+                        => next.Handle(request, ct);
+                }
+
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddScoped(typeof(IPipelineBehavior<Ping, string>), typeof(TraceBehavior));
+                    services.AddScoped(typeof(IPipelineBehavior<Ping, string>), typeof(CountingBehavior));
+                }
+            }
+
+            public static class RootB
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddScoped(typeof(IPipelineBehavior<Ping, string>), typeof(TraceBehavior));
+                }
+            }
+            """;
+
+        var (result, _) = GeneratorTestHarness.Run<MediatorPipelineGenerator>(twoRootsSameChain);
+        var code = result.AllSource();
+
+        var registrations = System.Text.RegularExpressions.Regex.Matches(
+            code,
+            @"BehaviorChainRegistry<global::TestApp\.Ping, string>\.Register");
+
+        registrations.Count.ShouldBe(1,
+            "both roots predict the same single-link chain, so one candidate covers both");
+    }
 }
