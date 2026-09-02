@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Threading;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Operations;
 
@@ -60,10 +61,30 @@ public sealed class MixedRegistrationApiAnalyzer : DiagnosticAnalyzer
     private const string RequestMetadataName =
         "DSoftStudio.Mediator.Abstractions.IRequest`1";
 
+    /// <summary>The pipeline components whose registration order decides whether a chain exists.</summary>
+    private static readonly string[] ComponentMetadataNames =
+    [
+        "DSoftStudio.Mediator.Abstractions.IPipelineBehavior`2",
+        "DSoftStudio.Mediator.Abstractions.IRequestPreProcessor`1",
+        "DSoftStudio.Mediator.Abstractions.IRequestPostProcessor`2",
+        "DSoftStudio.Mediator.Abstractions.IRequestExceptionHandler`2",
+        "DSoftStudio.Mediator.Abstractions.IStreamPipelineBehavior`2",
+        "DSoftStudio.Mediator.Abstractions.IMediatorDispatchObserver",
+    ];
+
+    /// <summary><c>MediatorBuilder</c> methods that register a pipeline component.</summary>
+    private static readonly string[] BuilderComponentMethods =
+    [
+        "AddBehavior", "AddOpenBehavior", "AddStreamBehavior", "AddOpenStreamBehavior",
+        "AddRequestPreProcessor", "AddRequestPostProcessor", "AddRequestExceptionHandler",
+        "AddDispatchObserver",
+    ];
+
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
         ImmutableArray.Create(
             DiagnosticDescriptors.MixedRegistrationApi,
-            DiagnosticDescriptors.MissingHandlerRegistration);
+            DiagnosticDescriptors.MissingHandlerRegistration,
+            DiagnosticDescriptors.ComponentRegisteredAfterPrecompile);
 
     public override void Initialize(AnalysisContext context)
     {
@@ -101,12 +122,25 @@ public sealed class MixedRegistrationApiAnalyzer : DiagnosticAnalyzer
             var unregisteredAddMediatorSites = new ConcurrentBag<Location>();
             int registersHandlersSomewhere = 0; // set-once via Interlocked from concurrent block actions
 
+            var componentTypes = new List<INamedTypeSymbol>(ComponentMetadataNames.Length);
+            foreach (var metadataName in ComponentMetadataNames)
+            {
+                var symbol = compilation.GetTypeByMetadataName(metadataName);
+                if (symbol is not null)
+                    componentTypes.Add(symbol);
+            }
+
             compilationStart.RegisterOperationBlockStartAction(blockStart =>
             {
                 // Per-scope (method body) state — DSOFT007 only. Each block gets its own closure instance.
                 var gate = new object();
                 var redundantCalls = new List<(Location Location, string Method, string Action)>();
                 bool hasBuilderOverload = false;
+
+                // DSOFT010 (per-scope): where the pipeline scans happen, and where components get
+                // registered, so the end action can pair them up by position on the same collection.
+                var scanPoints = new List<(int End, string Method, ISymbol? Receiver)>();
+                var componentAdds = new List<(Location Location, int Start, string Method, ISymbol? Receiver)>();
 
                 blockStart.RegisterOperationAction(opContext =>
                 {
@@ -122,6 +156,27 @@ public sealed class MixedRegistrationApiAnalyzer : DiagnosticAnalyzer
                     {
                         Interlocked.Exchange(ref registersHandlersSomewhere, 1);
                         return;
+                    }
+
+                    // ── DSOFT010 probes ────────────────────────────────────────────────────────────
+                    // These sit ABOVE the mediator-namespace gate below, like the manual-handler probe
+                    // and for the same reason: the registrations this rule exists to catch —
+                    // services.AddTransient(typeof(IPipelineBehavior<,>), typeof(X<,>)) and friends — are
+                    // Microsoft.Extensions.DependencyInjection methods and would never reach the switch.
+                    if (IsPipelineScan(method))
+                    {
+                        // The CONTAINING STATEMENT is the boundary, not the invocation: that keeps a fluent
+                        // chain (.RegisterMediatorHandlers().PrecompilePipelines()) and the
+                        // AddMediator(configure) lambda body on the "before" side, where they belong.
+                        var statement = invocation.Syntax.FirstAncestorOrSelf<StatementSyntax>() ?? invocation.Syntax;
+                        lock (gate)
+                            scanPoints.Add((statement.Span.End, method.Name + "()", ReceiverSymbol(invocation)));
+                    }
+                    else if (IsComponentRegistration(invocation, method, componentTypes))
+                    {
+                        lock (gate)
+                            componentAdds.Add((invocation.Syntax.GetLocation(), invocation.Syntax.SpanStart,
+                                               method.Name + "()", ReceiverSymbol(invocation)));
                     }
 
                     // Only the mediator's own registration methods (avoids matching an unrelated
@@ -168,6 +223,29 @@ public sealed class MixedRegistrationApiAnalyzer : DiagnosticAnalyzer
                             blockEnd.ReportDiagnostic(Diagnostic.Create(
                                 DiagnosticDescriptors.MixedRegistrationApi, location, method, action));
                     }
+
+                    // ── DSOFT010: a component registered after a scan on the SAME collection ──
+                    // A later scan is deliberately NOT treated as a repair: a second PrecompilePipelines()
+                    // returns early on its sentinel and changes nothing, so the registration is still late.
+                    foreach (var add in componentAdds)
+                    {
+                        if (add.Receiver is null)
+                            continue;
+
+                        foreach (var scan in scanPoints)
+                        {
+                            if (scan.Receiver is null || add.Start <= scan.End)
+                                continue;
+
+                            if (!SymbolEqualityComparer.Default.Equals(add.Receiver, scan.Receiver))
+                                continue;
+
+                            blockEnd.ReportDiagnostic(Diagnostic.Create(
+                                DiagnosticDescriptors.ComponentRegisteredAfterPrecompile,
+                                add.Location, add.Method, scan.Method));
+                            break;
+                        }
+                    }
                 });
             });
 
@@ -184,6 +262,108 @@ public sealed class MixedRegistrationApiAnalyzer : DiagnosticAnalyzer
                         DiagnosticDescriptors.MissingHandlerRegistration, location));
             });
         });
+    }
+
+    /// <summary>
+    /// True for the calls that snapshot the <c>IServiceCollection</c>: the three <c>Precompile*</c>
+    /// methods and the <c>AddMediator(Action&lt;MediatorBuilder&gt;)</c> overload, which ends by
+    /// precompiling.
+    /// </summary>
+    private static bool IsPipelineScan(IMethodSymbol method)
+        => method.Name is "PrecompilePipelines" or "PrecompileStreams" or "PrecompileNotifications"
+           || (method.Name == "AddMediator" && HasMediatorBuilderParameter(method));
+
+    /// <summary>
+    /// True when the invocation registers a pipeline component. Three shapes are recognised, and
+    /// anything else is left alone — DSOFT010 is a Warning, and users build with
+    /// <c>TreatWarningsAsErrors</c>, so a miss is far cheaper than a false positive.
+    /// </summary>
+    private static bool IsComponentRegistration(
+        IInvocationOperation invocation, IMethodSymbol method, List<INamedTypeSymbol> componentTypes)
+    {
+        // (a) A MediatorBuilder method that registers a component.
+        if (method.ContainingType is { Name: "MediatorBuilder" })
+        {
+            foreach (var name in BuilderComponentMethods)
+                if (method.Name == name)
+                    return true;
+        }
+
+        // (b) A generic Add*/TryAdd* whose type arguments name a component interface, e.g.
+        //     services.AddTransient<IPipelineBehavior<Ping, int>, LoggingBehavior>().
+        if (method.Name.StartsWith("Add", StringComparison.Ordinal)
+            || method.Name.StartsWith("TryAdd", StringComparison.Ordinal))
+        {
+            foreach (var argument in method.TypeArguments)
+                if (MatchesComponent(argument, componentTypes))
+                    return true;
+        }
+
+        // (c) Any typeof(...) argument naming a component interface — covers the open-generic form
+        //     services.AddTransient(typeof(IPipelineBehavior<,>), typeof(Logging<,>)) and
+        //     services.Add(new ServiceDescriptor(typeof(IPipelineBehavior<,>), ...)).
+        foreach (var argument in invocation.Arguments)
+            if (ContainsComponentTypeOf(argument.Value, componentTypes))
+                return true;
+
+        return false;
+    }
+
+    private static bool ContainsComponentTypeOf(IOperation? operation, List<INamedTypeSymbol> componentTypes)
+    {
+        switch (operation)
+        {
+            case null:
+                return false;
+            case ITypeOfOperation typeOf:
+                return MatchesComponent(typeOf.TypeOperand, componentTypes);
+            // new ServiceDescriptor(typeof(IPipelineBehavior<,>), ...) reaches us as the argument.
+            case IObjectCreationOperation creation:
+                foreach (var argument in creation.Arguments)
+                    if (ContainsComponentTypeOf(argument.Value, componentTypes))
+                        return true;
+                return false;
+            case IConversionOperation conversion:
+                return ContainsComponentTypeOf(conversion.Operand, componentTypes);
+            default:
+                return false;
+        }
+    }
+
+    private static bool MatchesComponent(ITypeSymbol? type, List<INamedTypeSymbol> componentTypes)
+    {
+        if (type is not INamedTypeSymbol named)
+            return false;
+
+        var definition = named.OriginalDefinition;
+        foreach (var component in componentTypes)
+            if (SymbolEqualityComparer.Default.Equals(definition, component))
+                return true;
+
+        return false;
+    }
+
+    /// <summary>
+    /// The <c>IServiceCollection</c> an invocation acts on, so DSOFT010 only pairs a registration with
+    /// a scan of the SAME collection. Returns <c>null</c> when it cannot be resolved to a symbol, and
+    /// the rule then stays silent rather than guessing.
+    /// </summary>
+    private static ISymbol? ReceiverSymbol(IInvocationOperation invocation)
+    {
+        var receiver = invocation.Instance
+                       ?? (invocation.Arguments.Length > 0 ? invocation.Arguments[0].Value : null);
+
+        while (receiver is IConversionOperation conversion)
+            receiver = conversion.Operand;
+
+        return receiver switch
+        {
+            ILocalReferenceOperation local => local.Local,
+            IParameterReferenceOperation parameter => parameter.Parameter,
+            IPropertyReferenceOperation property => property.Property, // builder.Services
+            IFieldReferenceOperation field => field.Field,
+            _ => null,
+        };
     }
 
     /// <summary>

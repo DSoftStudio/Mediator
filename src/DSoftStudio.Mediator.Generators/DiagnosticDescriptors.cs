@@ -108,6 +108,30 @@ namespace DSoftStudio.Mediator.Generators
                         + "Use either the builder overload (recommended) or the individual methods, "
                         + "but not both.");
 
+        /// <summary>
+        /// DSOFT010 — a pipeline component registered after the scan that decides whether a chain
+        /// exists for it. Reported per registration block, on the same service collection.
+        /// </summary>
+        public static readonly DiagnosticDescriptor ComponentRegisteredAfterPrecompile = new(
+            id: "DSOFT010",
+            title: "Pipeline component registered after the mediator pipeline scan",
+            messageFormat: "'{0}' registers a pipeline component after '{1}' has already scanned the "
+                         + "service collection. The scan decides, per request type, whether a pipeline chain "
+                         + "is built AT ALL, and freezes its lifetime; a component added afterwards may never "
+                         + "run — silently. Move it before '{1}'.",
+            category: "DSoftStudio.Mediator.Usage",
+            defaultSeverity: DiagnosticSeverity.Warning,
+            isEnabledByDefault: true,
+            description: "PrecompilePipelines() / PrecompileStreams() / AddMediator(builder => { }) inspect "
+                        + "the IServiceCollection at the point they are called. If a request/response pair has "
+                        + "no behavior, processor or exception handler registered by then, no pipeline chain is "
+                        + "built for it and anything registered afterwards never runs — with no exception and no "
+                        + "diagnostic at runtime. Where a chain does exist, the scan has already fixed its "
+                        + "lifetime, so a Transient component registered later is constructed once and shared. "
+                        + "Calling the scan a second time does not repair either case. This rule sees only "
+                        + "registrations in the same method on the same collection; ValidateMediatorHandlers() "
+                        + "catches the rest, including registrations in other methods and assemblies.");
+
         public static readonly DiagnosticDescriptor MissingHandlerRegistration = new(
             id: "DSOFT008",
             title: "AddMediator() registers core services but no handlers",

@@ -34,8 +34,8 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
                 var (external, skippedInternals) = ReferencedAssemblyScanner.GetExternalDIHandlers(compilation);
                 var array = external
                     .Select(e => new HandlerInfo(e.ServiceType, e.ImplementationType, e.IsStateless))
-                    .OrderBy(static h => h.InterfaceType)
-                    .ThenBy(static h => h.HandlerType)
+                    .OrderBy(static h => h.InterfaceType, StringComparer.Ordinal)
+                    .ThenBy(static h => h.HandlerType, StringComparer.Ordinal)
                     .ToArray();
                 var skippedArray = skippedInternals.ToArray();
                 return (
@@ -105,16 +105,16 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
 
             var localRegistrations = localHandlers
                 .Distinct()
-                .OrderBy(static h => h.InterfaceType)
-                .ThenBy(static h => h.HandlerType)
+                .OrderBy(static h => h.InterfaceType, StringComparer.Ordinal)
+                .ThenBy(static h => h.HandlerType, StringComparer.Ordinal)
                 .ToArray();
 
             // Merge local + external, deduplicate
             var allRegistrations = localRegistrations
                 .Concat(external)
                 .Distinct()
-                .OrderBy(static h => h.InterfaceType)
-                .ThenBy(static h => h.HandlerType)
+                .OrderBy(static h => h.InterfaceType, StringComparer.Ordinal)
+                .ThenBy(static h => h.HandlerType, StringComparer.Ordinal)
                 .ToArray();
 
             // Local self-handlers only - external self-handlers are now discovered
@@ -122,7 +122,7 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
             var localSelfHandlers = selfHandlers.IsDefaultOrEmpty
                 ? []
                 : selfHandlers.Distinct()
-                    .OrderBy(static h => h.RequestType)
+                    .OrderBy(static h => h.RequestType, StringComparer.Ordinal)
                     .ToArray();
 
             // Detect duplicate request/stream handlers (silent "last wins" bug)
@@ -758,6 +758,9 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
             sb.AppendLine("        using var scope = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.CreateScope(serviceProvider);");
             sb.AppendLine("        var sp = scope.ServiceProvider;");
             sb.AppendLine("        var errors = new global::System.Collections.Generic.List<global::System.Exception>();");
+            // Tracks whether ANY request type ended up with a pipeline chain. A dispatch observer is
+            // not pair-specific, so it is checked once at the end rather than reported per pair.
+            sb.AppendLine("        var anyChain = false;");
             sb.AppendLine();
 
             var emittedInterfaces = new System.Collections.Generic.HashSet<string>();
@@ -778,7 +781,55 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
                     // Validate pipeline chain if registered (behaviors, processors, exception handlers)
                     var chainType = handler.InterfaceType.Replace(RequestPrefix,
                         "global::DSoftStudio.Mediator.PipelineChainHandler<");
-                    sb.AppendLine($"        try {{ global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetService<{chainType}>(sp); }}");
+
+                    // The registration-order trap: PrecompilePipelines() decides PER PAIR whether a chain
+                    // is built at all, and freezes its lifetime. A component registered after that scan
+                    // either never runs (no chain was built) or runs under a lifetime that was decided
+                    // without it. Both are silent. The validator is the only place that can see it,
+                    // because it looks at the built container rather than at one syntax tree.
+                    var behaviorType = handler.InterfaceType.Replace(RequestPrefix,
+                        "global::DSoftStudio.Mediator.Abstractions.IPipelineBehavior<");
+                    var postType = handler.InterfaceType.Replace(RequestPrefix,
+                        "global::DSoftStudio.Mediator.Abstractions.IRequestPostProcessor<");
+                    var excType = handler.InterfaceType.Replace(RequestPrefix,
+                        "global::DSoftStudio.Mediator.Abstractions.IRequestExceptionHandler<");
+
+                    var probes = new StringBuilder();
+                    probes.Append($"__AnyService<{behaviorType}>(sp)");
+                    // IRequestPreProcessor takes the request type only, so it needs the argument
+                    // extracted rather than the tail reused. Skipped when it cannot be extracted.
+                    var requestArg = TryGetFirstTypeArgument(handler.InterfaceType, RequestPrefix);
+                    if (requestArg is not null)
+                        probes.Append($" || __AnyService<global::DSoftStudio.Mediator.Abstractions.IRequestPreProcessor<{requestArg}>>(sp)");
+                    probes.Append($" || __AnyService<{postType}>(sp)");
+                    probes.Append($" || __AnyService<{excType}>(sp)");
+
+                    sb.AppendLine("        try");
+                    sb.AppendLine("        {");
+                    sb.AppendLine($"            var chain = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetService<{chainType}>(sp);");
+                    sb.AppendLine("            if (chain is null)");
+                    sb.AppendLine("            {");
+                    sb.AppendLine($"                if ({probes})");
+                    sb.AppendLine("                    errors.Add(new global::System.InvalidOperationException(");
+                    sb.AppendLine($"                        \"Pipeline components are registered for {EscapeForLiteral(handler.InterfaceType)}, but no pipeline \" +");
+                    sb.AppendLine("                        \"chain was built for it, so those components will NEVER run. They were added to the \" +");
+                    sb.AppendLine("                        \"service collection after PrecompilePipelines() / AddMediator(configure) scanned it. \" +");
+                    sb.AppendLine("                        \"Move the registration before the scan.\"));");
+                    sb.AppendLine("            }");
+                    sb.AppendLine("            else");
+                    sb.AppendLine("            {");
+                    sb.AppendLine("                anyChain = true;");
+                    sb.AppendLine($"                if (__AnyService<{behaviorType}>(sp)");
+                    sb.AppendLine($"                    && global::DSoftStudio.Mediator.DispatchCacheability.AllowsCaching(sp, typeof({chainType}))");
+                    sb.AppendLine($"                    && !global::DSoftStudio.Mediator.DispatchCacheability.AllowsCaching(sp, typeof({behaviorType})))");
+                    sb.AppendLine("                    errors.Add(new global::System.InvalidOperationException(");
+                    sb.AppendLine($"                        \"A Transient pipeline behavior is registered for {EscapeForLiteral(handler.InterfaceType)}, but its \" +");
+                    sb.AppendLine("                        \"pipeline chain is not Transient, so that behavior is constructed once and shared for the \" +");
+                    sb.AppendLine("                        \"life of the chain instead of per dispatch. It was added to the service collection after \" +");
+                    sb.AppendLine("                        \"PrecompilePipelines() / AddMediator(configure) fixed the chain's lifetime. Move the \" +");
+                    sb.AppendLine("                        \"registration before the scan.\"));");
+                    sb.AppendLine("            }");
+                    sb.AppendLine("        }");
                     sb.AppendLine("        catch (global::System.Exception ex) { errors.Add(ex); }");
                 }
                 else if (handler.InterfaceType.StartsWith(NotificationPrefix))
@@ -796,7 +847,21 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
                     // Validate stream pipeline chain if registered
                     var chainType = handler.InterfaceType.Replace(StreamPrefix,
                         "global::DSoftStudio.Mediator.StreamPipelineChainHandler<");
-                    sb.AppendLine($"        try {{ global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetService<{chainType}>(sp); }}");
+                    var streamBehaviorType = handler.InterfaceType.Replace(StreamPrefix,
+                        "global::DSoftStudio.Mediator.Abstractions.IStreamPipelineBehavior<");
+
+                    // Same trap as the request side: PrecompileStreams() decides per pair whether a
+                    // chain exists, and a behavior registered afterwards streams unwrapped in silence.
+                    sb.AppendLine("        try");
+                    sb.AppendLine("        {");
+                    sb.AppendLine($"            var streamChain = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetService<{chainType}>(sp);");
+                    sb.AppendLine($"            if (streamChain is null && __AnyService<{streamBehaviorType}>(sp))");
+                    sb.AppendLine("                errors.Add(new global::System.InvalidOperationException(");
+                    sb.AppendLine($"                    \"Stream pipeline behaviors are registered for {EscapeForLiteral(handler.InterfaceType)}, but no \" +");
+                    sb.AppendLine("                    \"chain was built for it, so the handler streams unwrapped and those behaviors will NEVER \" +");
+                    sb.AppendLine("                    \"run. They were added to the service collection after PrecompileStreams() scanned it. \" +");
+                    sb.AppendLine("                    \"Move the registration before the scan.\"));");
+                    sb.AppendLine("        }");
                     sb.AppendLine("        catch (global::System.Exception ex) { errors.Add(ex); }");
                 }
             }
@@ -812,6 +877,16 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
                 sb.AppendLine("        catch (global::System.Exception ex) { errors.Add(ex); }");
             }
 
+            // A dispatch observer wraps the whole dispatch through the chain, so with no chain
+            // anywhere it never runs. Reported once, not per pair — it is not pair-specific.
+            sb.AppendLine();
+            sb.AppendLine("        if (!anyChain && __AnyService<global::DSoftStudio.Mediator.Abstractions.IMediatorDispatchObserver>(sp))");
+            sb.AppendLine("            errors.Add(new global::System.InvalidOperationException(");
+            sb.AppendLine("                \"An IMediatorDispatchObserver is registered, but no request type has a pipeline chain, \" +");
+            sb.AppendLine("                \"so the observer will NEVER run. It was added to the service collection after \" +");
+            sb.AppendLine("                \"PrecompilePipelines() / AddMediator(configure) scanned it. Move the registration \" +");
+            sb.AppendLine("                \"before the scan.\"));");
+
             sb.AppendLine();
             sb.AppendLine("        if (errors.Count > 0)");
             sb.AppendLine("            throw new global::System.AggregateException(");
@@ -820,9 +895,66 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
         }
 
         sb.AppendLine("    }");
+
+        if (allHandlers.Length > 0 || selfHandlers.Length > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("    /// <summary>True when the container has at least one service of <typeparamref name=\"T\"/>.</summary>");
+            sb.AppendLine("    private static bool __AnyService<T>(global::System.IServiceProvider sp)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        foreach (var _ in global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetServices<T>(sp))");
+            sb.AppendLine("            return true;");
+            sb.AppendLine("        return false;");
+            sb.AppendLine("    }");
+        }
+
         sb.AppendLine("}");
         sb.AppendLine();
     }
+
+    /// <summary>
+    /// Returns the FIRST type argument of a constructed interface string such as
+    /// <c>global::…IRequestHandler&lt;Ns.Ping, int&gt;</c>, or <c>null</c> when there is no
+    /// top-level comma to split on.
+    /// <para>
+    /// The scan has to track nesting: a request type can itself be generic, a tuple or a
+    /// multi-dimensional array (<c>IRequestHandler&lt;GetUser&lt;Tenant, Region&gt;, Result&gt;</c>,
+    /// <c>(int, string)</c>, <c>int[,]</c>), where the first comma in the string is not the separator.
+    /// </para>
+    /// </summary>
+    private static string? TryGetFirstTypeArgument(string constructedInterface, string prefix)
+    {
+        if (!constructedInterface.StartsWith(prefix, StringComparison.Ordinal))
+            return null;
+
+        int depth = 0;
+        for (int i = prefix.Length; i < constructedInterface.Length; i++)
+        {
+            char c = constructedInterface[i];
+
+            if (c == '<' || c == '(' || c == '[')
+            {
+                depth++;
+            }
+            else if (c == '>' || c == ')' || c == ']')
+            {
+                // A '>' at depth 0 closes the interface's own argument list: single argument, no split.
+                if (depth == 0)
+                    return null;
+                depth--;
+            }
+            else if (c == ',' && depth == 0)
+            {
+                return constructedInterface.Substring(prefix.Length, i - prefix.Length);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Escapes a type string for embedding in a generated C# string literal.</summary>
+    private static string EscapeForLiteral(string value)
+        => value.Replace("\\", "\\\\").Replace("\"", "\\\"");
 
     private static void GenerateHandlerValidatorExtension(StringBuilder sb)
     {
