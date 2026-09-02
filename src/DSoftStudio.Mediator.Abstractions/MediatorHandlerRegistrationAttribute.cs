@@ -1,4 +1,4 @@
-// Copyright (c) DSoftStudio. All rights reserved.
+﻿// Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using System;
@@ -27,6 +27,9 @@ namespace DSoftStudio.Mediator.Abstractions
         /// </summary>
         public Type ImplementationType { get; }
 
+        /// <summary>Advertises one handler registration to referencing projects.</summary>
+        /// <param name="serviceType">The service interface type.</param>
+        /// <param name="implementationType">The concrete handler implementation type.</param>
         public MediatorHandlerRegistrationAttribute(Type serviceType, Type implementationType)
         {
             ServiceType = serviceType;

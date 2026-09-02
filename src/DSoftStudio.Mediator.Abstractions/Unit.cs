@@ -53,8 +53,16 @@ namespace DSoftStudio.Mediator.Abstractions
         /// <inheritdoc />
         public override string ToString() => "()";
 
+        /// <summary>Always <see langword="true"/>: <see cref="Unit"/> has exactly one value.</summary>
+        /// <param name="left">Left operand.</param>
+        /// <param name="right">Right operand.</param>
+        /// <returns><see langword="true"/>.</returns>
         public static bool operator ==(Unit left, Unit right) => true;
 
+        /// <summary>Always <see langword="false"/>: <see cref="Unit"/> has exactly one value.</summary>
+        /// <param name="left">Left operand.</param>
+        /// <param name="right">Right operand.</param>
+        /// <returns><see langword="false"/>.</returns>
         public static bool operator !=(Unit left, Unit right) => false;
     }
 }

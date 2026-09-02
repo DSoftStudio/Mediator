@@ -1,9 +1,13 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
 	  <TargetFramework>netstandard2.0</TargetFramework>
 	  <LangVersion>latest</LangVersion>
 	  <Nullable>enable</Nullable>
+
+	  <!-- Ship XML docs in the package. Without this the .nupkg carries no documentation
+	       file at all, so a consumer sees nothing in IntelliSense. -->
+	  <GenerateDocumentationFile>true</GenerateDocumentationFile>
 	  <ImplicitUsings>false</ImplicitUsings>
 
 	  <!-- NuGet -->

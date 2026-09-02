@@ -1,4 +1,4 @@
-// Copyright (c) DSoftStudio. All rights reserved.
+﻿// Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using System;
@@ -18,6 +18,19 @@ namespace DSoftStudio.Mediator.Abstractions
     /// </summary>
     public interface IRequestExceptionHandler<in TRequest, TResponse>
     {
+        /// <summary>
+        /// Observes <paramref name="exception"/>, and decides whether to suppress it.
+        /// </summary>
+        /// <remarks>
+        /// Set <see cref="RequestExceptionHandlerState{TResponse}.Handled"/> through
+        /// <paramref name="state"/>, supplying a response, to suppress the exception and return that
+        /// response to the caller. Leave it alone and the exception propagates.
+        /// </remarks>
+        /// <param name="request">The request whose dispatch threw.</param>
+        /// <param name="exception">The exception thrown during dispatch.</param>
+        /// <param name="state">Carries the decision, and the response to return when suppressing.</param>
+        /// <param name="cancellationToken">Token used to observe cancellation requests.</param>
+        /// <returns>A task that completes when this exception handler is done.</returns>
         ValueTask Handle(
             TRequest request,
             Exception exception,

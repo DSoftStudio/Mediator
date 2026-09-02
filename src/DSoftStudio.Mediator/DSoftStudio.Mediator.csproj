@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 
@@ -6,6 +6,15 @@
 
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
+
+		<!-- Ship XML docs in the package. Without this the .nupkg carries no documentation
+		     file at all, so a consumer sees nothing in IntelliSense. -->
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+		<!-- The infrastructure types this assembly exposes are [EditorBrowsable(Never)]: they exist
+		     for generated code, not for people. The contracts a user implements live in Abstractions
+		     and are documented there. -->
+		<NoWarn>$(NoWarn);CS1591</NoWarn>
 
 		<!-- AOT / trimming -->
 		<IsTrimmable>true</IsTrimmable>

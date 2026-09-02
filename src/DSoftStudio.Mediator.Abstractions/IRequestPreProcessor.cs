@@ -1,4 +1,4 @@
-// Copyright (c) DSoftStudio. All rights reserved.
+﻿// Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using System.Threading;
@@ -21,6 +21,16 @@ namespace DSoftStudio.Mediator.Abstractions
     /// </summary>
     public interface IRequestPreProcessor<in TRequest>
     {
+        /// <summary>
+        /// Runs before the handler for <paramref name="request"/>.
+        /// </summary>
+        /// <remarks>
+        /// Throwing here stops the dispatch: the handler is not invoked. When the work is
+        /// synchronous, return a completed value rather than marking the method <c>async</c>.
+        /// </remarks>
+        /// <param name="request">The request about to be handled.</param>
+        /// <param name="cancellationToken">Token used to observe cancellation requests.</param>
+        /// <returns>A task that completes when this pre-processor is done.</returns>
         ValueTask Process(TRequest request, CancellationToken cancellationToken);
     }
 }
