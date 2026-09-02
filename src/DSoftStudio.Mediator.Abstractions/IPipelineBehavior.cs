@@ -28,11 +28,23 @@ namespace DSoftStudio.Mediator.Abstractions
         /// <para>
         /// Call <c>next.Handle(request, cancellationToken)</c> to continue the chain. Returning
         /// without calling it stops the chain there: no later behavior runs and neither does the
-        /// handler, which is how a behavior serves a cached or rejected result.
+        /// handler, which is how a behavior serves a cached or rejected result. Post-processors are
+        /// NOT skipped by this — they sit outside the chain and receive whatever response the
+        /// behavior returned.
         /// </para>
         /// <para>
-        /// Behaviors must be registered BEFORE <c>PrecompilePipelines()</c>, which is what scans the
-        /// service collection for them. Registering one afterwards leaves it out of the chain.
+        /// Register behaviors BEFORE <c>PrecompilePipelines()</c>. That call decides, per
+        /// request/response pair, whether a pipeline chain is built at all: if the pair has no
+        /// behavior, pre-processor, post-processor or exception handler registered by then, no chain
+        /// exists and anything added afterwards never runs — silently, with no error. Calling
+        /// <c>PrecompilePipelines()</c> a second time does not repair it.
+        /// </para>
+        /// <para>
+        /// The scan records only that a chain is needed; the behaviors themselves are resolved from
+        /// the container when the chain is constructed. So a behavior registered after the scan does
+        /// run when the pair already had one — but the chain's lifetime was fixed by the scan, so a
+        /// <c>Transient</c> behavior added late can end up constructed once and shared. Register the
+        /// whole pipeline before the call.
         /// </para>
         /// <para>
         /// When the behavior does not await anything of its own, return a completed value rather

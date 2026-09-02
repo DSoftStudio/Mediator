@@ -9,7 +9,7 @@ namespace DSoftStudio.Mediator.Abstractions
     /// <summary>
     /// Handles a notification of type <typeparamref name="TNotification"/>.
     /// Multiple handlers can be registered for the same notification type;
-    /// all will be invoked sequentially when the notification is published.
+    /// all will be invoked, one after another, when the notification is published.
     /// </summary>
     /// <typeparam name="TNotification">The notification type, which must implement <see cref="INotification"/>.</typeparam>
     public interface INotificationHandler<in TNotification>
@@ -20,9 +20,21 @@ namespace DSoftStudio.Mediator.Abstractions
         /// </summary>
         /// <remarks>
         /// <para>
-        /// By default handlers run sequentially, in registration order, and if one throws the rest
-        /// are skipped. Register the built-in <c>ParallelNotificationPublisher</c> to run them in
-        /// parallel instead.
+        /// By default the handlers for a notification run sequentially — each one completes before
+        /// the next starts — and if one throws the rest are skipped.
+        /// </para>
+        /// <para>
+        /// Do NOT rely on the order between handlers. The generated dispatch table and the generated
+        /// container registrations are both ordered by handler TYPE NAME, not by the order the
+        /// registrations appear in. The sequence is therefore deterministic, but it is not the one the
+        /// registration code suggests, and renaming a handler changes it. Handlers that must run in a
+        /// given order belong in one handler, or behind a request.
+        /// </para>
+        /// <para>
+        /// Register the built-in <c>ParallelNotificationPublisher</c> to run them concurrently
+        /// instead. It queues each handler to the thread pool, so even handlers written in the
+        /// completed-task style below run in parallel — which means they must then be safe to run
+        /// alongside each other.
         /// </para>
         /// <para>
         /// When the work is synchronous, return a completed task rather than marking the method

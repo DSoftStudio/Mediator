@@ -6,8 +6,20 @@ using DSoftStudio.Mediator.Abstractions;
 namespace DSoftStudio.Mediator
 {
     /// <summary>
-    /// Default notification publisher. Invokes handlers one at a time in registration order.
-    /// If a handler throws, subsequent handlers are not invoked.
+    /// Invokes the handlers one at a time, each completing before the next starts. If a handler
+    /// throws, the ones after it are not invoked.
+    /// <para>
+    /// Despite the name this is NOT what runs by default: by default no
+    /// <see cref="INotificationPublisher"/> is registered at all and <c>Publish</c> goes through
+    /// generated dispatch, which implements the same semantics. This type exists for callers that
+    /// need an <see cref="INotificationPublisher"/> INSTANCE — the OpenTelemetry bridge wraps one —
+    /// and registering it in DI is a de-optimization: it disarms the generated fast path and resolves
+    /// the handlers from the container on every publish, to arrive at identical behavior.
+    /// </para>
+    /// <para>
+    /// The order is whatever the container returns, which for generator-registered handlers is
+    /// handler type name order — not the order the registrations appear in.
+    /// </para>
     /// </summary>
     public sealed class SequentialNotificationPublisher : INotificationPublisher
     {

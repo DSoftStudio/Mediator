@@ -10,7 +10,8 @@ using System.Runtime.CompilerServices;
 namespace DSoftStudio.Mediator
 {
     /// <summary>
-    /// AOT-safe static dispatch table for <see cref="ISender.Send(object, CancellationToken)"/>.
+    /// AOT-safe static dispatch table for the generated <c>Send(object, CancellationToken)</c>
+    /// extension on <see cref="DSoftStudio.Mediator.Abstractions.ISender"/>.
     /// <para>
     /// Populated at startup by the generated <c>MediatorRegistry.RegisterPipelineChains()</c>.
     /// Each request type gets a compile-time generated delegate — no

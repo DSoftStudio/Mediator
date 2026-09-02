@@ -139,6 +139,11 @@ public sealed class MediatorBuilder
     /// The mediator pays nothing when no observer is registered: the dispatch stays on its fast path. Defaults
     /// to <see cref="ServiceLifetime.Singleton"/> — an observer is a stateless cross-cutting adapter.
     /// </para>
+    /// <para>
+    /// Only ONE observer is ever used: the first one registered wins and any others are silently
+    /// ignored. Compose several concerns inside a single adapter rather than registering several
+    /// observers.
+    /// </para>
     /// </summary>
     /// <typeparam name="T">The concrete observer type implementing <see cref="IMediatorDispatchObserver"/>.</typeparam>
     /// <param name="lifetime">The DI service lifetime. Defaults to <see cref="ServiceLifetime.Singleton"/>.</param>
@@ -155,6 +160,10 @@ public sealed class MediatorBuilder
     /// Registers a pre-configured dispatch observer instance (<see cref="IMediatorDispatchObserver"/>). Use
     /// this overload when the observer carries configuration that cannot be resolved from DI (the OpenTelemetry
     /// bridge registers its tracing observer this way). See <see cref="AddDispatchObserver{T}(ServiceLifetime)"/>.
+    /// <para>
+    /// As with the other overload, only the first registered observer is used; any others are
+    /// silently ignored.
+    /// </para>
     /// </summary>
     /// <param name="observer">The observer instance to register as a singleton.</param>
     /// <returns>This builder for chaining.</returns>
@@ -166,8 +175,19 @@ public sealed class MediatorBuilder
     }
 
     /// <summary>
-    /// Replaces the default sequential notification publisher with a parallel implementation
-    /// that invokes all notification handlers concurrently via <see cref="Task.WhenAll"/>.
+    /// Registers <see cref="ParallelNotificationPublisher"/>, which queues every notification
+    /// handler to the thread pool and awaits them together via <see cref="Task.WhenAll"/>.
+    /// <para>
+    /// Handlers then run concurrently whether or not they suspend, so they must be safe to run
+    /// alongside each other. Awaiting the publish rethrows the first failure; the rest are on the
+    /// task's <see cref="Task.Exception"/> aggregate.
+    /// </para>
+    /// <para>
+    /// Registering any <see cref="INotificationPublisher"/> also changes how handlers are resolved
+    /// — through <c>IEnumerable&lt;INotificationHandler&lt;T&gt;&gt;</c> instead of the generated
+    /// concrete factories — which bypasses the generated fast path, costs a container lookup per
+    /// publish, and yields a different singleton instance for a handler that keeps state.
+    /// </para>
     /// </summary>
     /// <returns>This builder for chaining.</returns>
     public MediatorBuilder AddParallelNotificationPublisher()

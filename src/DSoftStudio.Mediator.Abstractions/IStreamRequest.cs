@@ -44,11 +44,17 @@ namespace DSoftStudio.Mediator.Abstractions
         /// }
         /// </code>
         /// <para>
-        /// Annotate the token parameter with <c>[EnumeratorCancellation]</c> so a token passed to
-        /// <c>WithCancellation</c> on the consuming side reaches this method.
+        /// The token passed to <c>CreateStream</c> always arrives here. Annotate the parameter with
+        /// <c>[EnumeratorCancellation]</c> so that a token supplied on the consuming side with
+        /// <c>WithCancellation</c> reaches it too; without the attribute only that second token is
+        /// lost, and the compiler warns (CS8425).
         /// </para>
         /// <para>
-        /// Nothing runs until the returned stream is enumerated.
+        /// Written as an iterator, this body does not start until the returned stream is enumerated.
+        /// Dispatch itself is not deferred: <c>CreateStream</c> resolves the handler and builds the
+        /// behavior chain when it is called, so a stream created inside a scope has already captured
+        /// both even if it is enumerated later — and enumerating it after the scope is disposed uses
+        /// the objects it captured.
         /// </para>
         /// </remarks>
         /// <param name="request">The request to handle.</param>

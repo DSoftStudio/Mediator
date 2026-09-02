@@ -47,11 +47,19 @@ Publish a notification:
 await mediator.Publish(new UserCreated(userId));
 ```
 
-Both `SendWelcomeEmail` and `AuditUserCreation` will execute in registration order. Handlers are resolved from DI, so each can have its own dependencies.
+Both `SendWelcomeEmail` and `AuditUserCreation` will execute, one after another. Handlers are resolved from DI, so each can have its own dependencies.
+
+> **Do not depend on the order between handlers.** The generated dispatch table and the generated
+> container registrations are both ordered by handler *type name*, not by the order the registrations
+> appear in. The sequence is deterministic — the two dispatch routes agree — but it is not the one
+> your registration code suggests, and renaming a handler changes it. Work that must happen in a
+> given sequence belongs in a single handler, or behind a request.
 
 ## Notification Strategies
 
-By default, handlers run **sequentially** in registration order (if one throws, the rest are skipped). To run all handlers **in parallel**, register the built-in `ParallelNotificationPublisher`:
+By default, handlers run **sequentially** — each one completes before the next starts — and if one
+throws, the rest are skipped. To let them overlap, register the built-in
+`ParallelNotificationPublisher`:
 
 ```csharp
 services.AddSingleton<INotificationPublisher, ParallelNotificationPublisher>();
@@ -60,7 +68,29 @@ services.AddSingleton<INotificationPublisher, ParallelNotificationPublisher>();
 | Strategy | Behavior |
 |---|---|
 | Sequential (default) | Handlers run one at a time. If a handler throws, subsequent handlers are not invoked. |
-| `ParallelNotificationPublisher` | All handlers start concurrently via `Task.WhenAll`. If any throw, an `AggregateException` is raised after all complete. |
+| `ParallelNotificationPublisher` | Queues every handler to the thread pool, then awaits them together with `Task.WhenAll`. |
+
+Two things about the parallel publisher are worth knowing:
+
+- **Your handlers must be thread-safe with respect to each other.** Each one is queued to the thread
+  pool, so they run concurrently whether or not they suspend — including handlers written in the
+  recommended `return Task.CompletedTask` style. Shared state they touch needs synchronizing. The
+  cost of this is one thread-pool work item per handler; the default path has none.
+- **`await` surfaces one exception, not an `AggregateException`.** Awaiting the task returned by
+  `Publish` rethrows the first faulted handler's exception. Inspect `Task.Exception` on the
+  un-awaited task if you need them all. Every handler is started regardless, including after one
+  fails — a handler that throws synchronously does not stop the others.
+
+Registering any `INotificationPublisher` — including the built-in `SequentialNotificationPublisher`,
+which reproduces the default semantics — bypasses the generated fast path. Handlers are then
+resolved through `IEnumerable<INotificationHandler<T>>` instead of the generated concrete factories,
+which costs a container lookup per publish and yields a *different* singleton instance for a handler
+that keeps state.
+
+That also changes **which** handlers run. The default path dispatches the table the generator built at
+compile time; a publisher is handed whatever the container returns. A handler the generator could not
+see — registered by hand against `INotificationHandler<T>` — is skipped by default and invoked once a
+publisher is registered.
 
 ## Custom Strategies
 

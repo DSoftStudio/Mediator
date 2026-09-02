@@ -79,6 +79,25 @@ Register as an open generic:
 services.AddTransient(typeof(IStreamPipelineBehavior<,>), typeof(StreamLoggingBehavior<,>));
 ```
 
+> **Register stream behaviors before `PrecompileStreams()`.** That call decides whether a behavior
+> chain is built for each stream pair. If a pair has no behavior registered by then, the handler
+> streams unwrapped and behaviors added afterwards never run — silently, with no error.
+
+Unlike the request pipeline, the stream pipeline composes behaviors only: there are no stream
+pre-processors, post-processors or exception handlers.
+
+### What is deferred, and what is not
+
+Writing the handler or a behavior as an iterator defers *its body* until the caller starts
+enumerating — that is the C# iterator rule, not something the mediator adds. Dispatch itself is
+eager: `CreateStream` resolves the handler and builds the behavior chain when it is called. A stream
+created inside a scope has therefore already captured both, and enumerating it after the scope is
+disposed uses what it captured.
+
+An iterator behavior returns its own stream, so a token the consumer supplies with
+`WithCancellation` stops there. Annotate the token parameter with `[EnumeratorCancellation]` and
+forward the token when enumerating `next`, as the example above does.
+
 ## Using Streams in ASP.NET Minimal APIs
 
 Streams integrate naturally with ASP.NET Core's `IAsyncEnumerable<T>` support for Server-Sent Events (SSE) and chunked responses:

@@ -263,12 +263,28 @@ RegisterMediatorHandlers()   → Source-generated handler registrations
 [Register behaviors, processors, exception handlers, lifetime overrides]
 PrecompilePipelines()        → Scans for IPipelineBehavior, Pre/Post processors, exception handlers
 PrecompileNotifications()    → Builds static dispatch arrays for each INotification type
-PrecompileStreams()           → Builds static factory delegates for each IStreamRequest type
+PrecompileStreams()           → Scans for IStreamPipelineBehavior; builds static factory delegates per IStreamRequest type
 ```
 
 ### Rationale
 - Precompilation inspects the `IServiceCollection` snapshot at that point in time.
 - Avoids runtime discovery or lazy initialization overhead.
+
+### Consequence
+The scan is a freeze point. It decides, per request/response pair, whether a pipeline chain is built
+at all, and fixes its lifetime; a second call returns immediately rather than re-opening the
+decision, so a late registration cannot half-rebuild a pipeline that other code is already
+dispatching through. Sealing is what allows dispatch to be a static-field read.
+
+The cost is that registration order is part of the contract. A pair with no component registered at
+that moment gets no chain, so components added afterwards never run. Where a chain does exist, a
+component added later still runs, but under the lifetime the snapshot chose: a `Transient` component
+added late can be constructed once and shared.
+
+Neither case is silent any more. **DSOFT010** reports the same-method case at compile time, and the
+generated `ValidateMediatorHandlers()` reports both cases at startup — including registrations that
+cross methods and assemblies, which no analyzer can see, because there is no compilation-wide
+ordering to consult.
 
 ### Consequences
 - Registrations after `Precompile*` calls are silently ignored.
@@ -338,8 +354,8 @@ Notification dispatch strategy is configurable via `INotificationPublisher`.
 
 | Strategy | Behavior |
 |----------|----------|
-| Sequential (default) | Handlers run one at a time in registration order. If one throws, the rest are skipped. |
-| `ParallelNotificationPublisher` | All handlers start concurrently via `Task.WhenAll`. If any throw, `AggregateException` is raised after all complete. |
+| Sequential (default) | Handlers run one at a time; each completes before the next starts. If one throws, the rest are skipped. The order between handlers is the generated table's — sorted by handler type name — not registration order. |
+| `ParallelNotificationPublisher` | Queues every handler to the thread pool and awaits them together with `Task.WhenAll`, so handlers run concurrently whether or not they suspend. Awaiting rethrows the first faulted handler's exception, not an `AggregateException`. |
 
 ### Custom strategies
 Users can implement `INotificationPublisher` for fire-and-forget, batched, prioritized, etc.

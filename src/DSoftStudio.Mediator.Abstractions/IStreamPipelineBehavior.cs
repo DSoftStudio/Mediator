@@ -11,8 +11,18 @@ namespace DSoftStudio.Mediator.Abstractions
     /// counterpart of <see cref="IPipelineBehavior{TRequest, TResponse}"/>.
     /// <para>
     /// Behaviors execute in registration order, forming a chain
-    /// <c>Behavior1 → Behavior2 → … → Handler</c>, and must be registered BEFORE
-    /// <c>PrecompileStreams()</c>, which is what scans the service collection for them.
+    /// <c>Behavior1 → Behavior2 → … → Handler</c>.
+    /// </para>
+    /// <para>
+    /// Register them BEFORE <c>PrecompileStreams()</c>. That call decides, per request/response
+    /// pair, whether a chain is built at all: if the pair has no behavior registered by then, the
+    /// handler streams unwrapped and behaviors added afterwards never run — silently, with no
+    /// error. The scan also fixes the chain's lifetime, so a behavior added after it can be
+    /// constructed once and shared even when registered <c>Transient</c>.
+    /// </para>
+    /// <para>
+    /// Unlike the request pipeline, the stream pipeline composes behaviors only: there are no
+    /// stream pre-processors, post-processors or exception handlers.
     /// </para>
     /// </summary>
     /// <typeparam name="TRequest">The request type, which must implement <see cref="IStreamRequest{TResponse}"/>.</typeparam>
@@ -30,8 +40,14 @@ namespace DSoftStudio.Mediator.Abstractions
         /// passes, drop items, or stop enumerating early.
         /// </para>
         /// <para>
-        /// The body runs per enumeration, not per call: nothing happens until the caller starts
-        /// consuming the stream.
+        /// Written as an iterator, the body runs per enumeration rather than per call: nothing
+        /// happens until the caller starts consuming the stream. The chain itself is not deferred —
+        /// it is built when <c>CreateStream</c> is called.
+        /// </para>
+        /// <para>
+        /// An iterator behavior returns its own stream, so annotate its token parameter with
+        /// <c>[EnumeratorCancellation]</c> for the same reason the handler does, and forward the
+        /// token when enumerating <paramref name="next"/>.
         /// </para>
         /// </remarks>
         /// <param name="request">The request travelling through the pipeline.</param>

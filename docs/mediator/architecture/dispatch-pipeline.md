@@ -59,17 +59,17 @@ Service resolution goes directly through `IServiceProvider` — the standard DI 
 ## What Runs per Request
 
 - For requests **without behaviors**, the interceptor resolves the handler directly from DI — Singleton handlers return the cached instance (zero allocation), Transient handlers create a new instance
-- For requests **with behaviors**, a `PipelineChainHandler` is resolved from DI — it passes itself as the `next` parameter to each behavior via interface dispatch, advancing through the behavior array without allocating closures or delegates
-- Pre/post processors and exception handlers execute around the core pipeline when registered
+- For requests **with behaviors**, a `PipelineChainHandler` is resolved — at construction it pre-links the behaviors into a nested chain of single-link adapters, each holding the next step. Dispatch is then a straight sequence of interface calls: no closures, no delegates, and no per-call index state
+- When processors and exception handlers are registered, the order is: `[ exception-handler guard: pre-processors (registration order) → behaviors → handler ]` → post-processors (registration order). The guard covers the pre-processor stage, the behaviors and the handler; a throw from a **post-processor** is deliberately not covered, because a response already exists by then and substituting another would contradict the post-processors that already ran
 
 This design ensures correct lifetime semantics: Singleton handlers are shared across all calls (safe for stateless handlers), Transient handlers get new instances per call (safe for handlers with DI dependencies), and Scoped handlers are shared within the HTTP request scope. Users can always override the auto-detected lifetime by re-registering after `RegisterMediatorHandlers()` — the last registration wins.
 
 ## What This Means at Runtime
 
 - **Handler discovery** is done at compile time — no assembly scanning, no `GetTypes()`, no attribute reflection.
-- **Request dispatch** resolves a new `PipelineChainHandler` from DI per `Send()` call. The handler, behaviors, pre/post processors, and exception handlers are injected by the container.
+- **Request dispatch** obtains the `PipelineChainHandler` through `PipelineChainCache`, which reuses it per provider when the chain's lifetime permits and falls back to resolving it from DI when it does not. The handler, behaviors, pre/post processors, and exception handlers are injected by the container.
 - **Runtime-typed request dispatch** (`Send(object)`) looks up a `FrozenDictionary<Type, DispatchDelegate>` by the request's runtime `Type`, casts `object` → `TRequest`, and enters the same pipeline as `Send<TRequest, TResponse>()`. No reflection, AOT-safe.
-- **Notification dispatch** reads a precompiled `Func<IServiceProvider, INotificationHandler<T>>[]` array — no `GetServices<T>()` enumeration per publish.
+- **Notification dispatch** reads a precompiled `Func<IServiceProvider, INotificationHandler<T>>[]` array — no `GetServices<T>()` enumeration per publish. Registering a custom `INotificationPublisher` opts out of this path and resolves the handlers through `IEnumerable<INotificationHandler<T>>` on every publish.
 - **Stream dispatch** resolves handlers through a precompiled factory delegate stored in `StreamDispatch<TRequest, TResponse>.Handler`.
 
 The result is that every `Send()`, `Send(object)`, `Publish()`, and `CreateStream()` call at runtime uses precompiled dispatch tables with zero discovery overhead.

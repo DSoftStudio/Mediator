@@ -69,6 +69,15 @@ services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
 
 Behaviors execute in registration order. The first registered behavior is the outermost wrapper.
 
+Returning without calling `next.Handle` stops the chain there: no later behavior runs and neither
+does the handler, which is how a behavior serves a cached or rejected result. Post-processors are
+**not** skipped by this — they sit outside the chain and receive whatever response the behavior
+returned.
+
+> **Register behaviors before `PrecompilePipelines()`.** That call decides whether a chain is built
+> for each request/response pair at all; if none exists by then, behaviors added afterwards never
+> run. See [Registration Order](../getting-started/registration-order.md).
+
 ## See Also
 
 - [Pipeline Patterns](../advanced/pipeline-patterns.md) — logging, transactions, and other real-world patterns

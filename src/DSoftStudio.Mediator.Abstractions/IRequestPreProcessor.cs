@@ -15,8 +15,14 @@ namespace DSoftStudio.Mediator.Abstractions
     /// no <c>next</c> parameter, no chain responsibility.
     /// </para>
     /// <para>
-    /// Multiple pre-processors execute in registration order.
-    /// If a pre-processor throws, the handler is not invoked.
+    /// Multiple pre-processors execute in registration order. If one throws, neither the behaviors
+    /// nor the handler are invoked and the post-processors are skipped.
+    /// </para>
+    /// <para>
+    /// The pre-processor stage runs INSIDE the region guarded by
+    /// <see cref="IRequestExceptionHandler{TRequest, TResponse}"/>, so a registered exception handler
+    /// does see a throw from here and may substitute a response for it — which is the point of
+    /// throwing from a validation or authorization pre-processor.
     /// </para>
     /// </summary>
     public interface IRequestPreProcessor<in TRequest>
@@ -25,8 +31,11 @@ namespace DSoftStudio.Mediator.Abstractions
         /// Runs before the handler for <paramref name="request"/>.
         /// </summary>
         /// <remarks>
-        /// Throwing here stops the dispatch: the handler is not invoked. When the work is
-        /// synchronous, return a completed value rather than marking the method <c>async</c>.
+        /// Throwing here stops the dispatch: the handler is not invoked. A registered
+        /// <see cref="IRequestExceptionHandler{TRequest, TResponse}"/> is consulted and may suppress
+        /// the exception, in which case its response is returned and the post-processors run on it.
+        /// When the work is synchronous, return a completed value rather than marking the method
+        /// <c>async</c>.
         /// </remarks>
         /// <param name="request">The request about to be handled.</param>
         /// <param name="cancellationToken">Token used to observe cancellation requests.</param>

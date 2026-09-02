@@ -8,12 +8,20 @@ using System.Threading.Tasks;
 namespace DSoftStudio.Mediator.Abstractions
 {
     /// <summary>
-    /// Handles exceptions thrown during request pipeline execution.
+    /// Handles exceptions thrown by the pre-processors, the behavior chain or the request handler.
     /// <para>
     /// Registered as an open generic or for specific request types.
-    /// If the handler sets <see cref="RequestExceptionHandlerState{TResponse}.Handled"/>
-    /// to <c>true</c> and provides a response, the exception is suppressed and the
-    /// response is returned to the caller. Otherwise, the exception propagates.
+    /// If the handler calls <see cref="RequestExceptionHandlerState{TResponse}.SetHandled"/>,
+    /// the exception is suppressed and that response is returned to the caller.
+    /// Otherwise, the exception propagates.
+    /// </para>
+    /// <para>
+    /// The guarded region covers the <see cref="IRequestPreProcessor{TRequest}"/> stage, the behavior
+    /// chain and the terminal handler. It deliberately stops short of the
+    /// <see cref="IRequestPostProcessor{TRequest, TResponse}"/> stage: by the time a post-processor
+    /// runs, a response already exists, so substituting a different one would leave the
+    /// post-processors that already ran having observed a response that is not the one returned. A
+    /// post-processor that throws therefore propagates to the caller.
     /// </para>
     /// </summary>
     public interface IRequestExceptionHandler<in TRequest, TResponse>
@@ -22,9 +30,20 @@ namespace DSoftStudio.Mediator.Abstractions
         /// Observes <paramref name="exception"/>, and decides whether to suppress it.
         /// </summary>
         /// <remarks>
-        /// Set <see cref="RequestExceptionHandlerState{TResponse}.Handled"/> through
-        /// <paramref name="state"/>, supplying a response, to suppress the exception and return that
-        /// response to the caller. Leave it alone and the exception propagates.
+        /// <para>
+        /// Call <see cref="RequestExceptionHandlerState{TResponse}.SetHandled"/> on
+        /// <paramref name="state"/> to suppress the exception and return that response to the
+        /// caller. Leave it alone and the exception propagates.
+        /// </para>
+        /// <para>
+        /// Handlers are invoked in registration order and the FIRST one to call <c>SetHandled</c>
+        /// wins: the remaining handlers are not invoked. If none does, the original exception is
+        /// rethrown with its stack intact. Suppressing does not skip the post-processors — they run
+        /// on the substituted response, as on a successful dispatch.
+        /// </para>
+        /// <para>
+        /// An exception thrown by this method is not caught: it replaces the original one.
+        /// </para>
         /// </remarks>
         /// <param name="request">The request whose dispatch threw.</param>
         /// <param name="exception">The exception thrown during dispatch.</param>

@@ -47,6 +47,28 @@ Internally, this single call executes in order:
 If you need fine-grained control over the registration order, use the individual methods.
 The `Precompile*` methods inspect the `IServiceCollection` at startup to determine dispatch strategies and chain lifetimes. **All service registrations must happen before the corresponding `Precompile*` call.**
 
+> **Why this is a hard rule.** The `Precompile*` calls are a **freeze point**, by design: they read
+> the collection once, decide the dispatch strategy and the chain lifetimes from what they find, and
+> seal the result so nothing that comes later can perturb what was already built. That is what makes
+> dispatch a static-field read at runtime instead of a lookup.
+>
+> The consequence is that registration order is part of the contract. The scan decides, per
+> request/response pair, whether a pipeline chain is built *at all*. If a pair has no behavior,
+> processor or exception handler registered by then, no chain exists and anything added afterwards
+> never runs. Calling `PrecompilePipelines()` a second time does not re-open the decision — it returns
+> immediately, on purpose, so a late registration cannot half-rebuild a pipeline other code is already
+> dispatching through.
+>
+> Late registration used to be silent. It is now reported in two places: **DSOFT010** at compile time
+> when the registration and the scan are in the same method, and `ValidateMediatorHandlers()` at
+> startup for everything else — including registrations in another method or another assembly, and
+> components captured under a lifetime the scan fixed before they existed.
+>
+> The scan records only that a chain is needed; the components themselves are resolved from the
+> container when the chain is constructed. So a behavior added after the scan *does* run when the
+> pair already had one — but the chain's lifetime was fixed by the scan, so a `Transient` component
+> added late can end up constructed once and shared. Register the whole pipeline up front.
+
 ```csharp
 services
     .AddMediator()                // 1. Core mediator services
@@ -67,7 +89,7 @@ services.AddSingleton<INotificationPublisher, ParallelNotificationPublisher>();
 services
     .PrecompilePipelines()        // scans for IPipelineBehavior, Pre/Post processors, exception handlers
     .PrecompileNotifications()    // builds static dispatch arrays for each INotification type
-    .PrecompileStreams();         // builds static factory delegates for each IStreamRequest type
+    .PrecompileStreams();         // scans for IStreamPipelineBehavior; builds static factory delegates per IStreamRequest type
 ```
 
 ## What Each Method Inspects
@@ -76,7 +98,7 @@ services
 |---|---|---|
 | `PrecompilePipelines()` | `IPipelineBehavior<,>`, `IRequestPreProcessor<>`, `IRequestPostProcessor<,>`, `IRequestExceptionHandler<,>`, handler lifetimes | Behaviors, processors, exception handlers, handler overrides |
 | `PrecompileNotifications()` | `INotificationHandler<>` | Notification handler overrides |
-| `PrecompileStreams()` | `IStreamRequestHandler<,>` | Stream handler overrides |
+| `PrecompileStreams()` | `IStreamRequestHandler<,>`, `IStreamPipelineBehavior<,>` | Stream handler overrides, **stream behaviors** |
 
 ## Pipeline Chain Lifetimes
 

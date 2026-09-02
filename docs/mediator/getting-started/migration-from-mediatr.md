@@ -167,6 +167,27 @@ services
 | Pre/Post processor return | `Task` | `ValueTask` |
 | Handler lifetime (default) | All Transient | Stateless → Singleton, with DI deps → Transient |
 | Namespace | `using MediatR;` | `using DSoftStudio.Mediator.Abstractions;` |
+| Stream dispatch timing | Handler resolved on the first `MoveNextAsync` | Handler and behavior chain resolved when `CreateStream` is called |
+
+### Stream dispatch is not deferred
+
+`CreateStream` resolves the handler and builds the behavior chain **when you call it**, not when you
+start enumerating. The handler's own body is still deferred, because an `async IAsyncEnumerable`
+method is an iterator — that part is the C# language, not the mediator.
+
+The practical difference from MediatR: a stream created inside a DI scope has already captured its
+handler and behaviors, so enumerating it after the scope is disposed keeps using what it captured
+instead of failing on the provider. Create and enumerate the stream inside the same scope.
+
+```csharp
+await using var scope = provider.CreateAsyncScope();
+var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+
+await foreach (var item in mediator.CreateStream<GetNumbers, int>(new GetNumbers(), ct))
+{
+    // enumerated inside the scope that created it
+}
+```
 
 ## 9. Optional: Consolidate with self-handling requests
 
