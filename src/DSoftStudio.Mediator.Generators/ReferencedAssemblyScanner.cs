@@ -694,12 +694,22 @@ namespace DSoftStudio.Mediator.Generators
         /// </summary>
         internal static bool IsNameableBehaviorType(INamedTypeSymbol type, bool allowInternal)
         {
+            // A `file` type reports Internal accessibility, so the check below waves it through while
+            // the generated file — a different file in the same assembly — cannot name it at all. That
+            // emitted a typeof() for a type the compiler refuses to resolve, breaking the build in a
+            // file the user cannot edit. Same rule handler discovery applies.
+            if (type.IsFileLocal)
+                return false;
+
             if (!IsAccessibleHere(type.DeclaredAccessibility, allowInternal))
                 return false;
 
             for (var outer = type.ContainingType; outer is not null; outer = outer.ContainingType)
             {
                 if (outer.IsGenericType)
+                    return false;
+
+                if (outer.IsFileLocal)
                     return false;
 
                 if (!IsAccessibleHere(outer.DeclaredAccessibility, allowInternal))
