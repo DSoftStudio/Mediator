@@ -1,4 +1,4 @@
-// Copyright (c) DSoftStudio. All rights reserved.
+﻿// Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using DSoftStudio.Mediator.Abstractions;
@@ -39,6 +39,16 @@ namespace DSoftStudio.Mediator
         // Optional dispatch-observation port (Ports & Adapters). Null when no adapter is registered (the
         // common case) → the hot path never touches it. See IMediatorDispatchObserver.
         private readonly IMediatorDispatchObserver? _observer;
+
+        // The whole dispatch decision, pre-resolved into ONE reference. Non-null exactly when this
+        // scope is the common shape: no observer, and behaviors only (no pre/post processors, no
+        // exception handlers). Reading it replaces the observer null-test AND the three-way mode
+        // switch with a single field read and a single predictable branch.
+        //
+        // Measured motivation: the 0->1 behavior step in DSoftBehaviorScalingBenchmarks costs ~1.70 ns
+        // beyond the no-chain path and one behavior, and none of that is the chain itself - it is the
+        // entry machinery. Every part of it is decided in this constructor and never changes.
+        private readonly IRequestHandler<TRequest, TResponse>? _fastPath;
 
         public PipelineChainHandler(
             IEnumerable<IPipelineBehavior<TRequest, TResponse>> behaviors,
@@ -89,6 +99,11 @@ namespace DSoftStudio.Mediator
             //  3. BehaviorHandlerAdapter — both fields interface-typed. What this always used to build.
             _prelinkedChain = BehaviorChainRegistry<TRequest, TResponse>.TryBuild(_behaviors, _handler)
                               ?? BuildPerLinkChain();
+
+            // PassThrough (mode 0) also qualifies: its chain IS the handler, so the same single read
+            // serves it. Anything with processors, exception handlers or an observer keeps the full
+            // path and leaves this null.
+            _fastPath = _observer is null && _pipelineMode <= 1 ? _prelinkedChain : null;
         }
 
         /// <summary>
@@ -134,6 +149,13 @@ namespace DSoftStudio.Mediator
             // declined the AggressiveInlining hint and emitted a real call, adding ~2.3 ns to EVERY chain
             // dispatch (measured back-to-back vs. the pre-observer build). So the switch lives directly in
             // Handle; the observer paths reuse HandleCore, where a call is cold and irrelevant.
+            // One read, one branch. _fastPath is non-null for the common scope shape (no observer,
+            // no processors, no exception handlers) and already points at the pre-linked chain - which
+            // for PassThrough is the handler itself. Everything else falls through to the cold paths.
+            var fast = _fastPath;
+            if (fast is not null)
+                return fast.Handle(request, cancellationToken);
+
             if (_observer is not null)
                 return HandleWithObserver(request, cancellationToken);
 
