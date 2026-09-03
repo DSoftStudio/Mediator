@@ -135,6 +135,16 @@ public sealed class PublishInterceptorGenerator : IIncrementalGenerator
             if (InterceptorHelpers.ContainsTypeParameter(method.TypeArguments[0]))
                 return null;
 
+            // An interface or abstract type argument has no plan of its own, so the interceptor this
+            // would emit routes to an EMPTY dispatch table -- the call compiles, runs, reports a
+            // publish, and invokes nothing. That also happens without anyone writing a type argument:
+            // `Publish(n)` where n is declared INotification infers TNotification = INotification and
+            // arrives here already constructed, which is why the inference branch below is the wrong
+            // place to guard. Leave the call site to Mediator.Publish, which can look at the runtime
+            // type.
+            if (method.TypeArguments[0] is { TypeKind: TypeKind.Interface } or { IsAbstract: true })
+                return null;
+
             notificationType = method.TypeArguments[0]
                 .ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat);
         }

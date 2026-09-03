@@ -75,6 +75,21 @@ namespace DSoftStudio.Mediator
         {
             ArgumentNullException.ThrowIfNull(notification);
 
+            // `Publish(n)` where n is declared as INotification, or as an abstract base, instantiates
+            // this method at that static type -- which has no dispatch table of its own, so it would
+            // report a publish and invoke nothing. Dispatch by the RUNTIME type instead.
+            //
+            // typeof(TNotification).IsAbstract is a JIT constant per instantiation, so a concrete
+            // TNotification folds the whole branch away and pays nothing. The table check is what
+            // keeps an abstract base that DOES have handlers of its own going to those handlers
+            // rather than being re-routed.
+            if (typeof(TNotification).IsAbstract
+                && NotificationDispatch<TNotification>.Handlers is not { Length: > 0 })
+            {
+                return NotificationObjectDispatch.Dispatch(
+                    notification, _serviceProvider, _notificationPublisher, cancellationToken);
+            }
+
             // One static read on the plain path. Both questions -- is there a publisher, is there an
             // observer -- are settled at startup, because both registrations are knowable before the
             // container is built. A process with neither never reaches the routed entry at all, and
