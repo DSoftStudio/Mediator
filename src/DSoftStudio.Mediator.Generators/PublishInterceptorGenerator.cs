@@ -285,20 +285,13 @@ public sealed class PublishInterceptorGenerator : IIncrementalGenerator
                 sb.AppendLine("            var sp = __spa.ServiceProvider;");
             }
 
-            // Custom publisher fast-path: skip GetService when no publisher is registered.
-            sb.AppendLine("            if (global::DSoftStudio.Mediator.NotificationPublisherFlag.HasCustomPublisher)");
-            sb.AppendLine("            {");
-            sb.AppendLine("                var customPublisher = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions");
-            sb.AppendLine("                    .GetService<global::DSoftStudio.Mediator.Abstractions.INotificationPublisher>(sp);");
-            sb.AppendLine("                if (customPublisher is not null)");
-            sb.AppendLine("                {");
-            sb.Append("                    var handlers = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions");
-            sb.Append(".GetServices<global::DSoftStudio.Mediator.Abstractions.INotificationHandler<");
-            sb.Append(notifType);
-            sb.AppendLine(">>(sp);");
-            sb.AppendLine("                    return customPublisher.Publish(handlers, notification, cancellationToken);");
-            sb.AppendLine("                }");
-            sb.AppendLine("            }");
+            // Anything that takes this process off the plain path -- a custom publisher, a
+            // notification observer, or both -- routes to one cold entry that sorts out which.
+            // ONE static read, the same one the publisher branch used to cost, and the GetService
+            // plus GetServices that used to sit here now live in that entry: the emitted body gets
+            // smaller, not larger, and a process with neither never calls it.
+            sb.AppendLine("            if (global::DSoftStudio.Mediator.NotificationPublisherFlag.NotPlain)");
+            sb.AppendLine("                return global::DSoftStudio.Mediator.NotificationCachedDispatcher.DispatchRouted(notification, sp, cancellationToken);");
 
             // ADR-0066 SAFE concrete tier when a cache exists; today's sequential dispatch otherwise.
             if (hasCache)

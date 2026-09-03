@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using DSoftStudio.Mediator.Abstractions;
+using Microsoft.Extensions.DependencyInjection;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
@@ -76,18 +77,72 @@ namespace DSoftStudio.Mediator
             CancellationToken cancellationToken)
             where TNotification : INotification
         {
-            var observer = MediatorObservation.ResolveNotificationObserver(serviceProvider);
+            // The custom-publisher branch lives HERE, moved verbatim off the emitted hot path. Two
+            // things follow from that: the emitted body shrinks to one static read and one call, and
+            // handler MEMBERSHIP is unchanged, because a publisher still receives exactly what
+            // GetServices returns.
+            var publisher = NotificationPublisherFlag.HasCustomPublisher
+                ? serviceProvider.GetService<INotificationPublisher>()
+                : null;
 
-            // Registered in some container, absent or idle in this one: nothing to observe, and the
-            // ordinary dispatch is reached without having built anything.
+            var observer = NotificationPublisherFlag.HasObserver
+                ? MediatorObservation.ResolveNotificationObserver(serviceProvider)
+                : null;
+
+            // Registered in some container, absent or idle in this one: nothing to observe.
             if (observer is null || !observer.IsActive)
-                return DispatchSequential(notification, serviceProvider, cancellationToken);
+                return Unobserved(publisher, notification, serviceProvider, cancellationToken);
 
             var scope = observer.BeginPublish(notification);
             if (scope is null)
-                return DispatchSequential(notification, serviceProvider, cancellationToken);
+                return Unobserved(publisher, notification, serviceProvider, cancellationToken);
 
-            return DispatchObserved(scope, notification, serviceProvider, cancellationToken);
+            // A publisher owns the subscriber loop, so the core cannot reach the individual
+            // invocations. Say so, rather than letting the adapter emit a publish with nothing
+            // under it -- which a consumer cannot tell from "no handlers ran".
+            return publisher is null
+                ? DispatchObserved(scope, notification, serviceProvider, cancellationToken)
+                : DispatchObservedViaPublisher(scope, publisher, notification, serviceProvider, cancellationToken);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Task Unobserved<TNotification>(
+            INotificationPublisher? publisher,
+            TNotification notification,
+            IServiceProvider serviceProvider,
+            CancellationToken cancellationToken)
+            where TNotification : INotification
+            => publisher is null
+                ? DispatchSequential(notification, serviceProvider, cancellationToken)
+                : publisher.Publish(
+                    serviceProvider.GetServices<INotificationHandler<TNotification>>(),
+                    notification,
+                    cancellationToken);
+
+        private static async Task DispatchObservedViaPublisher<TNotification>(
+            IMediatorPublishScope scope,
+            INotificationPublisher publisher,
+            TNotification notification,
+            IServiceProvider serviceProvider,
+            CancellationToken cancellationToken)
+            where TNotification : INotification
+        {
+            try
+            {
+                scope.OnSubscribersUnobservable();
+
+                var handlers = serviceProvider.GetServices<INotificationHandler<TNotification>>();
+                await publisher.Publish(handlers, notification, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                scope.OnError(ex);
+                throw;
+            }
+            finally
+            {
+                scope.Dispose();
+            }
         }
 
         /// <summary>

@@ -6,8 +6,9 @@ description: "A read-only port for observing notification dispatch, so instrumen
 
 # ADR-0007: Notification Observation Port
 
-**Status:** Proposed (revision 2 — the first draft was reviewed from five angles and rejected; what
-that review measured is recorded below rather than quietly dropped)
+**Status:** Accepted (revision 3 — measured by a vertical slice on `spike/notification-observation-port`.
+Revision 1 was reviewed from five angles and rejected; what that review measured is recorded below
+rather than quietly dropped)
 **Date:** 2026-09-03
 **Affects:** `DSoftStudio.Mediator.Abstractions`, the notification dispatch paths, `DSoftStudio.Mediator.OpenTelemetry`
 
@@ -217,12 +218,30 @@ is not this repository's decision.
 
 ---
 
-## Open, and honestly so
+## The measurement that settles it
 
-Whether the routed entry can carry every path without a second envelope has been reasoned through but
-not yet built. The measurement that settles this ADR is the unobserved armed publish before and after,
-in one run, with a control — and it has not been taken, because no code exists yet. Status stays
-**Proposed** until it has.
+A vertical slice was built — the three interfaces, the widened flag, `MediatorObservation` and the
+routed entry, wired into the virtual `Publish<TNotification>`. No generator support, and the
+OpenTelemetry bridge untouched.
+
+`DSoftPublishBenchmarks`, net10.0, the two runs minutes apart on an otherwise idle machine, each with
+its own `Direct_Publish` control in the same run:
+
+| | Direct_Publish | DSoft_Publish | overhead | ratio | allocated |
+|---|---|---|---|---|---|
+| base `1.4.0` | 3.055 ns | 3.312 ns | **+0.257 ns** | 1.08 | 0 B |
+| slice | 3.044 ns | 3.281 ns | **+0.237 ns** | 1.08 | 0 B |
+
+A difference of **0.020 ns** against a reported Error of ±0.04 on both rows, with identical ratios and
+identical allocations. The port is indistinguishable from not having it on the unobserved path.
+
+That is not a fine measurement flattering a small cost. The unobserved path never reaches the routed
+entry: the question is answered at startup, because whether an observer is REGISTERED is knowable
+before the container is built, so a process with none pays one static read and one branch — and that
+read already existed for custom publishers.
+
+Still unbuilt, and not claimed: generator support for the armed and safe tiers, the bridge migration,
+and a test that pins the ambient discipline and the parenting against a real `ActivityListener`.
 
 ---
 

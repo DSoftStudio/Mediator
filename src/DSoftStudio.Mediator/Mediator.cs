@@ -34,6 +34,11 @@ namespace DSoftStudio.Mediator
             // GetService<INotificationPublisher> probe (~2-3 ns saved per Publish call).
             if (_notificationPublisher is not null)
                 NotificationPublisherFlag.MarkRegistered();
+
+            // Same probe, same reason, for the observation port: asking once per scope is what buys
+            // every dispatch the right to answer "is anyone observing?" with a static read.
+            if (serviceProvider.GetService<IMediatorNotificationObserver>() is not null)
+                NotificationPublisherFlag.ObserverAppeared();
         }
 
         /// <inheritdoc />
@@ -70,16 +75,11 @@ namespace DSoftStudio.Mediator
         {
             ArgumentNullException.ThrowIfNull(notification);
 
-            if (_notificationPublisher is not null)
-            {
-                var handlers = _serviceProvider.GetServices<INotificationHandler<TNotification>>();
-                return _notificationPublisher.Publish(handlers, notification, cancellationToken);
-            }
-
-            // One static read on the plain path. The observer question is settled at startup -- the
-            // registration is knowable before the container is built -- so a process with no observer
-            // never reaches the routed entry at all.
-            return NotificationPublisherFlag.HasObserver
+            // One static read on the plain path. Both questions -- is there a publisher, is there an
+            // observer -- are settled at startup, because both registrations are knowable before the
+            // container is built. A process with neither never reaches the routed entry at all, and
+            // the routed entry carries the publisher branch this method used to inline.
+            return NotificationPublisherFlag.NotPlain
                 ? NotificationCachedDispatcher.DispatchRouted(notification, _serviceProvider, cancellationToken)
                 : NotificationCachedDispatcher.DispatchSequential(notification, _serviceProvider, cancellationToken);
         }

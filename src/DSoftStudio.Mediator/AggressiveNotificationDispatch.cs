@@ -51,6 +51,7 @@ public static class AggressiveNotificationDispatch<TNotification>
         bool eligible = handlerTypes.Length > 0
             && !AggressiveDispatchLatch.IsPoisoned
             && !NotificationPublisherFlag.HasCustomPublisher
+            && !NotificationPublisherFlag.HasObserver
             && VerifyDescriptors(services, handlerTypes);
 
         if (!eligible)
@@ -127,7 +128,10 @@ public static class AggressiveNotificationDispatch<TNotification>
 
         foreach (var descriptor in services)
         {
-            if (descriptor.ServiceType == typeof(INotificationPublisher))
+            // An observer disqualifies the pair for the same reason a publisher does: an armed
+            // holder dispatches straight to the handlers, so it would run right past it.
+            if (descriptor.ServiceType == typeof(INotificationPublisher)
+                || descriptor.ServiceType == typeof(IMediatorNotificationObserver))
                 return false;
 
             for (int i = 0; i < handlerTypes.Length; i++)
