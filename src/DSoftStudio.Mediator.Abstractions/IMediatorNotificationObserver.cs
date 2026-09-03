@@ -63,17 +63,6 @@ public interface IMediatorPublishScope : IDisposable
     /// </summary>
     IMediatorSubscriberScope? BeginSubscriber(object handler);
 
-    /// <summary>
-    /// The core could not reach the subscriber invocations because a third-party
-    /// <see cref="INotificationPublisher"/> owns the loop. Called once, instead of any
-    /// <see cref="BeginSubscriber"/>, so the adapter degrades deliberately.
-    /// <para>
-    /// Without this, a consumer sees a publish with no subscribers underneath it and cannot tell
-    /// "no handlers ran" from "the handlers could not be observed".
-    /// </para>
-    /// </summary>
-    void OnSubscribersUnobservable();
-
     /// <summary>An exception that escaped the entire publish. At most once, before disposal.</summary>
     void OnError(Exception exception);
 }

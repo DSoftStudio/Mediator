@@ -128,13 +128,6 @@ internal sealed class MediatorNotificationTracingObserver(
             return new SubscriberScope(span, previous, options);
         }
 
-        public void OnSubscribersUnobservable()
-        {
-            // A publisher owns the loop, so there are no subscriber spans to emit. The envelope still
-            // stands, and the absence of children below it is now a fact the adapter knows rather
-            // than one a consumer has to guess at.
-        }
-
         public void OnError(Exception exception)
         {
             if (envelope is not null)

@@ -101,7 +101,7 @@ public class NotificationObservationTests
     }
 
     [Fact]
-    public async Task WithACustomPublisherTheObserverIsToldTheSubscribersAreUnobservable()
+    public async Task WithACustomPublisherTheSubscribersAreStillObserved()
     {
         ResetTierState();
         var observer = new RecordingObserver();
@@ -110,11 +110,31 @@ public class NotificationObservationTests
         await provider.GetRequiredService<IMediator>()
             .Publish(new ObservedPing(), TestContext.Current.CancellationToken);
 
-        // The publisher owns the loop, so the core cannot reach the invocations. Saying so beats
-        // emitting a publish with nothing under it, which reads as "no handlers ran".
+        // A publisher owns the loop, so the core cannot bracket the invocations from outside -- it
+        // hands the publisher handlers that bracket themselves instead. Giving up here would lose the
+        // whole per-subscriber breakdown for anyone who registered a publisher, which is exactly the
+        // shape a profiler installs.
         observer.Publishes.ShouldBe(1);
-        observer.Scope!.SubscribersUnobservable.ShouldBeTrue();
-        observer.Scope.Subscribers.ShouldBeEmpty();
+        observer.Scope!.Subscribers.Select(s => s.Handler.GetType()).ShouldBe(
+            new[] { typeof(ObservedHandlerA), typeof(ObservedHandlerB) }, ignoreOrder: true);
+        observer.Scope.Subscribers.ShouldAllBe(s => s.Disposed);
+        observer.Scope.Disposed.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task PublishingAsObjectIsObservedToo()
+    {
+        ResetTierState();
+        var observer = new RecordingObserver();
+
+        using var provider = Build(observer);
+        await provider.GetRequiredService<IMediator>()
+            .Publish((object)new ObservedPing(), TestContext.Current.CancellationToken);
+
+        // The object route used to have its own dispatch that never consulted the observer, so a
+        // domain-event or outbox loop publishing as `object` was invisible.
+        observer.Publishes.ShouldBe(1);
+        observer.Scope!.Subscribers.Count.ShouldBe(2);
         observer.Scope.Disposed.ShouldBeTrue();
     }
 
@@ -152,7 +172,6 @@ public class NotificationObservationTests
     internal sealed class RecordingScope : IMediatorPublishScope
     {
         public readonly List<RecordingSubscriber> Subscribers = [];
-        public bool SubscribersUnobservable;
         public bool Disposed;
         public Exception? Error;
 
@@ -163,7 +182,6 @@ public class NotificationObservationTests
             return subscriber;
         }
 
-        public void OnSubscribersUnobservable() => SubscribersUnobservable = true;
         public void OnError(Exception exception) => Error = exception;
         public void Dispose() => Disposed = true;
     }

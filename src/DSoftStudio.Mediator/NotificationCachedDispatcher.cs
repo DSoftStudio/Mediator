@@ -137,10 +137,17 @@ namespace DSoftStudio.Mediator
 
             try
             {
-                scope.OnSubscribersUnobservable();
-
+                // A publisher owns the loop, so the core cannot bracket each invocation from the
+                // outside -- but it can hand the publisher handlers that bracket themselves. The
+                // wrapper is the CORE's, not the observer's: the observer is still only told what
+                // happened. It forwards IPipelineHandlerTypeAccessor so the concrete subscriber
+                // survives, which is what a consumer keys its per-handler breakdown on.
                 var handlers = serviceProvider.GetServices<INotificationHandler<TNotification>>();
-                await publisher.Publish(handlers, notification, cancellationToken).ConfigureAwait(false);
+                var observed = new List<INotificationHandler<TNotification>>();
+                foreach (var handler in handlers)
+                    observed.Add(new ObservedHandler<TNotification>(handler, scope));
+
+                await publisher.Publish(observed, notification, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -220,6 +227,42 @@ namespace DSoftStudio.Mediator
                 // In a finally so a handler that throws SYNCHRONOUSLY cannot leave the observation
                 // open. An exporter that fires on close would otherwise drop the whole publish.
                 scope.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// Brackets one handler invocation with its subscriber observation, for the case where a
+        /// publisher owns the loop. Transparent: it forwards the concrete handler type so nothing
+        /// downstream sees this wrapper where the subscriber should be.
+        /// </summary>
+        private sealed class ObservedHandler<TNotification>(
+            INotificationHandler<TNotification> inner,
+            IMediatorPublishScope scope) : INotificationHandler<TNotification>, IPipelineHandlerTypeAccessor
+            where TNotification : INotification
+        {
+            public Type HandlerType => inner is IPipelineHandlerTypeAccessor accessor
+                ? accessor.HandlerType
+                : inner.GetType();
+
+            public async Task Handle(TNotification notification, CancellationToken cancellationToken)
+            {
+                // The INNER handler is handed over, not this wrapper, so the observer reads the real
+                // subscriber even if it does not ask through IPipelineHandlerTypeAccessor.
+                var subscriber = scope.BeginSubscriber(inner);
+
+                try
+                {
+                    await inner.Handle(notification, cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    subscriber?.OnError(ex);
+                    throw;
+                }
+                finally
+                {
+                    subscriber?.Dispose();
+                }
             }
         }
 

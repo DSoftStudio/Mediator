@@ -204,11 +204,12 @@ public sealed class NotificationGenerator : IIncrementalGenerator
                 var varName = $"__n{caseIndex}";
                 sb.AppendLine($"                case {plan.NotificationType} {varName}:");
                 sb.AppendLine("                {");
-                sb.AppendLine("                    if (publisher is not null)");
-                sb.AppendLine("                    {");
-                sb.AppendLine($"                        var __handlers = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetServices<global::DSoftStudio.Mediator.Abstractions.INotificationHandler<{plan.NotificationType}>>(sp);");
-                sb.AppendLine($"                        return publisher.Publish(__handlers, {varName}, ct);");
-                sb.AppendLine("                    }");
+                // Same collapse as the typed interceptor: a custom publisher OR a notification
+                // observer routes to the one cold entry that sorts out which. This case used to have
+                // its own publisher branch and no observer branch at all, so a notification published
+                // as `object` -- a domain-event or outbox loop -- was invisible to observation.
+                sb.AppendLine("                    if (global::DSoftStudio.Mediator.NotificationPublisherFlag.NotPlain)");
+                sb.AppendLine($"                        return global::DSoftStudio.Mediator.NotificationCachedDispatcher.DispatchRouted({varName}, sp, ct);");
                 AppendNoPublisherDispatch(sb, plan, disableAggressive, "                    ", varName);
                 sb.AppendLine("                }");
                 caseIndex++;
