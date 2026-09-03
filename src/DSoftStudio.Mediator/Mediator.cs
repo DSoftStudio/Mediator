@@ -76,7 +76,12 @@ namespace DSoftStudio.Mediator
                 return _notificationPublisher.Publish(handlers, notification, cancellationToken);
             }
 
-            return NotificationCachedDispatcher.DispatchSequential(notification, _serviceProvider, cancellationToken);
+            // One static read on the plain path. The observer question is settled at startup -- the
+            // registration is knowable before the container is built -- so a process with no observer
+            // never reaches the routed entry at all.
+            return NotificationPublisherFlag.HasObserver
+                ? NotificationCachedDispatcher.DispatchRouted(notification, _serviceProvider, cancellationToken)
+                : NotificationCachedDispatcher.DispatchSequential(notification, _serviceProvider, cancellationToken);
         }
 
         /// <inheritdoc />
