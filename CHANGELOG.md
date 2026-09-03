@@ -44,6 +44,14 @@ those before upgrading.
   by a chain whose lifetime was fixed before they were registered. This is the only check that sees
   the case across methods, files and assemblies, because it inspects the built container rather than
   one syntax tree.
+- **ADR-0007 — notification observation port.** `IMediatorNotificationObserver` lets a tracing bridge
+  or a profiler watch a publish without replacing `INotificationPublisher`, which was the only option
+  before and was never neutral: it disarmed the generated dispatch, resolved handlers from the
+  container instead of the compile-time table — so a handler the generator could not see went from
+  skipped to invoked — and handed back a different instance for a stateful singleton. The core calls
+  the observer and the observer substitutes nothing. Registering one is knowable before the container
+  is built, so an application that registers none pays nothing. Every registered observer runs, not
+  just the first, and a publish reports how many subscribers it resolved before the first one starts.
 - **Benchmarks.** Multi-targeted `net10.0`/`net11.0` with `runtime-async` on net11, a behavior-count
   scaling suite, `run-all-benchmarks.cmd`, and `compare-runs.ps1`, which compares two runs by overhead
   above each suite's own baseline so machine drift cancels out.

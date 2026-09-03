@@ -22,6 +22,9 @@ public sealed class ObservedHandlerB : INotificationHandler<ObservedPing>
         => Gate?.Task ?? Task.CompletedTask;
 }
 
+/// <summary>A notification with no handler anywhere — the "resolved zero" case.</summary>
+public sealed record SilentPing : INotification;
+
 /// <summary>
 /// ADR-0007: the core CALLS the observer; the observer never substitutes anything.
 /// <para>
@@ -138,6 +141,7 @@ public class NotificationObservationTests
         // domain-event or outbox loop publishing as `object` was invisible.
         observer.Publishes.ShouldBe(1);
         observer.Scope!.Subscribers.Count.ShouldBe(2);
+        observer.Scope.ResolvedCount.ShouldBe(2);
         observer.Scope.Disposed.ShouldBeTrue();
     }
 
@@ -179,6 +183,9 @@ public class NotificationObservationTests
         {
             observer.Publishes.ShouldBe(1);
             observer.Scope!.Subscribers.Count.ShouldBe(2);
+            // Forwarded by the composite: the second adapter must be told the count too, or it is
+            // back to counting the subscribers that started.
+            observer.Scope.ResolvedCount.ShouldBe(2);
             observer.Scope.Subscribers.ShouldAllBe(s => s.Disposed);
             observer.Scope.Disposed.ShouldBeTrue();
         }
@@ -195,6 +202,99 @@ public class NotificationObservationTests
             .Publish(new ObservedPing(), TestContext.Current.CancellationToken);
 
         observer.Publishes.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task TheSubscriberCountArrivesOnceBeforeTheFirstSubscriberStarts()
+    {
+        ResetTierState();
+        var observer = new RecordingObserver();
+
+        using var provider = Build(observer);
+        await provider.GetRequiredService<IMediator>()
+            .Publish(new ObservedPing(), TestContext.Current.CancellationToken);
+
+        // The number the port cannot deliver any other way. It cannot ride on BeginPublish: the
+        // observation has to open BEFORE the handlers are resolved, or it stops covering the
+        // resolution it exists to measure. Without this signal an adapter can only count the
+        // subscribers that STARTED, which after a failure part-way through the fan-out is a
+        // different number from how many there were.
+        observer.Scope!.ResolvedCalls.ShouldBe(1);
+        observer.Scope.ResolvedCount.ShouldBe(2);
+
+        // Before the first BeginSubscriber, so an adapter can size its per-subscriber state once
+        // instead of growing it as the fan-out arrives.
+        observer.Scope.SubscribersAtResolve.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task TheSubscriberCountArrivesOnThePublisherRouteToo()
+    {
+        ResetTierState();
+        var observer = new RecordingObserver();
+
+        using var provider = Build(observer, new SequentialNotificationPublisher());
+        await provider.GetRequiredService<IMediator>()
+            .Publish(new ObservedPing(), TestContext.Current.CancellationToken);
+
+        // Both observed routes or neither: an adapter cannot ask which one the application is on,
+        // so a signal that only one route sends is a signal it cannot rely on.
+        observer.Scope!.ResolvedCalls.ShouldBe(1);
+        observer.Scope.ResolvedCount.ShouldBe(2);
+        observer.Scope.SubscribersAtResolve.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task PublishingToNobodyReportsZeroRatherThanStayingSilent()
+    {
+        ResetTierState();
+        var observer = new RecordingObserver();
+
+        using var provider = Build(observer);
+        await provider.GetRequiredService<IMediator>()
+            .Publish(new SilentPing(), TestContext.Current.CancellationToken);
+
+        // Zero is reported, not skipped. Staying silent here would leave an adapter unable to tell
+        // "this publish resolved no subscribers" from "this version never tells me", and those two
+        // want opposite treatment in a report.
+        observer.Scope!.ResolvedCalls.ShouldBe(1);
+        observer.Scope.ResolvedCount.ShouldBe(0);
+        observer.Scope.Subscribers.ShouldBeEmpty();
+        observer.Scope.Disposed.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task PublishingToNobodyThroughAPublisherAlsoReportsZero()
+    {
+        ResetTierState();
+        var observer = new RecordingObserver();
+
+        using var provider = Build(observer, new SequentialNotificationPublisher());
+        await provider.GetRequiredService<IMediator>()
+            .Publish(new SilentPing(), TestContext.Current.CancellationToken);
+
+        observer.Scope!.ResolvedCalls.ShouldBe(1);
+        observer.Scope.ResolvedCount.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task TheCountIsNotConcurrentEvenWhenTheSubscribersAre()
+    {
+        ResetTierState();
+        var observer = new RecordingObserver();
+
+        using var provider = Build(observer, new ParallelNotificationPublisher());
+        await provider.GetRequiredService<IMediator>()
+            .Publish(new ObservedPing(), TestContext.Current.CancellationToken);
+
+        // BeginSubscriber is concurrent here — the parallel publisher queues each handler to the
+        // thread pool — and the count still is not. The recording double reads and writes its
+        // fields with no synchronisation at all, which is the point: adapters were going to add
+        // defensive interlocks around a call that never races.
+        observer.Scope!.ResolvedCalls.ShouldBe(1);
+        observer.Scope.ResolvedCount.ShouldBe(2);
+        observer.Scope.SubscribersAtResolve.ShouldBe(0);
+        observer.Scope.Subscribers.Count.ShouldBe(2);
     }
 
     // ── Recording double ──────────────────────────────────────────────
@@ -222,6 +322,28 @@ public class NotificationObservationTests
         public IReadOnlyCollection<RecordingSubscriber> Subscribers => _subscribers;
         public bool Disposed;
         public Exception? Error;
+
+        /// <summary>How many times the count arrived. The contract says exactly one.</summary>
+        public int ResolvedCalls;
+
+        /// <summary>The count reported; -1 when it was never reported at all.</summary>
+        public int ResolvedCount = -1;
+
+        /// <summary>
+        /// Subscribers already begun when the count arrived. Anything but zero means it arrived
+        /// after the fan-out had started, which is what the ordering half of the contract forbids.
+        /// </summary>
+        public int SubscribersAtResolve = -1;
+
+        // Plain fields, no interlocks: the contract says this call is not concurrent with respect
+        // to the scope, and an unsynchronised double is how that stays true rather than merely
+        // being written down.
+        public void OnSubscribersResolved(int count)
+        {
+            SubscribersAtResolve = _subscribers.Count;
+            ResolvedCount = count;
+            ResolvedCalls++;
+        }
 
         // Concurrent by contract: a publisher may run the handlers in parallel, so this is called
         // from several threads for the same scope.

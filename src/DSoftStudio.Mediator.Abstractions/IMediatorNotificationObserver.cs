@@ -58,6 +58,28 @@ public interface IMediatorNotificationObserver
 public interface IMediatorPublishScope : IDisposable
 {
     /// <summary>
+    /// How many subscribers this publish resolved, called once the core knows and before any of them
+    /// starts. A mandatory member, not a default implementation: this package targets
+    /// netstandard2.0, where default interface members have no runtime support.
+    /// <para>
+    /// It exists because the count and the observation window cannot be delivered together. The
+    /// window has to open at the start of the publish, before the handlers are resolved, or it stops
+    /// covering the resolution it is meant to measure — so the count cannot ride on
+    /// <see cref="IMediatorNotificationObserver.BeginPublish"/>. Without it an adapter can only count
+    /// the subscribers that STARTED, which after a failure part-way through the fan-out is a
+    /// different and less useful number than how many there were.
+    /// </para>
+    /// <para>
+    /// The contract, so every adapter reads it the same way: called EXACTLY ONCE per scope, after the
+    /// subscribers are resolved and before the first <see cref="BeginSubscriber"/>; called with
+    /// <c>0</c> when there are none, so "resolved zero" is distinguishable from "never told"; called
+    /// on both observed routes; and — unlike <see cref="BeginSubscriber"/> — NOT concurrent, so an
+    /// implementation needs no synchronisation of its own.
+    /// </para>
+    /// </summary>
+    void OnSubscribersResolved(int count);
+
+    /// <summary>
     /// Called immediately before <c>handler.Handle(...)</c>, and handed the handler INSTANCE.
     /// <para>
     /// The instance rather than the type on purpose: an adapter must be able to read the CONCRETE

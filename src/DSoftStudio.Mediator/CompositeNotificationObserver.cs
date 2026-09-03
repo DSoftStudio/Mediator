@@ -92,6 +92,12 @@ namespace DSoftStudio.Mediator
                 };
             }
 
+            public void OnSubscribersResolved(int subscriberCount)
+            {
+                for (int i = 0; i < count; i++)
+                    scopes[i].OnSubscribersResolved(subscriberCount);
+            }
+
             public void OnError(Exception exception)
             {
                 for (int i = 0; i < count; i++)

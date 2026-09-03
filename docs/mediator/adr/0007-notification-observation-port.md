@@ -110,12 +110,11 @@ public interface IMediatorPublishScope : IDisposable
     IMediatorSubscriberScope? BeginSubscriber(object handler);
 
     /// <summary>
-    /// The core could not reach the subscriber invocations because a third-party
-    /// <see cref="INotificationPublisher"/> owns the loop. Called once instead of
-    /// <see cref="BeginSubscriber"/>, so the adapter degrades deliberately rather than leaving a
-    /// consumer to read "a publish row with no subscriber rows" as "no handlers ran".
+    /// How many subscribers this publish resolved. Exactly once per scope, after resolving and
+    /// before the first <c>BeginSubscriber</c>; with 0 when there are none; on both observed
+    /// routes; and NOT concurrent, unlike <c>BeginSubscriber</c>.
     /// </summary>
-    void OnSubscribersUnobservable();
+    void OnSubscribersResolved(int count);
 
     void OnError(Exception exception);
 }
@@ -132,8 +131,33 @@ Three things in that shape are answers to measured failures rather than taste. `
 the **instance** because a wrapper type collapses every subscriber into one and breaks the CPU
 self-attribution that matches the handler-type tag verbatim against stack frames. `IMediatorSubscriberScope`
 carries its **own** `OnError` because the per-subscriber error status, `error.type` and recorded
-exception cannot be expressed from the publish scope. `OnSubscribersUnobservable` exists because the
-alternative is silent, wrong data.
+exception cannot be expressed from the publish scope.
+
+`OnSubscribersResolved` is the third, and it is a **mandatory** member rather than a default
+implementation: `Abstractions` targets `netstandard2.0`, where default interface members have no
+runtime support. It is separate from `BeginPublish` because the count and the observation window
+cannot be delivered together — the window has to open before the handlers are resolved, or it stops
+covering the resolution it exists to measure. Without it an adapter can only count the subscribers
+that STARTED, and after a failure part-way through a fan-out that is a different number from how many
+there were.
+
+An earlier draft had `OnSubscribersUnobservable()` here instead, for the case where a third-party
+`INotificationPublisher` owns the loop and the core cannot bracket the invocations. It is gone: the
+core hands such a publisher handlers that bracket **themselves**, so that case observes fully and
+there is nothing to declare unobservable.
+
+### Considered and declined: `handlerIndex`
+
+A `handlerIndex` on `BeginSubscriber`, so an adapter could order the subscriber rows by dispatch
+position rather than by arrival. Declined before publishing, deliberately and not by oversight: no
+consumer reads it today, and start order already falls out of the `dispatchOffsetMs` each adapter
+records — under a parallel publisher an index would order rows the fan-out itself did not order,
+which is worse than not having one.
+
+Recorded here because the window closes at **publish**. Widening `BeginSubscriber` costs nothing
+today and breaks every implementer once the package is out, so this is the decision rather than a
+deferral — and it is written down so that whoever wonders in a year finds the reason instead of
+assuming it was forgotten.
 
 ### The gate
 
@@ -184,6 +208,8 @@ a separate, cold twin, not a probe threaded through the fast one.
 | I8 | the subscriber observation covers the handler's **whole Task** | closing at invocation return measured 0.0–1.8 ms subscriber spans against a 157 ms envelope |
 | I9 | publishing does not mutate the caller's ambient Activity | otherwise the caller's next span parents to a stopped subscriber span |
 | I10 | **Baggage survives into the subscriber and into what it emits** | explicit-context parenting drops it; this is why anchoring is ambient |
+| I11 | the subscriber count arrives exactly once per scope, before the first `BeginSubscriber`, including as 0 | an adapter sizes its per-subscriber state once, and can tell "resolved none" from "never told" |
+| I12 | `OnSubscribersResolved` is not concurrent with respect to the scope | stated so adapters do not add interlocks around a call that cannot race |
 
 ---
 

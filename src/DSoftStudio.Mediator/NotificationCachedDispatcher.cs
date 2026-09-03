@@ -147,6 +147,10 @@ namespace DSoftStudio.Mediator
                 foreach (var handler in handlers)
                     observed.Add(new ObservedHandler<TNotification>(handler, scope));
 
+                // Same signal on this route: the publisher decides what to invoke, but the list it
+                // was handed is what "resolved" means.
+                scope.OnSubscribersResolved(observed.Count);
+
                 await publisher.Publish(observed, notification, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -191,9 +195,19 @@ namespace DSoftStudio.Mediator
             {
                 var factories = NotificationDispatch<TNotification>.Handlers;
                 if (factories is null || factories.Length == 0)
+                {
+                    // Zero is reported, not skipped: an adapter has to be able to tell "resolved
+                    // none" from "was never told".
+                    scope.OnSubscribersResolved(0);
                     return;
+                }
 
                 var handlers = NotificationHandlerCache<TNotification>.Resolve(serviceProvider, factories);
+
+                // The count the observer cannot get any other way -- the port never hands it the
+                // list. Reported after resolving, so the observation window still covers the
+                // resolution, and before the first subscriber starts.
+                scope.OnSubscribersResolved(handlers.Length);
 
                 for (int i = 0; i < handlers.Length; i++)
                 {

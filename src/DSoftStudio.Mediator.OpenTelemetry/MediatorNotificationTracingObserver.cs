@@ -128,6 +128,13 @@ internal sealed class MediatorNotificationTracingObserver(
             return new SubscriberScope(span, previous, options);
         }
 
+        public void OnSubscribersResolved(int count)
+        {
+            // Deliberately not tagged. The span shape is a contract with the trace importers, and
+            // adding a tag to the envelope changes what they read; the subscriber count is already
+            // derivable from the child spans. Kept as a hook for adapters that need the number.
+        }
+
         public void OnError(Exception exception)
         {
             if (envelope is not null)
