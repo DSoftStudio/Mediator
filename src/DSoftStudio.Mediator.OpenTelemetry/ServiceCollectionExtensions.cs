@@ -94,15 +94,22 @@ public static class OpenTelemetryServiceCollectionExtensions
                 // handler invocations when a publisher owns the loop.
                 services.RemoveAll<INotificationPublisher>();
 
-                services.AddSingleton<INotificationPublisher>(sp =>
-                {
-                    var inner = ResolveInnerPublisher(sp, existingDescriptor);
-                    // MediatorMetrics is only registered when metrics are enabled — null here means tracing-only.
-                    return new InstrumentedNotificationPublisher(
-                        inner,
-                        sp.GetRequiredService<MediatorInstrumentationOptions>(),
-                        sp.GetService<MediatorMetrics>());
-                });
+                // The decorator keeps the ORIGINAL lifetime. Registering it Singleton promoted a
+                // Scoped publisher to process-wide and resolved its dependencies from the root: under
+                // ValidateScopes that throws, and without it a per-request publisher silently became
+                // one instance for the life of the application.
+                services.Add(new ServiceDescriptor(
+                    typeof(INotificationPublisher),
+                    sp =>
+                    {
+                        var inner = ResolveInnerPublisher(sp, existingDescriptor);
+                        // MediatorMetrics is only registered when metrics are enabled — null here means tracing-only.
+                        return new InstrumentedNotificationPublisher(
+                            inner,
+                            sp.GetRequiredService<MediatorInstrumentationOptions>(),
+                            sp.GetService<MediatorMetrics>());
+                    },
+                    existingDescriptor.Lifetime));
             }
         }
 

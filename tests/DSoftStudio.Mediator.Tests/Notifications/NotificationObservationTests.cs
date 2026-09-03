@@ -39,13 +39,16 @@ public class NotificationObservationTests
         ObservedHandlerB.Gate = null;
     }
 
-    private static ServiceProvider Build(RecordingObserver? observer, INotificationPublisher? publisher = null)
+    private static ServiceProvider Build(RecordingObserver? observer, INotificationPublisher? publisher = null, RecordingObserver? second = null)
     {
         var services = new ServiceCollection();
         services.AddMediator().RegisterMediatorHandlers();
 
         if (observer is not null)
             services.AddSingleton<IMediatorNotificationObserver>(observer);
+
+        if (second is not null)
+            services.AddSingleton<IMediatorNotificationObserver>(second);
 
         if (publisher is not null)
             services.AddSingleton(publisher);
@@ -156,6 +159,29 @@ public class NotificationObservationTests
             new[] { typeof(ObservedHandlerA), typeof(ObservedHandlerB) }, ignoreOrder: true);
         observer.Scope.Subscribers.ShouldAllBe(s => s.Disposed);
         observer.Scope.Disposed.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task TwoObserversBothSeeThePublish()
+    {
+        ResetTierState();
+        var bridge = new RecordingObserver();
+        var profiler = new RecordingObserver();
+
+        using var provider = Build(bridge, second: profiler);
+        await provider.GetRequiredService<IMediator>()
+            .Publish(new ObservedPing(), TestContext.Current.CancellationToken);
+
+        // Two adapters observing at once is the normal case -- a tracing bridge and a profiler -- and
+        // neither can be asked to stand down for the other. Resolving a single observer used to drop
+        // whichever registered second, without a word.
+        foreach (var observer in new[] { bridge, profiler })
+        {
+            observer.Publishes.ShouldBe(1);
+            observer.Scope!.Subscribers.Count.ShouldBe(2);
+            observer.Scope.Subscribers.ShouldAllBe(s => s.Disposed);
+            observer.Scope.Disposed.ShouldBeTrue();
+        }
     }
 
     [Fact]

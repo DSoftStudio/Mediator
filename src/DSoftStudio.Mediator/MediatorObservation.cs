@@ -53,7 +53,18 @@ namespace DSoftStudio.Mediator
             if (serviceProvider is null)
                 return null;
 
-            var observer = serviceProvider.GetService<IMediatorNotificationObserver>();
+            // GetServices, not GetService: two adapters observing at once is the normal case -- a
+            // tracing bridge and a profiler -- and resolving one silently dropped whichever registered
+            // second. One is used directly; several are fanned out through a composite built once.
+            var registered = serviceProvider.GetServices<IMediatorNotificationObserver>() as IMediatorNotificationObserver[]
+                             ?? [.. serviceProvider.GetServices<IMediatorNotificationObserver>()];
+
+            IMediatorNotificationObserver? observer = registered.Length switch
+            {
+                0 => null,
+                1 => registered[0],
+                _ => new CompositeNotificationObserver(registered),
+            };
 
             var slot = _notificationSlot ??= new DispatchCacheSlot<IMediatorNotificationObserver>();
 
