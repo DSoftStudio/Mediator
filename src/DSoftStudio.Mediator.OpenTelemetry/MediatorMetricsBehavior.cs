@@ -13,17 +13,33 @@ public sealed class MediatorMetricsBehavior<TRequest, TResponse>(MediatorInstrum
     where TRequest : IRequest<TResponse>
 {
 
-    public async ValueTask<TResponse> Handle(
+    public ValueTask<TResponse> Handle(
         TRequest request,
         IRequestHandler<TRequest, TResponse> next,
         CancellationToken cancellationToken)
     {
+        // Both gates are read per call on purpose: a MeterProvider can be built after the container
+        // is, so "metrics are off" is not a fact that can be settled once at construction.
         if (!options.EnableMetrics || !metrics.RequestDuration.Enabled)
-            return await next.Handle(request, cancellationToken);
+            return next.Handle(request, cancellationToken);
 
         if (options.Filter is not null && !options.Filter(typeof(TRequest)))
-            return await next.Handle(request, cancellationToken);
+            return next.Handle(request, cancellationToken);
 
+        return Instrumented(request, next, cancellationToken);
+    }
+
+    /// <summary>
+    /// The measured path, split out so a dispatch nobody is measuring never builds an async state
+    /// machine. This behavior is registered as an OPEN GENERIC, so it sits on every request in the
+    /// application — the cost of the disabled path is paid by every dispatch, not just instrumented
+    /// ones. Both stream behaviors in this package already split this way; the request path did not.
+    /// </summary>
+    private async ValueTask<TResponse> Instrumented(
+        TRequest request,
+        IRequestHandler<TRequest, TResponse> next,
+        CancellationToken cancellationToken)
+    {
         var tags = new TagList
         {
             { "mediator.request.type", MediatorTelemetryMetadata<TRequest, TResponse>.RequestType },

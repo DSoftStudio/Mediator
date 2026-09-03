@@ -16,27 +16,36 @@ internal sealed class InstrumentedNotificationPublisher(INotificationPublisher i
     private static readonly ActivitySource Source = MediatorInstrumentation.ActivitySource;
     private static readonly ConcurrentDictionary<Type, string> HandlerSpanNames = new();
 
-    public async Task Publish<TNotification>(
+    public Task Publish<TNotification>(
         IEnumerable<INotificationHandler<TNotification>> handlers,
         TNotification notification,
         CancellationToken cancellationToken)
         where TNotification : INotification
     {
+        // Read per call, not cached: a listener or a MeterProvider can appear after the container is
+        // built, and HasListeners is a per-source null/count check.
         bool tracingActive = options.EnableTracing && Source.HasListeners();
         bool metricsActive = options.EnableMetrics && metrics is not null && metrics.RequestDuration.Enabled;
 
+        // Handing the inner publisher's task straight back keeps an unobserved publish free of the
+        // state machine this decorator would otherwise build around it.
         if (!tracingActive && !metricsActive)
-        {
-            await inner.Publish(handlers, notification, cancellationToken);
-            return;
-        }
+            return inner.Publish(handlers, notification, cancellationToken);
 
         if (options.Filter is not null && !options.Filter(typeof(TNotification)))
-        {
-            await inner.Publish(handlers, notification, cancellationToken);
-            return;
-        }
+            return inner.Publish(handlers, notification, cancellationToken);
 
+        return Instrumented(handlers, notification, tracingActive, metricsActive, cancellationToken);
+    }
+
+    private async Task Instrumented<TNotification>(
+        IEnumerable<INotificationHandler<TNotification>> handlers,
+        TNotification notification,
+        bool tracingActive,
+        bool metricsActive,
+        CancellationToken cancellationToken)
+        where TNotification : INotification
+    {
         // ── Tracing: parent span ──────────────────────────────────────
         Activity? parentActivity = null;
         if (tracingActive)
