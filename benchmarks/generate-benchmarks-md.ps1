@@ -237,6 +237,25 @@ $sb = [System.Text.StringBuilder]::new()
 if ($Tfm) { [void]$sb.AppendLine("Target framework: ``$Tfm``") }
 [void]$sb.AppendLine()
 
+# The net11 numbers are not reproducible on an older preview, so the document has to say which one
+# produced them. Emitted from the generator rather than pasted into the output, which is regenerated.
+if ($Tfm -like 'net11*') {
+    [void]$sb.AppendLine('> **These numbers need .NET 11 Preview 7 or later, with runtime-async on** (the switch lives in')
+    [void]$sb.AppendLine('> `benchmarks/Directory.Build.props`). Two Preview 7 runtime changes carry most of the difference')
+    [void]$sb.AppendLine('> against `net10.0`, and neither exists in Preview 6:')
+    [void]$sb.AppendLine('>')
+    [void]$sb.AppendLine('> - Async methods now go through tiered compilation. Before, they ran tier0 code forever, so every')
+    [void]$sb.AppendLine('>   `async` method on the dispatch path stayed unoptimized no matter how hot it got.')
+    [void]$sb.AppendLine('> - A hot `await` on an already-completed task folds into a status-flag check instead of a helper')
+    [void]$sb.AppendLine('>   call, which is the shape this library is built around.')
+    [void]$sb.AppendLine('>')
+    [void]$sb.AppendLine('> Preview 7 also fixed a flag check that skipped saving and restoring the async context across an')
+    [void]$sb.AppendLine('> `await` in a `ValueTask`-returning method. That is the entire dispatch surface here, so anything')
+    [void]$sb.AppendLine('> measured on an earlier preview with runtime-async on is unreliable for code that reads')
+    [void]$sb.AppendLine('> `AsyncLocal`, `Activity.Current` or `IHttpContextAccessor`.')
+    [void]$sb.AppendLine()
+}
+
 if ($envInfo) {
     [void]$sb.AppendLine("``````")
     [void]$sb.AppendLine($envInfo)
