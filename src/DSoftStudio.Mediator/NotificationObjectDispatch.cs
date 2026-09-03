@@ -47,6 +47,11 @@ namespace DSoftStudio.Mediator
         // Fast-path dispatch — defaults to FrozenDictionary; overridden by generated type switch.
         private static DispatchDelegate _dispatch = DispatchFallback;
 
+        // Set by Freeze(), which runs at the end of PrecompileNotifications(). It is what separates
+        // "nobody subscribes to this notification" from "the registration step never ran" — two very
+        // different situations that a missing table entry cannot tell apart on its own.
+        private static volatile bool _frozen;
+
         /// <summary>
         /// Registers a compile-time generated dispatch delegate for <typeparamref name="TNotification"/>.
         /// Called once at startup by the generated <c>NotificationRegistry</c>.
@@ -69,7 +74,14 @@ namespace DSoftStudio.Mediator
         public static void Freeze()
         {
             _dispatchers = _mutableDispatchers.ToFrozenDictionary();
+            _frozen = true;
         }
+
+        /// <summary>
+        /// Test-only: puts the table back in its unbuilt state. The flag is process-global, so a test
+        /// that exercises the not-yet-registered path has to restore it with <see cref="Freeze"/>.
+        /// </summary>
+        internal static void ResetForTests() => _frozen = false;
 
         /// <summary>
         /// Replaces the default FrozenDictionary-based dispatch with a source-generated
@@ -111,6 +123,13 @@ namespace DSoftStudio.Mediator
             if (_dispatchers.TryGetValue(notification.GetType(), out var dispatcher))
                 return dispatcher(notification, serviceProvider, publisher, cancellationToken);
 
+            // Plans are built from HANDLERS, so a notification nobody subscribes to has no entry
+            // here. Once the registration step has run, that is not an error — it is a notification
+            // with no subscribers yet, which is the ordinary state of a domain event. Publishing it
+            // through the generic overload has always been a no-op; this is the same publish.
+            if (_frozen && notification is INotification)
+                return Task.CompletedTask;
+
             ThrowNoHandler(notification);
             return Task.CompletedTask; // unreachable
         }
@@ -126,9 +145,11 @@ namespace DSoftStudio.Mediator
                     nameof(notification));
             }
 
+            // Only reachable before Freeze(), so the message can say what is actually wrong instead
+            // of guessing: the registration step has not run at all.
             throw new InvalidOperationException(
-                $"No notification handler registered for {notification.GetType().Name}. " +
-                "Ensure PrecompileNotifications() is called during service configuration.");
+                $"Cannot publish {notification.GetType().Name}: the notification dispatch table has " +
+                "not been built. Call PrecompileNotifications() during service configuration.");
         }
     }
 }

@@ -90,6 +90,16 @@ those before upgrading.
 
 ### Fixed
 
+- **Publishing a notification with no subscribers no longer depends on how the call is written.**
+  `Publish(object)` threw `InvalidOperationException` where the generic overload was a no-op, so the
+  same event published from a domain-event or outbox loop failed while the direct call succeeded.
+  Dispatch plans are built from handlers, so a notification nobody subscribes to has no table entry —
+  the ordinary state of an event nothing listens for yet, not a wiring fault, and the old message
+  ("Ensure PrecompileNotifications() is called") sent people to debug a registration that was fine.
+  Both forms are now a no-op. The two errors worth keeping still throw: publishing something that is
+  not an `INotification`, and publishing before `PrecompileNotifications()` has run, which now says
+  exactly that. Present since 1.3.0.
+
 - **The dispatch caches now honour the registered lifetime.** Every provider-keyed `[ThreadStatic]`
   cache stored whatever it resolved, keyed only on the provider. That is right for Singleton and
   Scoped and wrong for Transient: three `Send` calls of a handler with a Transient dependency

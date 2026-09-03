@@ -240,14 +240,18 @@ public class ParallelNotificationPublisherCoverageTests
 public class NotificationObjectDispatchCoverageTests
 {
     [Fact]
-    public void Dispatch_UnregisteredType_Throws()
+    public async Task Dispatch_UnregisteredType_IsANoOp()
     {
         var services = new ServiceCollection();
-        var sp = services.BuildServiceProvider();
+        using var sp = services.BuildServiceProvider();
 
-        Should.Throw<InvalidOperationException>(
-            () => NotificationObjectDispatch.Dispatch(
-                new UnregisteredNotification(), sp, null, TestContext.Current.CancellationToken));
+        // This used to throw. Dispatch plans are built from HANDLERS, so a notification nobody
+        // subscribes to has no entry -- which is the ordinary state of a domain event nothing
+        // listens for yet, not a wiring fault. The generic overload has always been a no-op here,
+        // and the two must agree. The wiring error the old throw existed to catch is still caught,
+        // and pinned by UnsubscribedNotificationTests.
+        await NotificationObjectDispatch.Dispatch(
+            new UnregisteredNotification(), sp, null, TestContext.Current.CancellationToken);
     }
 }
 
