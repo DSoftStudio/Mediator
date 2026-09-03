@@ -55,21 +55,20 @@ public class RegistrationTests
     }
 
     [Fact]
-    public void AddMediatorInstrumentation_registers_notification_publisher_decorator()
+    public void AddMediatorInstrumentation_observes_notifications_without_a_publisher()
     {
         var services = new ServiceCollection();
         services.AddMediatorInstrumentation();
 
-        var publisherDescriptor = services
-            .LastOrDefault(s => s.ServiceType == typeof(INotificationPublisher));
+        var observerDescriptor = services
+            .LastOrDefault(s => s.ServiceType == typeof(IMediatorNotificationObserver));
 
-        publisherDescriptor.ShouldNotBeNull();
-        publisherDescriptor!.Lifetime.ShouldBe(ServiceLifetime.Singleton);
+        observerDescriptor.ShouldNotBeNull();
+        observerDescriptor!.Lifetime.ShouldBe(ServiceLifetime.Singleton);
 
-        // Should resolve to InstrumentedNotificationPublisher
-        var sp = services.BuildServiceProvider();
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
-        publisher.ShouldBeOfType<InstrumentedNotificationPublisher>();
+        using var sp = services.BuildServiceProvider();
+        sp.GetRequiredService<IMediatorNotificationObserver>()
+            .ShouldBeOfType<MediatorNotificationTracingObserver>();
     }
 
     [Fact]
@@ -87,16 +86,22 @@ public class RegistrationTests
     }
 
     [Fact]
-    public void AddMediatorInstrumentation_wraps_default_sequential_publisher_when_none_registered()
+    public void AddMediatorInstrumentation_does_not_invent_a_publisher_to_decorate()
     {
         var services = new ServiceCollection();
-        // No custom publisher registered
+        // No custom publisher registered.
 
         services.AddMediatorInstrumentation();
 
-        var sp = services.BuildServiceProvider();
-        var publisher = sp.GetRequiredService<INotificationPublisher>();
-        publisher.ShouldBeOfType<InstrumentedNotificationPublisher>();
+        // Installing one here is what used to make enabling telemetry change the thing it observes:
+        // it disarms the generated dispatch, resolves handlers from the container instead of the
+        // compile-time table -- so a handler the generator cannot see goes from skipped to invoked --
+        // and hands back a different singleton instance for a handler that keeps state.
+        services.ShouldNotContain(s => s.ServiceType == typeof(INotificationPublisher));
+
+        using var sp = services.BuildServiceProvider();
+        sp.GetService<INotificationPublisher>().ShouldBeNull();
+        sp.GetService<IMediatorNotificationObserver>().ShouldNotBeNull();
     }
 
     [Fact]
@@ -153,9 +158,21 @@ public class RegistrationTests
 
         provider.GetServices<MediatorInstrumentationOptions>().Count().ShouldBe(1);
         provider.GetServices<IMediatorDispatchObserver>().Count().ShouldBe(1);
+        provider.GetServices<IMediatorNotificationObserver>().Count().ShouldBe(1);
+    }
 
-        // One layer of decoration. A second layer wraps every handler twice, and the OUTER wrapper is
-        // what mediator.handler.type reports — InstrumentedHandler does not implement
+    [Fact]
+    public void AddMediatorInstrumentation_called_twice_over_a_custom_publisher_decorates_once()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<INotificationPublisher, TestCustomPublisher>();
+        services.AddMediatorInstrumentation();
+        services.AddMediatorInstrumentation();
+
+        using var provider = services.BuildServiceProvider();
+
+        // One layer. A second wraps every handler twice, and the OUTER wrapper is what
+        // mediator.handler.type would report — InstrumentedHandler does not implement
         // IPipelineHandlerTypeAccessor, so the handler type cannot be resolved through it. A consumer
         // then sees the wrapper where the subscriber should be, and counts one publish as two.
         DecorationDepth(provider.GetRequiredService<INotificationPublisher>()).ShouldBe(1);

@@ -73,17 +73,37 @@ public static class OpenTelemetryServiceCollectionExtensions
         {
             var existingDescriptor = FindLastDescriptor(services, typeof(INotificationPublisher));
 
-            services.RemoveAll<INotificationPublisher>();
-
-            services.AddSingleton<INotificationPublisher>(sp =>
+            if (existingDescriptor is null)
             {
-                var inner = ResolveInnerPublisher(sp, existingDescriptor);
-                // MediatorMetrics is only registered when metrics are enabled — null here means tracing-only.
-                return new InstrumentedNotificationPublisher(
-                    inner,
-                    sp.GetRequiredService<MediatorInstrumentationOptions>(),
-                    sp.GetService<MediatorMetrics>());
-            });
+                // NOTHING to decorate, so do not invent something to decorate. Installing a publisher
+                // here is what used to make enabling telemetry change the thing it observes: it
+                // disarms the generated dispatch, resolves handlers from the container instead of the
+                // compile-time table -- so a handler the generator could not see goes from skipped to
+                // invoked -- and hands back a different singleton instance for a stateful handler.
+                // The observation port produces the same spans without any of that.
+                services.AddSingleton<IMediatorNotificationObserver>(sp =>
+                    new MediatorNotificationTracingObserver(
+                        sp.GetRequiredService<MediatorInstrumentationOptions>(),
+                        sp.GetService<MediatorMetrics>()));
+            }
+            else
+            {
+                // The application registered its own publisher, so the fast path is ALREADY disarmed
+                // and the membership already decided by the container. Decorating it changes nothing
+                // that was not already changed, and it is the only way to reach the individual
+                // handler invocations when a publisher owns the loop.
+                services.RemoveAll<INotificationPublisher>();
+
+                services.AddSingleton<INotificationPublisher>(sp =>
+                {
+                    var inner = ResolveInnerPublisher(sp, existingDescriptor);
+                    // MediatorMetrics is only registered when metrics are enabled — null here means tracing-only.
+                    return new InstrumentedNotificationPublisher(
+                        inner,
+                        sp.GetRequiredService<MediatorInstrumentationOptions>(),
+                        sp.GetService<MediatorMetrics>());
+                });
+            }
         }
 
         return services;

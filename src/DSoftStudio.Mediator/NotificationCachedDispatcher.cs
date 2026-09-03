@@ -93,16 +93,14 @@ namespace DSoftStudio.Mediator
             if (observer is null || !observer.IsActive)
                 return Unobserved(publisher, notification, serviceProvider, cancellationToken);
 
-            var scope = observer.BeginPublish(notification);
-            if (scope is null)
-                return Unobserved(publisher, notification, serviceProvider, cancellationToken);
-
-            // A publisher owns the subscriber loop, so the core cannot reach the individual
-            // invocations. Say so, rather than letting the adapter emit a publish with nothing
-            // under it -- which a consumer cannot tell from "no handlers ran".
+            // BeginPublish is called INSIDE the async body below, never here. Opening an observation
+            // typically makes something ambient, and this method is synchronous: a mutation made here
+            // lands in the CALLER's execution context and nothing restores it, so the code that called
+            // Publish would carry the observation away with it. The async method builder saves and
+            // restores that context around the first suspension, which is what contains it.
             return publisher is null
-                ? DispatchObserved(scope, notification, serviceProvider, cancellationToken)
-                : DispatchObservedViaPublisher(scope, publisher, notification, serviceProvider, cancellationToken);
+                ? DispatchObserved(observer, notification, serviceProvider, cancellationToken)
+                : DispatchObservedViaPublisher(observer, publisher, notification, serviceProvider, cancellationToken);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -120,13 +118,23 @@ namespace DSoftStudio.Mediator
                     cancellationToken);
 
         private static async Task DispatchObservedViaPublisher<TNotification>(
-            IMediatorPublishScope scope,
+            IMediatorNotificationObserver observer,
             INotificationPublisher publisher,
             TNotification notification,
             IServiceProvider serviceProvider,
             CancellationToken cancellationToken)
             where TNotification : INotification
         {
+            var scope = observer.BeginPublish(notification);
+            if (scope is null)
+            {
+                await publisher.Publish(
+                    serviceProvider.GetServices<INotificationHandler<TNotification>>(),
+                    notification,
+                    cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
             try
             {
                 scope.OnSubscribersUnobservable();
@@ -159,12 +167,19 @@ namespace DSoftStudio.Mediator
         /// </para>
         /// </summary>
         private static async Task DispatchObserved<TNotification>(
-            IMediatorPublishScope scope,
+            IMediatorNotificationObserver observer,
             TNotification notification,
             IServiceProvider serviceProvider,
             CancellationToken cancellationToken)
             where TNotification : INotification
         {
+            var scope = observer.BeginPublish(notification);
+            if (scope is null)
+            {
+                await DispatchSequential(notification, serviceProvider, cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
             try
             {
                 var factories = NotificationDispatch<TNotification>.Handlers;
