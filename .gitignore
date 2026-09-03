@@ -76,3 +76,12 @@ nunit-*.xml
 
 # Jekyll build output — GitHub Pages regenerates this from /docs
 /docs/_site/
+
+# BenchmarkDotNet artifacts: only the github-markdown reports are versioned. The csv, html and log
+# files are regenerated on every run and would bury the diff that matters.
+benchmarks/BenchmarkDotNet.Artifacts/**/*.csv
+benchmarks/BenchmarkDotNet.Artifacts/**/*.html
+benchmarks/BenchmarkDotNet.Artifacts/**/*.log
+BenchmarkDotNet.Artifacts/**/*.csv
+BenchmarkDotNet.Artifacts/**/*.html
+BenchmarkDotNet.Artifacts/**/*.log
