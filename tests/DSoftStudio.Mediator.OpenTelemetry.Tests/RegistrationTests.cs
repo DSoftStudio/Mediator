@@ -142,6 +142,43 @@ public class RegistrationTests
         options.RecordExceptionStackTraces.ShouldBeFalse();
     }
 
+    [Fact]
+    public void AddMediatorInstrumentation_called_twice_registers_one_of_everything()
+    {
+        var services = new ServiceCollection();
+        services.AddMediatorInstrumentation();
+        services.AddMediatorInstrumentation();
+
+        using var provider = services.BuildServiceProvider();
+
+        provider.GetServices<MediatorInstrumentationOptions>().Count().ShouldBe(1);
+        provider.GetServices<IMediatorDispatchObserver>().Count().ShouldBe(1);
+
+        // One layer of decoration. A second layer wraps every handler twice, and the OUTER wrapper is
+        // what mediator.handler.type reports — InstrumentedHandler does not implement
+        // IPipelineHandlerTypeAccessor, so the handler type cannot be resolved through it. A consumer
+        // then sees the wrapper where the subscriber should be, and counts one publish as two.
+        DecorationDepth(provider.GetRequiredService<INotificationPublisher>()).ShouldBe(1);
+    }
+
+    /// <summary>How many INotificationPublisher decorators are stacked, walking the inner chain.</summary>
+    private static int DecorationDepth(INotificationPublisher publisher)
+    {
+        int depth = 0;
+        object? current = publisher;
+
+        while (current is not null && current.GetType().Name.Contains("Instrumented"))
+        {
+            depth++;
+            var inner = current.GetType()
+                .GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                .FirstOrDefault(f => typeof(INotificationPublisher).IsAssignableFrom(f.FieldType));
+            current = inner?.GetValue(current);
+        }
+
+        return depth;
+    }
+
     // ── Test helpers ──────────────────────────────────────────────────
 
     private sealed class TestCustomPublisher : INotificationPublisher

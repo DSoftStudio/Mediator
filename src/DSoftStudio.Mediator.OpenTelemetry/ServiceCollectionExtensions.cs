@@ -12,7 +12,21 @@ public static class OpenTelemetryServiceCollectionExtensions
     /// <summary>
     /// Adds OpenTelemetry instrumentation behaviors for the mediator.
     /// Call this after <c>AddMediator()</c> / <c>RegisterMediatorHandlers()</c>
-    /// and before <c>PrecompilePipelines()</c>.
+    /// and before <c>PrecompilePipelines()</c> — and before the other mediator packages
+    /// (<c>AddMediatorFluentValidation()</c>, <c>AddMediatorHybridCache()</c>), since the scan that
+    /// <c>PrecompilePipelines()</c> performs is a freeze point for all of them.
+    /// <para>
+    /// Calling this more than once is a no-op after the first: the first call's options win. Without
+    /// that guard the second call decorates the first decorator, and every notification handler is
+    /// then wrapped twice — the outer wrapper is what
+    /// <c>mediator.handler.type</c> would report, so a consumer sees the wrapper instead of the
+    /// subscriber, and one publish is reported as two.
+    /// </para>
+    /// <para>
+    /// Only ONE <see cref="IMediatorDispatchObserver"/> is ever used — the first registered — so if
+    /// the application registers an observer of its own BEFORE calling this, the tracing observer
+    /// installed here is silently ignored and no request spans are produced.
+    /// </para>
     /// </summary>
     public static IServiceCollection AddMediatorInstrumentation(
         this IServiceCollection services,
@@ -20,9 +34,13 @@ public static class OpenTelemetryServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
+        if (AlreadyRegistered(services))
+            return services;
+
         var options = new MediatorInstrumentationOptions();
         configure?.Invoke(options);
 
+        services.AddSingleton(new InstrumentationMarker());
         services.AddSingleton(options);
 
         // ── Pipeline behaviors ──────────────────────────────────────────
@@ -69,6 +87,22 @@ public static class OpenTelemetryServiceCollectionExtensions
         }
 
         return services;
+    }
+
+    /// <summary>
+    /// Marker that records this collection has already been instrumented. A descriptor rather than a
+    /// flag because the collection is the only state shared across two calls.
+    /// </summary>
+    private sealed class InstrumentationMarker;
+
+    private static bool AlreadyRegistered(IServiceCollection services)
+    {
+        for (int i = 0; i < services.Count; i++)
+        {
+            if (services[i].ServiceType == typeof(InstrumentationMarker))
+                return true;
+        }
+        return false;
     }
 
     private static ServiceDescriptor? FindLastDescriptor(IServiceCollection services, Type serviceType)
