@@ -63,7 +63,7 @@ public sealed class LoggingPostProcessor<TRequest, TResponse>(List<string> log) 
 
 // ── Fake dispatch observer that records the dispatch lifecycle ──────
 
-public sealed class RecordingObserver(List<string> log) : IMediatorDispatchObserver
+public sealed class RecordingObserver(List<string> log, string name = "observer") : IMediatorDispatchObserver
 {
     public bool Active { get; set; } = true;
 
@@ -72,14 +72,14 @@ public sealed class RecordingObserver(List<string> log) : IMediatorDispatchObser
     public IMediatorDispatchScope? BeginDispatch<TRequest, TResponse>(TRequest request, IRequestHandler<TRequest, TResponse> handler)
         where TRequest : IRequest<TResponse>
     {
-        log.Add($"observer:begin:{typeof(TRequest).Name}:{handler.GetType().Name}");
-        return new RecordingScope(log);
+        log.Add($"{name}:begin:{typeof(TRequest).Name}:{handler.GetType().Name}");
+        return new RecordingScope(log, name);
     }
 
-    private sealed class RecordingScope(List<string> log) : IMediatorDispatchScope
+    private sealed class RecordingScope(List<string> log, string name) : IMediatorDispatchScope
     {
-        public void OnError(Exception exception) => log.Add($"observer:error:{exception.GetType().Name}");
-        public void Dispose() => log.Add("observer:dispose");
+        public void OnError(Exception exception) => log.Add($"{name}:error:{exception.GetType().Name}");
+        public void Dispose() => log.Add($"{name}:dispose");
     }
 }
 
@@ -142,6 +142,47 @@ public class DispatchObserverTests
 
         result.ShouldBe(7);
         log.ShouldBe(new[] { "observer:begin:ObservedSoloPing:ObservedSoloPingHandler", "handler", "observer:dispose" });
+    }
+
+    [Fact]
+    public async Task Every_registered_observer_runs_and_the_scopes_unwind_in_reverse()
+    {
+        var log = new List<string>();
+        var services = BuildServices(log);
+        services.AddSingleton<IMediatorDispatchObserver>(new RecordingObserver(log, "first"));
+        services.AddSingleton<IMediatorDispatchObserver>(new RecordingObserver(log, "second"));
+        services.PrecompilePipelines();
+
+        using var provider = services.BuildServiceProvider();
+        await provider.GetRequiredService<IMediator>().Send(new ObservedPing(), TestContext.Current.CancellationToken);
+
+        // Taking observers[0] used to drop the second silently -- a profiler alongside a tracing
+        // bridge simply never ran, and nothing said so. They are told in registration order and
+        // unwound in reverse, so one that leaves something ambient closes after anything opened
+        // inside it.
+        log.ShouldBe(new[]
+        {
+            "first:begin:ObservedPing:ObservedPingHandler",
+            "second:begin:ObservedPing:ObservedPingHandler",
+            "handler",
+            "second:dispose",
+            "first:dispose",
+        });
+    }
+
+    [Fact]
+    public async Task An_inactive_observer_does_not_suppress_an_active_one()
+    {
+        var log = new List<string>();
+        var services = BuildServices(log);
+        services.AddSingleton<IMediatorDispatchObserver>(new RecordingObserver(log, "idle") { Active = false });
+        services.AddSingleton<IMediatorDispatchObserver>(new RecordingObserver(log, "live"));
+        services.PrecompilePipelines();
+
+        using var provider = services.BuildServiceProvider();
+        await provider.GetRequiredService<IMediator>().Send(new ObservedPing(), TestContext.Current.CancellationToken);
+
+        log.ShouldBe(new[] { "live:begin:ObservedPing:ObservedPingHandler", "handler", "live:dispose" });
     }
 
     [Fact]

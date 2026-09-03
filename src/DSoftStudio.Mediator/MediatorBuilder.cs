@@ -140,9 +140,9 @@ public sealed class MediatorBuilder
     /// to <see cref="ServiceLifetime.Singleton"/> — an observer is a stateless cross-cutting adapter.
     /// </para>
     /// <para>
-    /// Only ONE observer is ever used: the first one registered wins and any others are silently
-    /// ignored. Compose several concerns inside a single adapter rather than registering several
-    /// observers.
+    /// Several observers may be registered and all of them run — a tracing bridge and a profiler can
+    /// watch the same dispatch. They are told in registration order and their scopes are disposed in
+    /// reverse, so one that makes something ambient unwinds after anything opened inside it.
     /// </para>
     /// </summary>
     /// <typeparam name="T">The concrete observer type implementing <see cref="IMediatorDispatchObserver"/>.</typeparam>
@@ -161,8 +161,7 @@ public sealed class MediatorBuilder
     /// this overload when the observer carries configuration that cannot be resolved from DI (the OpenTelemetry
     /// bridge registers its tracing observer this way). See <see cref="AddDispatchObserver{T}(ServiceLifetime)"/>.
     /// <para>
-    /// As with the other overload, only the first registered observer is used; any others are
-    /// silently ignored.
+    /// As with the other overload, every registered observer runs.
     /// </para>
     /// </summary>
     /// <param name="observer">The observer instance to register as a singleton.</param>

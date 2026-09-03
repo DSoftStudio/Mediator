@@ -8,7 +8,7 @@ BenchmarkDotNet v0.15.8, Windows 11 (10.0.26200.9278/25H2/2025Update/HudsonValle
 
 
 ```
-| Method     | Mean     | Error     | StdDev    | Ratio | Rank | Gen0   | Allocated | Alloc Ratio |
-|----------- |---------:|----------:|----------:|------:|-----:|-------:|----------:|------------:|
-| DirectCall | 6.825 ns | 0.0331 ns | 0.0310 ns |  1.00 |    1 | 0.0055 |      72 B |        1.00 |
-| DSoft_Send | 6.844 ns | 0.0386 ns | 0.0342 ns |  1.00 |    1 | 0.0055 |      72 B |        1.00 |
+| Method     | Mean     | Error     | StdDev    | Ratio | RatioSD | Rank | Gen0   | Allocated | Alloc Ratio |
+|----------- |---------:|----------:|----------:|------:|--------:|-----:|-------:|----------:|------------:|
+| DirectCall | 5.671 ns | 0.0842 ns | 0.0787 ns |  1.00 |    0.02 |    1 | 0.0055 |      72 B |        1.00 |
+| DSoft_Send | 5.931 ns | 0.0234 ns | 0.0183 ns |  1.05 |    0.01 |    2 | 0.0055 |      72 B |        1.00 |

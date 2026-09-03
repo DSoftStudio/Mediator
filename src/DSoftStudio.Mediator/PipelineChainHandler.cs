@@ -60,12 +60,19 @@ namespace DSoftStudio.Mediator
             // mediator carries no tracing dependency and _observer stays null.
             IEnumerable<IMediatorDispatchObserver> observers)
         {
-            // First registered observer wins (one tracing adapter in practice). Materialize like the component
-            // arrays below — DI hands us an array, so the `is` check avoids any copy — then take element 0. No
-            // LINQ, and no boxed enumerator (which a foreach over IEnumerable<T> would allocate anyway).
-            // Constructed once per scope, never on the hot path.
+            // Every registered observer runs, not just the first. Taking element 0 meant a second
+            // adapter — a profiler alongside a tracing bridge — was dropped silently, which is a hard
+            // failure to diagnose from the outside: everything looks healthy and half the telemetry
+            // is missing. Materialized like the component arrays below (DI hands us an array, so the
+            // `is` check avoids any copy), then collapsed to ONE reference so the dispatch reads a
+            // single field either way. Constructed once per scope, never on the hot path.
             var observerArray = observers is IMediatorDispatchObserver[] obsArray ? obsArray : [.. observers];
-            _observer = observerArray.Length > 0 ? observerArray[0] : null;
+            _observer = observerArray.Length switch
+            {
+                0 => null,
+                1 => observerArray[0],
+                _ => new CompositeDispatchObserver(observerArray),
+            };
 
             _behaviors = behaviors is IPipelineBehavior<TRequest, TResponse>[] bArray
                 ? bArray

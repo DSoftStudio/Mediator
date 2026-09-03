@@ -23,9 +23,9 @@ public static class OpenTelemetryServiceCollectionExtensions
     /// subscriber, and one publish is reported as two.
     /// </para>
     /// <para>
-    /// Only ONE <see cref="IMediatorDispatchObserver"/> is ever used — the first registered — so if
-    /// the application registers an observer of its own BEFORE calling this, the tracing observer
-    /// installed here is silently ignored and no request spans are produced.
+    /// The observer registered here coexists with any the application registers of its own: every
+    /// registered <see cref="IMediatorDispatchObserver"/> runs, and so does every
+    /// <see cref="IMediatorNotificationObserver"/>.
     /// </para>
     /// </summary>
     public static IServiceCollection AddMediatorInstrumentation(
