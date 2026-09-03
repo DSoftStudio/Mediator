@@ -139,6 +139,26 @@ public class NotificationObservationTests
     }
 
     [Fact]
+    public async Task AParallelPublisherObservesEverySubscriberFromItsOwnThread()
+    {
+        ResetTierState();
+        var observer = new RecordingObserver();
+
+        using var provider = Build(observer, new ParallelNotificationPublisher());
+        await provider.GetRequiredService<IMediator>()
+            .Publish(new ObservedPing(), TestContext.Current.CancellationToken);
+
+        // The parallel publisher queues each handler to the thread pool, so BeginSubscriber runs
+        // concurrently on the same scope. Losing one here would silently drop a subscriber from
+        // every fan-out an application publishes in parallel.
+        observer.Scope!.Subscribers.Count.ShouldBe(2);
+        observer.Scope.Subscribers.Select(s => s.Handler.GetType()).ShouldBe(
+            new[] { typeof(ObservedHandlerA), typeof(ObservedHandlerB) }, ignoreOrder: true);
+        observer.Scope.Subscribers.ShouldAllBe(s => s.Disposed);
+        observer.Scope.Disposed.ShouldBeTrue();
+    }
+
+    [Fact]
     public async Task AnIdleObserverIsNotAskedToOpenAnything()
     {
         ResetTierState();
@@ -171,14 +191,18 @@ public class NotificationObservationTests
 
     internal sealed class RecordingScope : IMediatorPublishScope
     {
-        public readonly List<RecordingSubscriber> Subscribers = [];
+        private readonly System.Collections.Concurrent.ConcurrentQueue<RecordingSubscriber> _subscribers = new();
+
+        public IReadOnlyCollection<RecordingSubscriber> Subscribers => _subscribers;
         public bool Disposed;
         public Exception? Error;
 
+        // Concurrent by contract: a publisher may run the handlers in parallel, so this is called
+        // from several threads for the same scope.
         public IMediatorSubscriberScope? BeginSubscriber(object handler)
         {
             var subscriber = new RecordingSubscriber(handler);
-            Subscribers.Add(subscriber);
+            _subscribers.Enqueue(subscriber);
             return subscriber;
         }
 

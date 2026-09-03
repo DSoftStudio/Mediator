@@ -147,11 +147,11 @@ public sealed class NotificationGenerator : IIncrementalGenerator
             sb.AppendLine("                static (notification, sp, publisher, ct) =>");
             sb.AppendLine("                {");
             sb.AppendLine($"                    var typed = ({plan.NotificationType})notification;");
-            sb.AppendLine("                    if (publisher is not null)");
-            sb.AppendLine("                    {");
-            sb.AppendLine($"                        var handlers = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetServices<global::DSoftStudio.Mediator.Abstractions.INotificationHandler<{plan.NotificationType}>>(sp);");
-            sb.AppendLine("                        return publisher.Publish(handlers, typed, ct);");
-            sb.AppendLine("                    }");
+            // The type switch above is not the only object route: this delegate is what
+            // NotificationObjectDispatch reaches through its FrozenDictionary, so it needs the same
+            // collapse. Fixing only the switch left every publish that lands here unobserved.
+            sb.AppendLine("                    if (global::DSoftStudio.Mediator.NotificationPublisherFlag.NotPlain)");
+            sb.AppendLine($"                        return global::DSoftStudio.Mediator.NotificationCachedDispatcher.DispatchRouted(typed, sp, ct);");
             AppendNoPublisherDispatch(sb, plan, disableAggressive, "                    ", "typed");
             sb.AppendLine("                });");
             sb.AppendLine();
@@ -195,29 +195,34 @@ public sealed class NotificationGenerator : IIncrementalGenerator
             sb.AppendLine("            global::DSoftStudio.Mediator.Abstractions.INotificationPublisher? publisher,");
             sb.AppendLine("            global::System.Threading.CancellationToken ct)");
             sb.AppendLine("        {");
-            sb.AppendLine("            switch (notification)");
-            sb.AppendLine("            {");
+            // EXACT-type dispatch, not type patterns. A `case Base b:` also matches a derived
+            // notification, which is wrong twice over: the plans are ordered ordinally, so a derived
+            // type sorting after its base makes its own case unreachable (CS8120, the generated file
+            // does not compile), and where it did compile the derived notification would be published
+            // to the BASE's handlers -- the opposite of the exact-type dispatch this library
+            // documents and chose deliberately over inheritance scanning.
+            sb.AppendLine("            var __type = notification.GetType();");
 
             int caseIndex = 0;
             foreach (var plan in plans)
             {
                 var varName = $"__n{caseIndex}";
-                sb.AppendLine($"                case {plan.NotificationType} {varName}:");
-                sb.AppendLine("                {");
+                sb.AppendLine($"            if (__type == typeof({plan.NotificationType}))");
+                sb.AppendLine("            {");
+                sb.AppendLine($"                var {varName} = ({plan.NotificationType})notification;");
                 // Same collapse as the typed interceptor: a custom publisher OR a notification
                 // observer routes to the one cold entry that sorts out which. This case used to have
                 // its own publisher branch and no observer branch at all, so a notification published
                 // as `object` -- a domain-event or outbox loop -- was invisible to observation.
-                sb.AppendLine("                    if (global::DSoftStudio.Mediator.NotificationPublisherFlag.NotPlain)");
-                sb.AppendLine($"                        return global::DSoftStudio.Mediator.NotificationCachedDispatcher.DispatchRouted({varName}, sp, ct);");
-                AppendNoPublisherDispatch(sb, plan, disableAggressive, "                    ", varName);
-                sb.AppendLine("                }");
+                sb.AppendLine("                if (global::DSoftStudio.Mediator.NotificationPublisherFlag.NotPlain)");
+                sb.AppendLine($"                    return global::DSoftStudio.Mediator.NotificationCachedDispatcher.DispatchRouted({varName}, sp, ct);");
+                AppendNoPublisherDispatch(sb, plan, disableAggressive, "                ", varName);
+                sb.AppendLine("            }");
+                sb.AppendLine();
                 caseIndex++;
             }
 
-            sb.AppendLine("                default:");
-            sb.AppendLine("                    return global::DSoftStudio.Mediator.NotificationObjectDispatch.DispatchFallback(notification, sp, publisher, ct);");
-            sb.AppendLine("            }");
+            sb.AppendLine("            return global::DSoftStudio.Mediator.NotificationObjectDispatch.DispatchFallback(notification, sp, publisher, ct);");
             sb.AppendLine("        }");
         }
 

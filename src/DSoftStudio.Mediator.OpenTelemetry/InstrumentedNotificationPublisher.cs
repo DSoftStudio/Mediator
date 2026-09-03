@@ -126,9 +126,17 @@ internal sealed class InstrumentedNotificationPublisher(INotificationPublisher i
     /// <summary>
     /// Wrapper that creates a child span for each notification handler invocation.
     /// </summary>
-    private sealed class InstrumentedHandler<TNotification>(INotificationHandler<TNotification> inner, MediatorInstrumentationOptions options) : INotificationHandler<TNotification>
+    private sealed class InstrumentedHandler<TNotification>(INotificationHandler<TNotification> inner, MediatorInstrumentationOptions options)
+        : INotificationHandler<TNotification>, IPipelineHandlerTypeAccessor
         where TNotification : INotification
     {
+        /// <summary>
+        /// Forwards the real subscriber. Without this the wrapper is opaque, and anything reading the
+        /// handler type through this seam — the live profiler's EventSource among them — collapses
+        /// every subscriber of a notification into this one wrapper type.
+        /// </summary>
+        public Type HandlerType => ResolveHandlerType(inner);
+
 
         public async Task Handle(TNotification notification, CancellationToken cancellationToken)
         {

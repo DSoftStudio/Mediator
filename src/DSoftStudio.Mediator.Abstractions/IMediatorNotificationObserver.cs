@@ -44,6 +44,16 @@ public interface IMediatorNotificationObserver
 
 /// <summary>
 /// One publish. Disposed when the whole publish completes, whether it succeeded or not.
+/// <para>
+/// <b><see cref="BeginSubscriber"/> may be called concurrently from several threads for the same
+/// scope.</b> A publisher is free to run the handlers in parallel — the built-in parallel one queues
+/// each to the thread pool — so an implementation must be safe under concurrent calls. The returned
+/// subscriber scopes are independent of one another; only this publish scope is shared.
+/// </para>
+/// <para>
+/// <see cref="OnError"/> and <see cref="IDisposable.Dispose"/> are called once each, after every
+/// subscriber has finished, so they need no synchronisation of their own.
+/// </para>
 /// </summary>
 public interface IMediatorPublishScope : IDisposable
 {
