@@ -36,7 +36,7 @@
 			mediator;mediatr;mediatr-alternative;cqrs;pipeline;dotnet;performance;source-generator;native-aot;high-performance;zero-allocation;aot
 		</PackageTags>
 
-		<PackageProjectUrl>https://docs.dsoftstudio.com/mediator</PackageProjectUrl>
+		<PackageProjectUrl>https://mediator.dsoftstudio.com/</PackageProjectUrl>
 		<RepositoryUrl>https://github.com/DSoftStudio/Mediator</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
 

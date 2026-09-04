@@ -25,7 +25,7 @@
 		  mediator;abstractions;contracts;cqrs;interfaces;dotnet;native-aot
 	  </PackageTags>
 
-	  <PackageProjectUrl>https://docs.dsoftstudio.com/mediator</PackageProjectUrl>
+	  <PackageProjectUrl>https://mediator.dsoftstudio.com/</PackageProjectUrl>
 	  <RepositoryUrl>https://github.com/DSoftStudio/Mediator</RepositoryUrl>
 	  <RepositoryType>git</RepositoryType>
 

@@ -22,7 +22,7 @@
 			mediator;fluentvalidation;validation;pipeline;cqrs;behavior
 		</PackageTags>
 
-		<PackageProjectUrl>https://docs.dsoftstudio.com/mediator</PackageProjectUrl>
+		<PackageProjectUrl>https://mediator.dsoftstudio.com/</PackageProjectUrl>
 		<RepositoryUrl>https://github.com/DSoftStudio/Mediator</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
 
