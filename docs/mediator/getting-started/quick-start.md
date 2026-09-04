@@ -59,14 +59,21 @@ services.AddMediator(builder =>
 
 Available builder methods:
 
-| Method | Purpose |
-|---|---|
-| `AddOpenBehavior(Type, ServiceLifetime)` | Open-generic `IPipelineBehavior<,>` |
-| `AddStreamBehavior<T>(ServiceLifetime)` | Closed `IStreamPipelineBehavior<,>` |
-| `AddRequestPreProcessor<T>(ServiceLifetime)` | `IRequestPreProcessor<T>` |
-| `AddRequestPostProcessor<T>(ServiceLifetime)` | `IRequestPostProcessor<T,R>` |
-| `AddRequestExceptionHandler<T>(ServiceLifetime)` | `IRequestExceptionHandler<T,R>` |
-| `AddParallelNotificationPublisher()` | Replace sequential with `Task.WhenAll` dispatch |
+| Method | Purpose | Default lifetime |
+|---|---|---|
+| `AddOpenBehavior(Type, ServiceLifetime)` | Open-generic `IPipelineBehavior<,>` | `Scoped` |
+| `AddStreamBehavior<T>(ServiceLifetime)` | Closed `IStreamPipelineBehavior<,>` | `Scoped` |
+| `AddRequestPreProcessor<T>(ServiceLifetime)` | `IRequestPreProcessor<T>` | `Scoped` |
+| `AddRequestPostProcessor<T>(ServiceLifetime)` | `IRequestPostProcessor<T,R>` | `Scoped` |
+| `AddRequestExceptionHandler<T>(ServiceLifetime)` | `IRequestExceptionHandler<T,R>` | `Scoped` |
+| `AddDispatchObserver<T>(ServiceLifetime)` | `IMediatorDispatchObserver` | `Singleton` |
+| `AddParallelNotificationPublisher()` | Replace sequential with `Task.WhenAll` dispatch | — |
+
+`Scoped` is the longest lifetime that is safe without inspecting the component's constructor, and it
+keeps the request's pipeline chain cacheable — one Transient component makes the whole chain Transient,
+so it is rebuilt on every dispatch. Pass `ServiceLifetime.Transient` yourself when a component must be
+constructed per dispatch: a Scoped instance is shared by every dispatch in the scope, concurrent ones
+included.
 
 ### Alternative: Step-by-step registration (v1.1.x style)
 
@@ -78,7 +85,7 @@ services
     .RegisterMediatorHandlers();      // Discover and register all handlers
 
 // Register behaviors, processors, etc.
-services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
+services.AddScoped(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
 
 services
     .PrecompilePipelines()            // Build dispatch table and freeze
@@ -139,10 +146,10 @@ var result = await mediator.Send(new Ping());
 - `Unit` type for void-returning commands (`ICommand<Unit>`)
 - Compile-time handler discovery (no assembly scanning at runtime)
 - Compile-time pipeline precompilation (no lazy initialization on first call)
-- Auto-Singleton registration for stateless handlers (no constructor params → Singleton, with DI dependencies → Transient)
+- Automatic handler lifetimes — no constructor params → Singleton; with DI dependencies → the longest lifetime those dependencies allow (Singleton when all are singletons, open-generic framework services such as `ILogger<T>` and `IOptions<T>` included; Scoped when any is scoped; Transient only when one is transient or unregistered)
 - Zero reflection during request execution
 - Fail-fast handler validation via `ValidateMediatorHandlers()` — detect misconfigured handlers at startup
-- Compile-time diagnostics for missing handlers (DSOFT001), duplicate handler registrations (DSOFT002, DSOFT003), and mixed registration API (DSOFT007)
+- Compile-time diagnostics for missing handlers (DSOFT001), duplicate handler registrations (DSOFT002, DSOFT003), mixed registration API (DSOFT007), and pipeline components registered after the scan that would have built their chain (DSOFT010)
 - `MediatorBuilder` fluent API — single-call `AddMediator(configure)` with `AddOpenBehavior`, `AddRequestPreProcessor`, `AddParallelNotificationPublisher`, and more
 - Strong naming — all assemblies signed with `PublicKeyToken=6c7e753832e8eb05` for enterprise compatibility
 

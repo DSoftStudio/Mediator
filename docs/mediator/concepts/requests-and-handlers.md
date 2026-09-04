@@ -60,9 +60,11 @@ DSoftStudio.Mediator automatically optimizes handler lifetimes:
 | Handler Type | Lifetime | Why |
 |---|---|---|
 | **Stateless** (no constructor parameters) | **Singleton** | Zero per-call allocation — the handler is instantiated once and reused |
-| **With DI dependencies** | **Transient** | Dependencies may be scoped or transient themselves |
+| **All dependencies Singleton** | **Singleton** | Nothing in the graph is shorter-lived, so the handler is safe to share. An open-generic registration counts: `ILogger<T>` and `IOptions<T>` resolve against their open registration exactly as the container does |
+| **Any dependency Scoped** | **Scoped** | Cached per scope, and the handler is only ever resolved inside one |
+| **Any dependency Transient or unregistered** | **Transient** | Not safe to capture for longer — and a Transient handler takes its whole pipeline chain down with it, so the chain is rebuilt per dispatch |
 
-This is different from MediatR, where all handlers are registered as Transient by default. The auto-singleton optimization eliminates per-call allocation for stateless handlers without any manual configuration.
+This is different from MediatR, where all handlers are registered as Transient by default — and the optimization is not confined to stateless handlers. The decision is deferred until every registration is present, and a closed dependency is matched against its open-generic registration the way the container matches it, so a handler injecting an `ILogger<T>` is promoted to Singleton and one injecting a scoped `DbContext` is promoted to Scoped. Only a transient or genuinely unregistered dependency leaves a handler Transient.
 
 You can override the default lifetime by registering the handler manually before calling `RegisterMediatorHandlers()`:
 

@@ -51,5 +51,5 @@ public sealed class QueryCacheBehavior<TRequest, TResponse>
 
 // Registration
 services.AddHybridCache();
-services.AddTransient(typeof(IPipelineBehavior<,>), typeof(QueryCacheBehavior<,>));
+services.AddScoped(typeof(IPipelineBehavior<,>), typeof(QueryCacheBehavior<,>));
 ```

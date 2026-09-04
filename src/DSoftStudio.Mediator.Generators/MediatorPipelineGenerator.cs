@@ -265,6 +265,18 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
         sb.AppendLine("        private sealed class __PipelineSentinel { }");
         sb.AppendLine();
 
+        // Whether the chains were ALREADY frozen. AddMediator(configure) asks BEFORE running the
+        // configure lambda, because that lambda registers unconditionally while RegisterPipelineChains
+        // below returns early -- so on a second call the components it adds get no chain built for them.
+        sb.AppendLine("        public static bool PipelinesAlreadyRegistered(global::Microsoft.Extensions.DependencyInjection.IServiceCollection services)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            foreach (var d in services)");
+        sb.AppendLine("                if (d.ServiceType == typeof(__PipelineSentinel))");
+        sb.AppendLine("                    return true;");
+        sb.AppendLine("            return false;");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+
         sb.AppendLine("        public static void RegisterPipelineChains(global::Microsoft.Extensions.DependencyInjection.IServiceCollection services)");
         sb.AppendLine("        {");
         sb.AppendLine("            foreach (var d in services)");
@@ -333,7 +345,8 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
         sb.AppendLine("        {");
         sb.AppendLine("            bool needsChain = false;");
         sb.AppendLine("            bool allSingleton = true;");
-        sb.AppendLine("            bool hasTransientPipelineComponent = false;");
+        sb.AppendLine("            global::Microsoft.Extensions.DependencyInjection.ServiceLifetime? handlerLifetime = null;");
+        sb.AppendLine("            bool hasTransientChainDependency = false;");
         sb.AppendLine("            bool hasDispatchObserver = false;");
         sb.AppendLine("            foreach (var descriptor in services)");
         sb.AppendLine("            {");
@@ -352,21 +365,50 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
         sb.AppendLine("                    if (descriptor.Lifetime != global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton)");
         sb.AppendLine("                        allSingleton = false;");
         sb.AppendLine("                    if (descriptor.Lifetime == global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)");
-        sb.AppendLine("                        hasTransientPipelineComponent = true;");
+        sb.AppendLine("                        hasTransientChainDependency = true;");
         sb.AppendLine("                }");
         sb.AppendLine("                else if (st == typeof(global::DSoftStudio.Mediator.Abstractions.IMediatorDispatchObserver))");
         sb.AppendLine("                {");
         sb.AppendLine("                    hasDispatchObserver = true;");
-        sb.AppendLine("                }");
-        sb.AppendLine("                else if (st == typeof(global::DSoftStudio.Mediator.Abstractions.IRequestHandler<TRequest, TResponse>))");
-        sb.AppendLine("                {");
-        sb.AppendLine("                    // The chain's ctor consumes the handler, so a non-singleton handler (for example one");
-        sb.AppendLine("                    // that injects a scoped IMediator) constrains the chain DOWN to Scoped, preventing a");
-        sb.AppendLine("                    // singleton chain from capturing it (and its scoped deps) for the whole app lifetime.");
-        sb.AppendLine("                    // It does NOT set needsChain: a handler on its own never needs a chain.");
+        sb.AppendLine();
+        sb.AppendLine("                    // The chain's ctor consumes IEnumerable<IMediatorDispatchObserver>, so an observer is a");
+        sb.AppendLine("                    // chain DEPENDENCY and constrains it exactly as the handler below does. Without this a");
+        sb.AppendLine("                    // Scoped observer alongside all-singleton components yields a singleton chain that");
+        sb.AppendLine("                    // captures the observer and its scoped graph -- ValidateScopes throws on the first");
+        sb.AppendLine("                    // dispatch, and with validation off it silently shares them for the process lifetime.");
         sb.AppendLine("                    if (descriptor.Lifetime != global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton)");
         sb.AppendLine("                        allSingleton = false;");
         sb.AppendLine("                }");
+        sb.AppendLine("                else if (st == typeof(global::DSoftStudio.Mediator.Abstractions.IRequestHandler<TRequest, TResponse>))");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    // The chain's ctor consumes the handler, so the handler's lifetime constrains the");
+        sb.AppendLine("                    // chain. RECORDED here rather than folded, because this service type resolves SINGLE:");
+        sb.AppendLine("                    // the container hands the chain whatever the LAST descriptor names, so that is the only");
+        sb.AppendLine("                    // one whose lifetime is real. Folding every descriptor instead let the generator's own");
+        sb.AppendLine("                    // Transient registration -- which HandlerLifetimeOptimizer deliberately leaves in place");
+        sb.AppendLine("                    // once a user appends an override -- decide the chain for a handler the container never");
+        sb.AppendLine("                    // builds, so the documented services.AddScoped<IRequestHandler<..>,..>() override");
+        sb.AppendLine("                    // silently produced a Transient, uncached chain.");
+        sb.AppendLine("                    // The components above keep the OR on purpose: IPipelineBehavior and friends are");
+        sb.AppendLine("                    // ENUMERABLE, so every descriptor for them is live and a Transient one really does run");
+        sb.AppendLine("                    // per dispatch.");
+        sb.AppendLine("                    // It does NOT set needsChain: a handler on its own never needs a chain.");
+        sb.AppendLine("                    handlerLifetime = descriptor.Lifetime;");
+        sb.AppendLine("                }");
+        sb.AppendLine("            }");
+        sb.AppendLine();
+        sb.AppendLine("            // The handler, folded once the winning descriptor is known. A TRANSIENT handler takes the");
+        sb.AppendLine("            // chain ALL the way down, not merely off Singleton: HandlerLifetimeOptimizer leaves a handler");
+        sb.AppendLine("            // Transient exactly when a dependency of its own is transient or unregistered -- when a fresh");
+        sb.AppendLine("            // instance per resolve is the whole point -- and a Scoped chain is CACHEABLE, so it would");
+        sb.AppendLine("            // construct that handler once for the scope and hand every dispatch the same instance,");
+        sb.AppendLine("            // sharing the very dependency the optimizer had just refused to share.");
+        sb.AppendLine("            if (handlerLifetime is not null)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                if (handlerLifetime != global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton)");
+        sb.AppendLine("                    allSingleton = false;");
+        sb.AppendLine("                if (handlerLifetime == global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient)");
+        sb.AppendLine("                    hasTransientChainDependency = true;");
         sb.AppendLine("            }");
         sb.AppendLine();
         sb.AppendLine("            // A dispatch observer wraps EVERY request at the dispatch boundary (it lives inside the");
@@ -386,7 +428,7 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
         sb.AppendLine("                {");
         sb.AppendLine("                    global::Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<global::DSoftStudio.Mediator.PipelineChainHandler<TRequest, TResponse>>(services);");
         sb.AppendLine("                }");
-        sb.AppendLine("                else if (hasTransientPipelineComponent)");
+        sb.AppendLine("                else if (hasTransientChainDependency)");
         sb.AppendLine("                {");
         sb.AppendLine("                    global::Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddTransient<global::DSoftStudio.Mediator.PipelineChainHandler<TRequest, TResponse>>(services);");
         sb.AppendLine("                }");
@@ -400,7 +442,7 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine("                // Scoped and Singleton chains are safe to cache per thread (same instance within a scope).");
         sb.AppendLine("                // Transient chains must be resolved fresh each call.");
-        sb.AppendLine("                if (!hasTransientPipelineComponent)");
+        sb.AppendLine("                if (!hasTransientChainDependency)");
         sb.AppendLine("                    global::DSoftStudio.Mediator.RequestDispatch<TRequest, TResponse>.MarkPipelineChainCacheable();");
         sb.AppendLine("            }");
         sb.AppendLine();
@@ -502,8 +544,22 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
         sb.AppendLine("            services.RegisterMediatorHandlers();");
 
         // 3. User customization (open behaviors, parallel publisher, etc.)
+        //
+        // The sentinel is read BEFORE the lambda runs, and the collection's count with it. This step is
+        // unguarded by design -- configure() must always be honoured -- while RegisterPipelineChains
+        // below returns early once the sentinel exists. A SECOND AddMediator(configure) therefore
+        // registers components that no chain will be rebuilt around: they either never run, or a
+        // Singleton chain from the first scan captures them and the container refuses to build under
+        // ValidateScopes. Recording it here is observation, not inference: the sentinel proves the
+        // chains were frozen, and only what this lambda appended is examined, so a second bare
+        // PrecompilePipelines() (which registers nothing) and a lambda that adds no component are both
+        // silent. ValidateMediatorHandlers() reports whatever is recorded.
+        sb.AppendLine("            bool __alreadyScanned = MediatorRegistry.PipelinesAlreadyRegistered(services);");
+        sb.AppendLine("            int __beforeConfigure = services.Count;");
         sb.AppendLine("            var builder = new global::DSoftStudio.Mediator.MediatorBuilder(services);");
         sb.AppendLine("            configure(builder);");
+        sb.AppendLine("            if (__alreadyScanned)");
+        sb.AppendLine("                global::DSoftStudio.Mediator.LateComponentRegistry.Record(services, __beforeConfigure);");
 
         // 4. Precompile pipelines (closes open generics, registers chains, freezes dispatch).
         sb.AppendLine("            global::DSoftStudio.Mediator.HandlerLifetimeOptimizer.Apply(services);");

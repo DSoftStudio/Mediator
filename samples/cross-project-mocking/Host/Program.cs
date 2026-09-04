@@ -33,7 +33,7 @@ services.AddMediator()
 
 // Register pipeline behaviors (execution order = registration order)
 services.AddSingleton<Action<string>>(Console.WriteLine);
-services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
+services.AddScoped(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
 
 services.AddTransient<OrderService>();
 

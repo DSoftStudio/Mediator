@@ -11,9 +11,14 @@ var builder = WebApplication.CreateBuilder(args);
 // 1. Register mediator + auto-discovered handlers
 // ═══════════════════════════════════════════════════════════════════
 //
-// RegisterMediatorHandlers() auto-discovers handlers and registers them:
+// RegisterMediatorHandlers() auto-discovers handlers and derives each lifetime from
+// the constructor:
 //   - Stateless (no constructor params) → Singleton (zero allocation per call)
-//   - With DI dependencies              → Transient (safe default)
+//   - All dependencies Singleton        → Singleton
+//   - Any dependency Scoped             → Scoped
+//   - Any dependency Transient, or not registered → Transient
+// A closed dependency resolves against its open-generic registration, so ILogger<T>
+// reads as the Singleton that AddLogging() registered rather than as unknown.
 // To override the lifetime for specific handlers, re-register them AFTER
 // this call — the last registration wins in Microsoft.Extensions.DI.
 
@@ -45,10 +50,15 @@ builder.Services.AddScoped<
 // 3. Register pipeline behaviors with explicit lifetimes
 // ═══════════════════════════════════════════════════════════════════
 //
-// Behaviors can have any lifetime. Choose based on what state they hold:
-//   - Transient: stateless (logging, validation)
-//   - Scoped:    per-request state (counters, correlation IDs, UnitOfWork)
-//   - Singleton: global state (metrics, rate limiting) — must be thread-safe!
+// Behaviors can have any lifetime, but the choice is not free: ONE Transient component
+// registers the request's whole chain as Transient, so the chain is re-resolved and
+// re-linked on every dispatch instead of being reused. Choose by the state held:
+//   - Singleton: no state, or global state (metrics, rate limiting) — must be thread-safe!
+//   - Scoped:    per-request state (correlation IDs, UnitOfWork). This is the default
+//                MediatorBuilder gives a component when you state no lifetime.
+//   - Transient: per-DISPATCH state, or a non-thread-safe field. Costs the cached chain,
+//                because a Scoped instance is shared by every dispatch in the scope —
+//                including concurrent ones.
 
 // Singleton behavior: counts total requests across all HTTP requests
 builder.Services.AddSingleton(

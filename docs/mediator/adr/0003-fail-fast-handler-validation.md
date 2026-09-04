@@ -49,6 +49,7 @@ For each handler type discovered at compile time:
 | `INotificationHandler<TNotif>` | `GetServices<T>()` + enumerate | All handler implementations for each notification type |
 | `IStreamRequestHandler<TReq, TRes>` | `GetRequiredService<T>()` | Stream handler + dependencies |
 | `StreamPipelineChainHandler<TReq, TRes>` | `GetService<T>()` (nullable) | Stream pipeline chain if registered |
+| Registration-order faults (not per handler) | Read back from the service collection at startup | A component registered after the scan, so no chain was built and it will never run; a Transient behavior in a chain that is not Transient, so it is constructed once and shared; components a second `AddMediator(configure)` registered after the chains were frozen |
 
 ### Error Aggregation
 

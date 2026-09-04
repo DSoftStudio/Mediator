@@ -64,8 +64,15 @@ public class LoggingBehavior<TRequest, TResponse>
 Register behaviors as open generics:
 
 ```csharp
-services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
+services.AddScoped(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
 ```
+
+`Scoped`, not `Transient`: one Transient component registers the request's whole pipeline chain as
+Transient, so every dispatch re-resolves and re-links the chain instead of reusing the one already
+built for the scope. Register a component `Transient` when it must be constructed per dispatch — a
+Scoped instance is shared by every dispatch in the scope, including concurrent ones, so per-dispatch
+state or a non-thread-safe field needs it. A behavior that keeps its state in locals, as the one above
+does, needs nothing.
 
 Behaviors execute in registration order. The first registered behavior is the outermost wrapper.
 

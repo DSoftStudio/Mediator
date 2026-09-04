@@ -121,7 +121,7 @@ TryDddSingleton(services, typeof(MyNotificationHandler));
 |---|---|---|
 | Interface mapping (`IRequestHandler<T,R>`) | `DddSingleton/DddTransient` | Multiple registrations possible — last wins for `GetRequiredService` |
 | Concrete type (notification/stream) | `TryDddSingleton/TryDddTransient` | First registration wins — subsequent calls are no-op |
-| Handler lifetime | Duto-detected | Stateless (no constructor params) → Singleton; with DI deps → Transient |
+| Handler lifetime | Auto-detected | Stateless (no constructor params) → Singleton; with DI deps → derived from those dependencies: all Singleton → Singleton, any Scoped → Scoped, any Transient or unregistered → Transient. A closed dependency falls back to its open-generic registration, so `ILogger<T>` reads Singleton rather than unregistered |
 
 **Duplicate request/stream handlers are detected at compile time** via DSOFT002 and
 DSOFT003 diagnostics (Warning). Multiple `IRequestHandler<T,R>` implementations for

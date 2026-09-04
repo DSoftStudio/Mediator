@@ -49,14 +49,25 @@ public sealed class MediatorBuilder
     /// An open-generic type implementing <see cref="IPipelineBehavior{TRequest, TResponse}"/>.
     /// Example: <c>typeof(LoggingBehavior&lt;,&gt;)</c>.
     /// </param>
-    /// <param name="lifetime">The DI service lifetime. Defaults to <see cref="ServiceLifetime.Transient"/>.</param>
+    /// <param name="lifetime">
+    /// The DI service lifetime. Defaults to <see cref="ServiceLifetime.Scoped"/>: one Transient component
+    /// makes the generated pipeline registration register the whole request's chain as Transient, so every
+    /// dispatch of that request re-resolves and re-links it instead of reusing the one already built for the
+    /// scope. Scoped is the longest lifetime that is safe without inspecting this type's constructor — a
+    /// Scoped service may consume any lifetime, and the chain is only ever resolved inside a scope. Pass
+    /// <see cref="ServiceLifetime.Transient"/> explicitly when this component must be constructed per
+    /// dispatch: a Scoped instance is shared by every dispatch in the scope, INCLUDING concurrent ones,
+    /// so a component holding per-dispatch state or a non-thread-safe field — a <c>Stopwatch</c> started
+    /// before the call and read after it, say — needs Transient to stay correct. Pass
+    /// <see cref="ServiceLifetime.Singleton"/> when it is stateless and depends only on singletons.
+    /// </param>
     /// <returns>This builder for chaining.</returns>
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="behaviorType"/> is not an open generic type.
     /// </exception>
     public MediatorBuilder AddOpenBehavior(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] Type behaviorType,
-        ServiceLifetime lifetime = ServiceLifetime.Transient)
+        ServiceLifetime lifetime = ServiceLifetime.Scoped)
     {
         ArgumentNullException.ThrowIfNull(behaviorType);
 
@@ -75,12 +86,23 @@ public sealed class MediatorBuilder
     /// for specific request/response types.
     /// </summary>
     /// <typeparam name="T">The concrete stream behavior type.</typeparam>
-    /// <param name="lifetime">The DI service lifetime. Defaults to <see cref="ServiceLifetime.Transient"/>.</param>
+    /// <param name="lifetime">
+    /// The DI service lifetime. Defaults to <see cref="ServiceLifetime.Scoped"/>: one Transient stream
+    /// behavior makes the generated stream registration register that request's whole chain as Transient,
+    /// so every enumeration re-resolves and re-links it instead of reusing the one already built for the
+    /// scope. Scoped is the longest lifetime that is safe without inspecting this type's constructor — a
+    /// Scoped service may consume any lifetime, and the chain is only ever resolved inside a scope. Pass
+    /// <see cref="ServiceLifetime.Transient"/> explicitly when this behavior must be constructed per
+    /// enumeration: a Scoped instance is shared by every enumeration in the scope, INCLUDING concurrent
+    /// ones, so a behavior holding per-enumeration state or a non-thread-safe field needs Transient to
+    /// stay correct. Pass <see cref="ServiceLifetime.Singleton"/> when it is stateless and depends only
+    /// on singletons.
+    /// </param>
     /// <returns>This builder for chaining.</returns>
     /// <exception cref="ArgumentException">
     /// Thrown when <typeparamref name="T"/> does not implement <see cref="IStreamPipelineBehavior{TRequest, TResponse}"/>.
     /// </exception>
-    public MediatorBuilder AddStreamBehavior<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.Interfaces)] T>(ServiceLifetime lifetime = ServiceLifetime.Transient)
+    public MediatorBuilder AddStreamBehavior<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.Interfaces)] T>(ServiceLifetime lifetime = ServiceLifetime.Scoped)
         where T : class
         => RegisterByOpenInterface(typeof(T), typeof(IStreamPipelineBehavior<,>), lifetime,
             nameof(T), "IStreamPipelineBehavior<TRequest, TResponse>");
@@ -90,12 +112,23 @@ public sealed class MediatorBuilder
     /// <typeparamref name="T"/> must implement <see cref="IRequestPreProcessor{TRequest}"/>.
     /// </summary>
     /// <typeparam name="T">The concrete pre-processor type.</typeparam>
-    /// <param name="lifetime">The DI service lifetime. Defaults to <see cref="ServiceLifetime.Transient"/>.</param>
+    /// <param name="lifetime">
+    /// The DI service lifetime. Defaults to <see cref="ServiceLifetime.Scoped"/>: one Transient component
+    /// makes the generated pipeline registration register the whole request's chain as Transient, so every
+    /// dispatch of that request re-resolves and re-links it instead of reusing the one already built for the
+    /// scope. Scoped is the longest lifetime that is safe without inspecting this type's constructor — a
+    /// Scoped service may consume any lifetime, and the chain is only ever resolved inside a scope. Pass
+    /// <see cref="ServiceLifetime.Transient"/> explicitly when this component must be constructed per
+    /// dispatch: a Scoped instance is shared by every dispatch in the scope, INCLUDING concurrent ones,
+    /// so a component holding per-dispatch state or a non-thread-safe field — a <c>Stopwatch</c> started
+    /// before the call and read after it, say — needs Transient to stay correct. Pass
+    /// <see cref="ServiceLifetime.Singleton"/> when it is stateless and depends only on singletons.
+    /// </param>
     /// <returns>This builder for chaining.</returns>
     /// <exception cref="ArgumentException">
     /// Thrown when <typeparamref name="T"/> does not implement <see cref="IRequestPreProcessor{TRequest}"/>.
     /// </exception>
-    public MediatorBuilder AddRequestPreProcessor<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.Interfaces)] T>(ServiceLifetime lifetime = ServiceLifetime.Transient)
+    public MediatorBuilder AddRequestPreProcessor<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.Interfaces)] T>(ServiceLifetime lifetime = ServiceLifetime.Scoped)
         where T : class
         => RegisterByOpenInterface(typeof(T), typeof(IRequestPreProcessor<>), lifetime,
             nameof(T), "IRequestPreProcessor<TRequest>");
@@ -105,12 +138,23 @@ public sealed class MediatorBuilder
     /// <typeparamref name="T"/> must implement <see cref="IRequestPostProcessor{TRequest, TResponse}"/>.
     /// </summary>
     /// <typeparam name="T">The concrete post-processor type.</typeparam>
-    /// <param name="lifetime">The DI service lifetime. Defaults to <see cref="ServiceLifetime.Transient"/>.</param>
+    /// <param name="lifetime">
+    /// The DI service lifetime. Defaults to <see cref="ServiceLifetime.Scoped"/>: one Transient component
+    /// makes the generated pipeline registration register the whole request's chain as Transient, so every
+    /// dispatch of that request re-resolves and re-links it instead of reusing the one already built for the
+    /// scope. Scoped is the longest lifetime that is safe without inspecting this type's constructor — a
+    /// Scoped service may consume any lifetime, and the chain is only ever resolved inside a scope. Pass
+    /// <see cref="ServiceLifetime.Transient"/> explicitly when this component must be constructed per
+    /// dispatch: a Scoped instance is shared by every dispatch in the scope, INCLUDING concurrent ones,
+    /// so a component holding per-dispatch state or a non-thread-safe field — a <c>Stopwatch</c> started
+    /// before the call and read after it, say — needs Transient to stay correct. Pass
+    /// <see cref="ServiceLifetime.Singleton"/> when it is stateless and depends only on singletons.
+    /// </param>
     /// <returns>This builder for chaining.</returns>
     /// <exception cref="ArgumentException">
     /// Thrown when <typeparamref name="T"/> does not implement <see cref="IRequestPostProcessor{TRequest, TResponse}"/>.
     /// </exception>
-    public MediatorBuilder AddRequestPostProcessor<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.Interfaces)] T>(ServiceLifetime lifetime = ServiceLifetime.Transient)
+    public MediatorBuilder AddRequestPostProcessor<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.Interfaces)] T>(ServiceLifetime lifetime = ServiceLifetime.Scoped)
         where T : class
         => RegisterByOpenInterface(typeof(T), typeof(IRequestPostProcessor<,>), lifetime,
             nameof(T), "IRequestPostProcessor<TRequest, TResponse>");
@@ -120,12 +164,23 @@ public sealed class MediatorBuilder
     /// <typeparamref name="T"/> must implement <see cref="IRequestExceptionHandler{TRequest, TResponse}"/>.
     /// </summary>
     /// <typeparam name="T">The concrete exception handler type.</typeparam>
-    /// <param name="lifetime">The DI service lifetime. Defaults to <see cref="ServiceLifetime.Transient"/>.</param>
+    /// <param name="lifetime">
+    /// The DI service lifetime. Defaults to <see cref="ServiceLifetime.Scoped"/>: one Transient component
+    /// makes the generated pipeline registration register the whole request's chain as Transient, so every
+    /// dispatch of that request re-resolves and re-links it instead of reusing the one already built for the
+    /// scope. Scoped is the longest lifetime that is safe without inspecting this type's constructor — a
+    /// Scoped service may consume any lifetime, and the chain is only ever resolved inside a scope. Pass
+    /// <see cref="ServiceLifetime.Transient"/> explicitly when this component must be constructed per
+    /// dispatch: a Scoped instance is shared by every dispatch in the scope, INCLUDING concurrent ones,
+    /// so a component holding per-dispatch state or a non-thread-safe field — a <c>Stopwatch</c> started
+    /// before the call and read after it, say — needs Transient to stay correct. Pass
+    /// <see cref="ServiceLifetime.Singleton"/> when it is stateless and depends only on singletons.
+    /// </param>
     /// <returns>This builder for chaining.</returns>
     /// <exception cref="ArgumentException">
     /// Thrown when <typeparamref name="T"/> does not implement <see cref="IRequestExceptionHandler{TRequest, TResponse}"/>.
     /// </exception>
-    public MediatorBuilder AddRequestExceptionHandler<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.Interfaces)] T>(ServiceLifetime lifetime = ServiceLifetime.Transient)
+    public MediatorBuilder AddRequestExceptionHandler<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.Interfaces)] T>(ServiceLifetime lifetime = ServiceLifetime.Scoped)
         where T : class
         => RegisterByOpenInterface(typeof(T), typeof(IRequestExceptionHandler<,>), lifetime,
             nameof(T), "IRequestExceptionHandler<TRequest, TResponse>");

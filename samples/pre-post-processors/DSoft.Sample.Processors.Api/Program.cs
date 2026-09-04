@@ -14,11 +14,11 @@ builder.Services
     .RegisterMediatorHandlers();
 
 // Register pre-processors (execution order = registration order, before handler)
-builder.Services.AddTransient(typeof(IRequestPreProcessor<>), typeof(LoggingPreProcessor<>));
-builder.Services.AddTransient(typeof(IRequestPreProcessor<>), typeof(ValidationPreProcessor<>));
+builder.Services.AddScoped(typeof(IRequestPreProcessor<>), typeof(LoggingPreProcessor<>));
+builder.Services.AddScoped(typeof(IRequestPreProcessor<>), typeof(ValidationPreProcessor<>));
 
 // Register post-processor (runs after handler, only on success)
-builder.Services.AddTransient(typeof(IRequestPostProcessor<,>), typeof(AuditPostProcessor<,>));
+builder.Services.AddScoped(typeof(IRequestPostProcessor<,>), typeof(AuditPostProcessor<,>));
 
 // Precompile after all pipeline components are registered
 builder.Services.PrecompilePipelines();

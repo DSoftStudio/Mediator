@@ -147,7 +147,7 @@ namespace DSoftStudio.Mediator
 
             foreach (var dep in deps)
             {
-                if (!lifetimes.TryGetValue(dep, out var lt))
+                if (!TryGetLifetime(lifetimes, dep, out var lt))
                     return ServiceLifetime.Transient; // unknown dependency - stay safe
 
                 if (lt == ServiceLifetime.Transient)
@@ -158,6 +158,36 @@ namespace DSoftStudio.Mediator
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// The registered lifetime of one dependency, falling back from the closed type to its OPEN-generic
+        /// registration exactly as the container does.
+        /// <para>
+        /// Without the fallback this answered "unregistered" for <c>ILogger&lt;THandler&gt;</c>,
+        /// <c>IOptions&lt;T&gt;</c> and every other framework service registered open - and an unregistered
+        /// dependency pins the handler at Transient. Since injecting a logger is the commonest thing a
+        /// handler does, the optimizer's whole promise was quietly off for most real handlers: they stayed
+        /// Transient however safely they could have been shared, and through the chain-lifetime fold their
+        /// pipeline chain stayed non-cacheable with them.
+        /// </para>
+        /// <para>
+        /// The closed lookup runs FIRST, so a specific registration still beats the open one behind it,
+        /// which is the order the container resolves in.
+        /// </para>
+        /// </summary>
+        private static bool TryGetLifetime(
+            Dictionary<Type, ServiceLifetime> lifetimes, Type dependency, out ServiceLifetime lifetime)
+        {
+            if (lifetimes.TryGetValue(dependency, out lifetime))
+                return true;
+
+            if (dependency.IsConstructedGenericType
+                && lifetimes.TryGetValue(dependency.GetGenericTypeDefinition(), out lifetime))
+                return true;
+
+            lifetime = default;
+            return false;
         }
     }
 }

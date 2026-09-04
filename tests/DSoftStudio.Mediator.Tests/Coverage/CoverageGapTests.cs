@@ -243,6 +243,12 @@ public class NotificationObjectDispatchCoverageTests
     public async Task Dispatch_UnregisteredType_IsANoOp()
     {
         var services = new ServiceCollection();
+
+        // PrecompileNotifications() here, not left to a sibling: the dispatch table is process-global, so
+        // an empty collection made this test pass only when some OTHER test class happened to build the
+        // table first. Run in the wrong order it threw "the notification dispatch table has not been
+        // built" -- an order dependency, not a defect in the code under test.
+        services.AddMediator().RegisterMediatorHandlers().PrecompileNotifications();
         using var sp = services.BuildServiceProvider();
 
         // This used to throw. Dispatch plans are built from HANDLERS, so a notification nobody

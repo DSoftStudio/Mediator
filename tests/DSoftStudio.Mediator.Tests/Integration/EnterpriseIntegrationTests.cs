@@ -481,6 +481,7 @@ public class MultiProjectIntegrationTests : IDisposable
 
         // Dependencies required by the auto-lifetime-detection test handlers (Lifetimes/)
         services.AddSingleton<Lifetimes.AutoSingletonDep>();
+        services.AddSingleton(typeof(Lifetimes.IAutoOpen<>), typeof(Lifetimes.AutoOpen<>));
         services.AddScoped<Lifetimes.AutoScopedDep>();
 
         _provider = services.BuildServiceProvider();

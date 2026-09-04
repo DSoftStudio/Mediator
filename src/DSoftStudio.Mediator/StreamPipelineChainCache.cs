@@ -49,8 +49,8 @@ namespace DSoftStudio.Mediator
         /// <para>
         /// The cacheability check comes FIRST, before the thread-local probe, and that order is
         /// deliberate. A Transient chain never populates the cache, so probing it first would cost that
-        /// pair a <c>[ThreadStatic]</c> read and a call frame that can only ever miss — and Transient is
-        /// the default lifetime for <c>MediatorBuilder.AddBehavior</c>. This ordering leaves BOTH paths
+        /// pair a <c>[ThreadStatic]</c> read and a call frame that can only ever miss — and any one
+        /// Transient stream behavior makes the whole pair's chain Transient. This ordering leaves BOTH paths
         /// with exactly the instruction sequence they had when the decision was emitted into each
         /// dispatch body; the win is that it is now written once instead of four times.
         /// </para>

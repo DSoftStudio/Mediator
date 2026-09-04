@@ -887,6 +887,20 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
             sb.AppendLine("                \"PrecompilePipelines() / AddMediator(configure) scanned it. Move the registration \" +");
             sb.AppendLine("                \"before the scan.\"));");
 
+            // Components registered by an AddMediator(configure) that ran after the chains were frozen.
+            // LateComponentRegistry records only when the sentinel already existed AND the lambda really
+            // added a component, so every entry here is a true positive and needs no further filtering.
+            sb.AppendLine();
+            sb.AppendLine("        foreach (var __lateReport in global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetServices<global::DSoftStudio.Mediator.LatePipelineComponentReport>(sp))");
+            sb.AppendLine("        {");
+            sb.AppendLine("            foreach (var __lateComponent in __lateReport.ComponentServiceTypes)");
+            sb.AppendLine("                errors.Add(new global::System.InvalidOperationException(");
+            sb.AppendLine("                    \"'\" + __lateComponent + \"' was registered by an AddMediator(configure) call that ran \" +");
+            sb.AppendLine("                    \"AFTER the pipeline scan had already fixed every chain's lifetime. No chain is rebuilt \" +");
+            sb.AppendLine("                    \"for it, so it either never runs or is captured by a chain that outlives it. Register \" +");
+            sb.AppendLine("                    \"every pipeline component in the FIRST AddMediator(configure), before the scan.\"));");
+            sb.AppendLine("        }");
+
             sb.AppendLine();
             sb.AppendLine("        if (errors.Count > 0)");
             sb.AppendLine("            throw new global::System.AggregateException(");

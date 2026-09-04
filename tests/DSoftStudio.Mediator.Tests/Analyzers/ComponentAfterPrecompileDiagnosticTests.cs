@@ -74,6 +74,43 @@ public class ComponentAfterPrecompileDiagnosticTests
         }
         """;
 
+    /// <summary>
+    /// The builder, with the two ways a caller can hold one: the <c>AddMediator(configure)</c> overload
+    /// that hands it to a lambda, and the public constructor over a collection. Its component methods
+    /// are what branch (a) of the analyzer's IsComponentRegistration matches.
+    /// </summary>
+    private const string BuilderStubSource = """
+        namespace DSoftStudio.Mediator.Abstractions
+        {
+            public interface IStreamPipelineBehavior<TRequest, TResponse> { }
+        }
+
+        namespace DSoftStudio.Mediator
+        {
+            public sealed class MediatorBuilder
+            {
+                public MediatorBuilder(Microsoft.Extensions.DependencyInjection.IServiceCollection services) { }
+
+                public MediatorBuilder AddOpenBehavior(System.Type behaviorType) => this;
+
+                public MediatorBuilder AddStreamBehavior<T>() => this;
+            }
+
+            public static class BuilderServiceCollectionExtensions
+            {
+                public static Microsoft.Extensions.DependencyInjection.IServiceCollection AddMediator(
+                    this Microsoft.Extensions.DependencyInjection.IServiceCollection services,
+                    System.Action<MediatorBuilder> configure) => services;
+
+                public static Microsoft.Extensions.DependencyInjection.IServiceCollection PrecompileStreams(
+                    this Microsoft.Extensions.DependencyInjection.IServiceCollection services) => services;
+
+                public static Microsoft.Extensions.DependencyInjection.IServiceCollection PrecompileNotifications(
+                    this Microsoft.Extensions.DependencyInjection.IServiceCollection services) => services;
+            }
+        }
+        """;
+
     private const string HandlerSource = """
         using DSoftStudio.Mediator.Abstractions;
 
@@ -99,6 +136,14 @@ public class ComponentAfterPrecompileDiagnosticTests
                 TRequest r, IRequestHandler<TRequest, TResponse> next, System.Threading.CancellationToken ct)
                 => next.Handle(r, ct);
         }
+        """;
+
+    private const string StreamHandlerSource = """
+        using DSoftStudio.Mediator.Abstractions;
+
+        public sealed class PingStream : IStreamRequest<int> { }
+
+        public sealed class StreamLogging : IStreamPipelineBehavior<PingStream, int> { }
         """;
 
     private const string DescriptorStubSource = """
@@ -175,6 +220,8 @@ public class ComponentAfterPrecompileDiagnosticTests
                 CSharpSyntaxTree.ParseText(AbstractionsSource, path: "Abstractions.cs"),
                 CSharpSyntaxTree.ParseText(DependencyInjectionStubSource, path: "DI.cs"),
                 CSharpSyntaxTree.ParseText(RegistrationApiStubSource, path: "RegistrationApi.cs"),
+                CSharpSyntaxTree.ParseText(BuilderStubSource, path: "Builder.cs"),
+                CSharpSyntaxTree.ParseText(StreamHandlerSource, path: "Streams.cs"),
                 CSharpSyntaxTree.ParseText(DescriptorStubSource, path: "Descriptors.cs"),
                 CSharpSyntaxTree.ParseText(CompanionStubSource, path: "Companions.cs"),
                 CSharpSyntaxTree.ParseText(HandlerSource, path: "Handlers.cs"),
@@ -455,6 +502,255 @@ public class ComponentAfterPrecompileDiagnosticTests
                     services.TryAddEnumerable(
                         ServiceDescriptor.Singleton(typeof(IPipelineBehavior<,>), typeof(OpenLogging<,>)));
                     services.PrecompilePipelines();
+                }
+            }
+            """;
+
+        Analyze(startup).ShouldBeEmpty();
+    }
+
+    // ── Receivers the rule could not resolve ──────────────────────────────────────────────────
+    // DSOFT010 pairs a registration with a scan of the SAME collection, by symbol. Two shapes never
+    // produced a symbol at all, so the rule was blind to them rather than quiet about them.
+
+    /// <summary>
+    /// The fluent style, which is how the README writes it. Both scan methods return the collection they
+    /// were handed, so the scan's receiver is the PREVIOUS INVOCATION rather than a symbol — the scan
+    /// was never recorded, and no registration anywhere in the file could be reported against it.
+    /// </summary>
+    [Fact]
+    public void Reports_A_Behavior_Registered_After_A_Fluent_Scan()
+    {
+        const string startup = """
+            using DSoftStudio.Mediator;
+            using DSoftStudio.Mediator.Abstractions;
+            using Microsoft.Extensions.DependencyInjection;
+
+            public static class Startup
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddMediator().PrecompilePipelines();
+                    services.AddTransient<IPipelineBehavior<Ping, int>, LoggingBehavior>();
+                }
+            }
+            """;
+
+        Analyze(startup).Length.ShouldBe(1);
+    }
+
+    /// <summary>
+    /// A component registered through the builder's public constructor. Branch (a) of
+    /// IsComponentRegistration exists for exactly these methods, but their receiver is the builder, so
+    /// before the unwrap it could never pair with a scan on the collection.
+    /// </summary>
+    [Fact]
+    public void Reports_A_Component_Registered_Through_A_New_Builder_After_The_Scan()
+    {
+        const string startup = """
+            using DSoftStudio.Mediator;
+            using DSoftStudio.Mediator.Abstractions;
+            using Microsoft.Extensions.DependencyInjection;
+
+            public static class Startup
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddMediator();
+                    services.PrecompilePipelines();
+                    new MediatorBuilder(services).AddOpenBehavior(typeof(OpenLogging<,>));
+                }
+            }
+            """;
+
+        Analyze(startup).Length.ShouldBe(1);
+    }
+
+    [Fact]
+    public void Ignores_A_Component_Registered_Through_A_Builder_Before_The_Scan()
+    {
+        const string startup = """
+            using DSoftStudio.Mediator;
+            using DSoftStudio.Mediator.Abstractions;
+            using Microsoft.Extensions.DependencyInjection;
+
+            public static class Startup
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    new MediatorBuilder(services).AddOpenBehavior(typeof(OpenLogging<,>));
+                    services.PrecompilePipelines();
+                }
+            }
+            """;
+
+        Analyze(startup).ShouldBeEmpty();
+    }
+
+    /// <summary>
+    /// The false-positive guard, and the reason the unwrap resolves a symbol instead of assuming one:
+    /// a builder over ANOTHER collection is not late for this scan, and the rule is a Warning that
+    /// users build with <c>TreatWarningsAsErrors</c>.
+    /// </summary>
+    [Fact]
+    public void Ignores_A_Builder_Over_A_Different_Collection()
+    {
+        const string startup = """
+            using DSoftStudio.Mediator;
+            using DSoftStudio.Mediator.Abstractions;
+            using Microsoft.Extensions.DependencyInjection;
+
+            public static class Startup
+            {
+                public static void Configure(IServiceCollection services, IServiceCollection other)
+                {
+                    services.AddMediator().PrecompilePipelines();
+                    new MediatorBuilder(other).AddOpenBehavior(typeof(OpenLogging<,>));
+                }
+            }
+            """;
+
+        Analyze(startup).ShouldBeEmpty();
+    }
+
+    /// <summary>
+    /// An accepted miss, pinned so it stays deliberate: a builder reached through a local names no
+    /// collection at the call site. Which one it wraps is a dataflow question, and this rule prefers a
+    /// miss to a guess. If it is ever made to resolve, this test is the one that should change.
+    /// </summary>
+    [Fact]
+    public void Does_Not_Report_A_Builder_Held_In_A_Local()
+    {
+        const string startup = """
+            using DSoftStudio.Mediator;
+            using DSoftStudio.Mediator.Abstractions;
+            using Microsoft.Extensions.DependencyInjection;
+
+            public static class Startup
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    var builder = new MediatorBuilder(services);
+                    services.PrecompilePipelines();
+                    builder.AddOpenBehavior(typeof(OpenLogging<,>));
+                }
+            }
+            """;
+
+        Analyze(startup).ShouldBeEmpty();
+    }
+
+    // ── The scan has to be the one that governs the component ────────────────────────────────
+    // The rule used to pair a component with ANY scan. A stream behavior that follows
+    // PrecompileNotifications() but precedes its own PrecompileStreams() is correctly ordered, and
+    // reporting it breaks a build that had nothing wrong with it. Three registrations in this repo's
+    // own tests were flagged that way the moment the receiver started resolving.
+
+    [Fact]
+    public void Ignores_A_Stream_Behavior_Registered_After_An_Unrelated_Scan()
+    {
+        const string startup = """
+            using DSoftStudio.Mediator;
+            using DSoftStudio.Mediator.Abstractions;
+            using Microsoft.Extensions.DependencyInjection;
+
+            public static class Startup
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddMediator().PrecompileNotifications();
+                    services.AddTransient<IStreamPipelineBehavior<PingStream, int>, StreamLogging>();
+                    services.PrecompileStreams();
+                }
+            }
+            """;
+
+        Analyze(startup).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Ignores_A_Request_Behavior_Registered_After_The_Stream_Scan()
+    {
+        const string startup = """
+            using DSoftStudio.Mediator;
+            using DSoftStudio.Mediator.Abstractions;
+            using Microsoft.Extensions.DependencyInjection;
+
+            public static class Startup
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddMediator().PrecompileStreams();
+                    services.AddTransient<IPipelineBehavior<Ping, int>, LoggingBehavior>();
+                    services.PrecompilePipelines();
+                }
+            }
+            """;
+
+        Analyze(startup).ShouldBeEmpty();
+    }
+
+    /// <summary>The other half: against its OWN scan the stream behavior is late, and is reported.</summary>
+    [Fact]
+    public void Reports_A_Stream_Behavior_Registered_After_The_Stream_Scan()
+    {
+        const string startup = """
+            using DSoftStudio.Mediator;
+            using DSoftStudio.Mediator.Abstractions;
+            using Microsoft.Extensions.DependencyInjection;
+
+            public static class Startup
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddMediator().PrecompileStreams();
+                    services.AddTransient<IStreamPipelineBehavior<PingStream, int>, StreamLogging>();
+                }
+            }
+            """;
+
+        Analyze(startup).Length.ShouldBe(1);
+    }
+
+    /// <summary>
+    /// <c>AddMediator(configure)</c> ends by precompiling everything, so it governs both kinds — and the
+    /// components inside its own lambda are on the "before" side, since the scan boundary is the
+    /// containing statement's end.
+    /// </summary>
+    [Fact]
+    public void Reports_A_Late_Configure_Lambda_Against_An_Earlier_Scan()
+    {
+        const string startup = """
+            using DSoftStudio.Mediator;
+            using DSoftStudio.Mediator.Abstractions;
+            using Microsoft.Extensions.DependencyInjection;
+
+            public static class Startup
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddMediator().PrecompilePipelines();
+                    services.AddMediator(b => b.AddOpenBehavior(typeof(OpenLogging<,>)));
+                }
+            }
+            """;
+
+        Analyze(startup).Length.ShouldBe(1);
+    }
+
+    [Fact]
+    public void Ignores_A_Configure_Lambda_That_Is_The_First_Scan()
+    {
+        const string startup = """
+            using DSoftStudio.Mediator;
+            using DSoftStudio.Mediator.Abstractions;
+            using Microsoft.Extensions.DependencyInjection;
+
+            public static class Startup
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddMediator(b => b.AddOpenBehavior(typeof(OpenLogging<,>)));
                 }
             }
             """;

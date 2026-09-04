@@ -76,12 +76,17 @@ public class StreamLoggingBehavior<TRequest, TResponse>
 Register as an open generic:
 
 ```csharp
-services.AddTransient(typeof(IStreamPipelineBehavior<,>), typeof(StreamLoggingBehavior<,>));
+services.AddScoped(typeof(IStreamPipelineBehavior<,>), typeof(StreamLoggingBehavior<,>));
 ```
 
 > **Register stream behaviors before `PrecompileStreams()`.** That call decides whether a behavior
 > chain is built for each stream pair. If a pair has no behavior registered by then, the handler
-> streams unwrapped and behaviors added afterwards never run — silently, with no error.
+> streams unwrapped and behaviors added afterwards never run. Nothing throws, but it is no longer
+> unreported: **DSOFT010** flags a stream behavior registered after `PrecompileStreams()` on the same
+> collection in the same method — the fluent `services.AddMediator().PrecompileStreams()` form included
+> — and `ValidateMediatorHandlers()` reports what the analyzer cannot see. Only `PrecompileStreams()`
+> counts, or `AddMediator(configure)`, which precompiles everything: a stream behavior registered after
+> `PrecompileNotifications()` but before `PrecompileStreams()` is correctly ordered.
 
 Unlike the request pipeline, the stream pipeline composes behaviors only: there are no stream
 pre-processors, post-processors or exception handlers.

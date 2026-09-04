@@ -77,6 +77,6 @@ public class AuditPostProcessor<TRequest, TResponse>
 Register as open generics:
 
 ```csharp
-services.AddTransient(typeof(IRequestPreProcessor<>), typeof(ValidationPreProcessor<>));
-services.AddTransient(typeof(IRequestPostProcessor<,>), typeof(AuditPostProcessor<,>));
+services.AddScoped(typeof(IRequestPreProcessor<>), typeof(ValidationPreProcessor<>));
+services.AddScoped(typeof(IRequestPostProcessor<,>), typeof(AuditPostProcessor<,>));
 ```

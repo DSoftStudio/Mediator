@@ -428,7 +428,8 @@ Mechanical code changes. No architectural rewrite.
 | Behavior `next` | `RequestHandlerDelegate<T>` | `IRequestHandler<TReq, TRes>` |
 | Calling next | `await next()` | `await next.Handle(req, ct)` |
 | Pre/Post return | `Task` | `ValueTask` |
-| Handler lifetime | All Transient | Stateless → Singleton |
+| Handler lifetime | All Transient | Derived from the constructor: stateless or all-Singleton deps → Singleton, any Scoped → Scoped, any Transient → Transient |
+| Component lifetime | `AddOpenBehavior` → Transient | `AddOpenBehavior` → **Scoped** (one Transient component makes the whole chain Transient) |
 | Namespace | `using MediatR;` | `using DSoftStudio.Mediator.Abstractions;` |
 
 > [Step-by-step Migration Guide](https://docs.dsoftstudio.com/mediator/getting-started/migration-from-mediatr)

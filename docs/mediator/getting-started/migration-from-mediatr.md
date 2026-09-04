@@ -45,6 +45,14 @@ MediatR's `AddMediatR(cfg => ...)` maps directly to DSoftStudio.Mediator's `AddM
 + });
 ```
 
+> **`AddOpenBehavior` changes lifetime when you port the call.** MediatR's
+> `cfg.AddOpenBehavior(typeof(LoggingBehavior<,>))` registers the behavior **Transient**; the
+> DSoftStudio.Mediator builder registers it **Scoped**, so one instance is shared by every dispatch in
+> the scope, concurrent ones included. A behavior that keeps per-dispatch state in a FIELD — a
+> `Stopwatch` started before `next` and read after it — must be ported as
+> `AddOpenBehavior(typeof(LoggingBehavior<,>), ServiceLifetime.Transient)`. One that keeps its state in
+> locals needs no change.
+
 Or, if you prefer the step-by-step approach:
 
 ```diff
@@ -128,7 +136,7 @@ Pre/post processors use `ValueTask` instead of MediatR's `Task`:
 MediatR registers all handlers as **Transient** by default. DSoftStudio.Mediator uses **automatic lifetime detection**:
 
 - **Stateless handlers** (no constructor parameters) → **Singleton** (zero allocation per call)
-- **Handlers with DI dependencies** → **Transient** (safe default)
+- **Handlers with DI dependencies** → the longest lifetime those dependencies allow: **Singleton** when every one is a singleton (open-generic framework registrations such as `ILogger<T>` and `IOptions<T>` count), **Scoped** when any is scoped, **Transient** only when one is transient or unregistered
 
 You can override any handler's lifetime after `RegisterMediatorHandlers()` — the last registration wins. Place overrides **before** `PrecompilePipelines()` so the pipeline chain picks up the correct lifetime:
 
@@ -155,7 +163,7 @@ services
 | Notification handler | `Task Handle(T, CancellationToken)` | `Task Handle(T, CancellationToken)` |
 | Stream request | `IStreamRequest<TResponse>` | `IStreamRequest<TResponse>` |
 | Send syntax | `mediator.Send(new Ping())` | `mediator.Send(new Ping())` (via generated extension) |
-| Open generic registration | `services.AddTransient(typeof(IPipelineBehavior<,>), ...)` | Same |
+| Open generic registration | `services.AddTransient(typeof(IPipelineBehavior<,>), ...)` | Same — the raw registration is unchanged; see below for the builder default |
 
 ## What changes
 
@@ -165,7 +173,8 @@ services
 | Behavior `next` param | `RequestHandlerDelegate<TResponse>` | `IRequestHandler<TRequest, TResponse>` |
 | Calling next | `await next()` | `await next.Handle(request, ct)` |
 | Pre/Post processor return | `Task` | `ValueTask` |
-| Handler lifetime (default) | All Transient | Stateless → Singleton, with DI deps → Transient |
+| Handler lifetime (default) | All Transient | Derived from the constructor: stateless or all-Singleton deps → Singleton, any Scoped → Scoped, any Transient or unregistered → Transient |
+| Component lifetime (default) | `AddOpenBehavior(...)` → Transient | `AddOpenBehavior(...)` → **Scoped**. One Transient component makes the request's whole chain Transient, so it is rebuilt on every dispatch. Pass `ServiceLifetime.Transient` explicitly when the component must be constructed per dispatch |
 | Namespace | `using MediatR;` | `using DSoftStudio.Mediator.Abstractions;` |
 | Stream dispatch timing | Handler resolved on the first `MoveNextAsync` | Handler and behavior chain resolved when `CreateStream` is called |
 

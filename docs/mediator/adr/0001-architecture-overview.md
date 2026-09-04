@@ -160,7 +160,7 @@ Use `[ThreadStatic]` fields to cache handler and pipeline chain resolutions per 
 - Eliminates ~10 ns `GetRequiredService` call on every `Send()` for Scoped/Singleton handlers.
 - `[ThreadStatic]` is lock-free, zero-allocation, and CPU cache friendly.
 - Cacheability is asked of the **container**, not of a process-global static: `AddMediator` registers a per-container lifetime snapshot, and each cache consults it once per (thread, provider). A static flag is one per closed generic pair and therefore shared by every container in the process, so the first container to register a Scoped or Singleton chain used to declare that pair cacheable for containers that had registered it Transient.
-- Transient registrations always resolve fresh. That includes handlers: a handler with a Transient dependency is registered Transient (see §4), and caching it would share that dependency across dispatches.
+- Transient registrations always resolve fresh. That includes handlers: a handler with a Transient — or unregistered — dependency is registered Transient (see §8), and caching it would share that dependency across dispatches. §9 then folds that Transient handler into its pipeline chain, so the chain is Transient and uncached too, and nothing on that request's path is shared.
 
 ### Consequences
 - Thread hops after `await` cause a single cache miss (no correctness issue).
@@ -212,19 +212,39 @@ The library is fully compatible with .NET Native AOT publishing and IL trimming.
 
 ---
 
-## 8. Auto-Singleton Handler Registration
+## 8. Automatic Handler Lifetime
 
 ### Decision
-Stateless handlers (no constructor parameters) are automatically registered as Singleton.
-Handlers with DI dependencies are registered as Transient.
+A handler's lifetime is derived from its constructor dependencies rather than fixed by hand:
+
+| Dependencies | Handler lifetime |
+|---|---|
+| none (stateless) | Singleton |
+| all Singleton | Singleton |
+| any Scoped, none Transient | Scoped |
+| any Transient, or any not registered | Transient |
+
+Each dependency's lifetime is read from its registered `ServiceDescriptor` — no reflection, so this is
+AOT- and trim-safe. A CLOSED dependency type falls back to its OPEN-generic registration, exactly as
+the container resolves: `ILogger<THandler>` is served by the `ILogger<>` that `AddLogging()` registers
+and therefore reads as Singleton. Without that fallback it read as *unregistered*, and since injecting
+a logger is the commonest thing a handler does, almost every real handler stayed Transient — and, via
+§9, dragged its whole pipeline chain onto the uncached path with it.
+
+Container intrinsics (`IServiceProvider`, `IServiceScopeFactory`) have no descriptor at all and are
+still read as unregistered, so a handler injecting one stays Transient.
 
 ### Rationale
-- Singleton registration eliminates per-call allocation for stateless handlers.
-- Transient is the safe default for handlers that inject scoped or transient services.
+- Singleton registration eliminates per-dispatch allocation for stateless handlers, and §9 then keeps
+  the whole chain cacheable rather than rebuilding it per dispatch.
+- An unregistered dependency keeps the handler Transient because sharing the handler would share
+  something whose lifetime we cannot see.
 - Users can override lifetimes after `RegisterMediatorHandlers()` and before `PrecompilePipelines()`.
+  The optimizer upgrades only a descriptor it still owns: any user re-registration appends a newer
+  descriptor and is left alone, including an identical re-`Add` that forces Transient.
 
 ### Consequences
-- Zero per-call allocation for stateless handlers.
+- Zero per-dispatch allocation for stateless handlers.
 - Users must place lifetime overrides before `PrecompilePipelines()`.
 
 ---
@@ -232,18 +252,28 @@ Handlers with DI dependencies are registered as Transient.
 ## 9. Pipeline Lifetime Determination
 
 ### Decision
-`PrecompilePipelines()` determines each `PipelineChainHandler` lifetime from the lifetime of **everything the chain wraps — the handler AND the registered components** (behaviors, pre/post processors, exception handlers):
+`PrecompilePipelines()` determines each `PipelineChainHandler` lifetime from the lifetime of **everything the chain's constructor consumes** — the registered components (behaviors, pre/post processors, exception handlers), the **handler**, and any registered `IMediatorDispatchObserver`:
 
-| Lowest lifetime among handler + components | Chain Lifetime |
+| Registered | Chain Lifetime |
 |------------|---------------|
 | All Singleton | Singleton |
-| Any Scoped | Scoped |
-| Any Transient | Transient |
+| Any component, or the handler, Transient | Transient |
+| Anything else | Scoped |
+
+`PrecompileStreams()` folds the stream handler and the stream behaviors the same way.
+
+A Transient chain is never cached: it is re-resolved and re-linked on every dispatch. That is the
+correct answer when something it wraps really is Transient, and the reason a component's default
+lifetime matters — one Transient component puts the whole request on that path.
+
+> A Transient **observer** is the one asymmetry: it stops the chain being Singleton but does not take
+> it to Transient, so it is constructed once per scope rather than per dispatch. `AddDispatchObserver`
+> defaults to Singleton precisely because an observer is meant to be a stateless adapter.
 
 ### Rationale
 - Ensures correct DI semantics without manual configuration.
 - Singleton chains are cached per-thread for maximum performance.
-- The **handler** is included because the chain's constructor consumes it. A Singleton chain wrapping a Transient/Scoped handler would capture that handler — and its scoped dependencies (e.g. an injected `IMediator` used to publish domain events) — for the whole application lifetime, producing the "Cannot consume scoped service from singleton" captive-dependency error at `BuildServiceProvider`. Likewise, instrumentation behaviors (e.g. the profiler's `EventSourceProfilingBehavior`) are registered **Scoped, not Singleton**, so adding them never promotes a chain to Singleton and captures a non-singleton handler.
+- The **handler** is included because the chain's constructor consumes it. A Singleton chain wrapping a Transient/Scoped handler would capture that handler — and its scoped dependencies (e.g. an injected `IMediator` used to publish domain events) — for the whole application lifetime, producing the "Cannot consume scoped service from singleton" captive-dependency error at `BuildServiceProvider`. Likewise, instrumentation behaviors (e.g. the profiler's `EventSourceProfilingBehavior`) are registered **Scoped, not Singleton**, so adding them never promotes a chain to Singleton and captures a non-singleton handler. A component's lifetime is therefore a deliberate choice rather than a detail: `MediatorBuilder` defaults one to **Scoped**, the longest lifetime that is safe without inspecting its constructor, because a single Transient component takes the whole chain to Transient and off the cached path.
 
 ### Consequences
 - Registrations added after `PrecompilePipelines()` are not picked up.
@@ -281,13 +311,19 @@ that moment gets no chain, so components added afterwards never run. Where a cha
 component added later still runs, but under the lifetime the snapshot chose: a `Transient` component
 added late can be constructed once and shared.
 
-Neither case is silent any more. **DSOFT010** reports the same-method case at compile time, and the
-generated `ValidateMediatorHandlers()` reports both cases at startup — including registrations that
-cross methods and assemblies, which no analyzer can see, because there is no compilation-wide
-ordering to consult.
+Neither case is silent any more. **DSOFT010** reports the same-method case at compile time. It
+resolves the collection through a fluent chain, through `new MediatorBuilder(services)`, and through
+the builder handed to an `AddMediator(configure)` lambda — registration styles it was previously blind
+to rather than merely quiet about — and it pairs a component only with the scan that governs ITS kind,
+so a stream behavior is never reported against `PrecompilePipelines()`.
+
+The generated `ValidateMediatorHandlers()` reports the rest at startup — registrations that cross
+methods and assemblies, which no analyzer can see because there is no compilation-wide ordering to
+consult, and the components a second `AddMediator(configure)` registered after the chains were already
+frozen.
 
 ### Consequences
-- Registrations after `Precompile*` calls are silently ignored.
+- Registrations after `Precompile*` calls are not folded into the scan — and are not silent: DSOFT010 flags the same-method case at compile time, and `ValidateMediatorHandlers()` names the rest at startup.
 - Documented in README with clear examples.
 
 ---

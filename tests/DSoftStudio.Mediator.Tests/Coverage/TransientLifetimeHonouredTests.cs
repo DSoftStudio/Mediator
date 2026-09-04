@@ -3,6 +3,7 @@
 
 using DSoftStudio.Mediator.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Runtime.CompilerServices;
 
 namespace DSoftStudio.Mediator.Tests.Coverage;
@@ -292,6 +293,16 @@ public class TransientLifetimeHonouredTests
         servicesA.AddMediator().RegisterMediatorHandlers();
         servicesA.AddSingleton(new LifeCounter());
         servicesA.AddScoped<IPipelineBehavior<LifePing, int>, LifeBehavior>();
+
+        // The handler is overridden Scoped, because a cacheable chain is this container's whole job and
+        // only a non-Transient chain latches the flag. LifePingHandler takes IServiceProvider, which is
+        // not in the descriptor list, so HandlerLifetimeOptimizer reads it as an unregistered dependency
+        // and leaves the handler Transient -- and a Transient handler takes the chain down to Transient
+        // with it, so A would latch nothing and the test would pass vacuously.
+        // A plain Add, which is the documented override: the generator's Transient descriptor stays in
+        // the collection, but IRequestHandler<,> resolves SINGLE, so the chain reads the last one.
+        // Container B, the actual subject below, is untouched.
+        servicesA.AddScoped<IRequestHandler<LifePing, int>, LifePingHandler>();
         servicesA.PrecompilePipelines();
 
         using (var spA = servicesA.BuildServiceProvider())

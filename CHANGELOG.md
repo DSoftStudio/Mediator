@@ -14,6 +14,15 @@ those before upgrading.
 
 ### Added
 
+- **A second `AddMediator(configure)` is now reported.** The overload runs your `configure` lambda on
+  every call — it has to, or the lambda would be ignored — while the pipeline scan behind it returns
+  early once it has run. A second call therefore registered components that no chain was ever rebuilt
+  around: they either never ran, or a Singleton chain from the first scan captured them and the
+  container refused to build under `ValidateScopes`. `ValidateMediatorHandlers()` now names them. The
+  check reports what it OBSERVED, not what it inferred, so it stays quiet for a second bare
+  `PrecompilePipelines()`, for a `configure` lambda that registers no component, and for a second call
+  on a different service collection.
+
 - **ADR-0065 — two-tier `Send` fast path.** The generator emits a concrete dispatch cache per
   (request, response) pair, plus an optional AGGRESSIVE armed holder that returns a Singleton handler
   directly when the pair provably has no pipeline. The aggressive tier is one-shot, stands down when
@@ -73,6 +82,33 @@ those before upgrading.
 
 ### Changed
 
+- **Pipeline components registered through `MediatorBuilder` now default to `Scoped`, not
+  `Transient`.** `AddOpenBehavior`, `AddStreamBehavior`, `AddRequestPreProcessor`,
+  `AddRequestPostProcessor` and `AddRequestExceptionHandler` are affected; `AddDispatchObserver` keeps
+  its Singleton default. One Transient component registers the request's whole chain as Transient, so
+  every dispatch re-resolved and re-linked it instead of reusing the one already built for the scope —
+  which put a caller who expressed no opinion on the slow path and gave them nothing for it. Scoped is
+  the longest lifetime that is safe without inspecting the component's constructor. **This is a
+  behavior change:** a Scoped component is shared by every dispatch in the scope, including concurrent
+  ones, so a component holding per-dispatch state or a non-thread-safe field — a `Stopwatch` started
+  before the call and read after it — must now be registered `Transient` explicitly. Passing a lifetime
+  yourself is unaffected; only the unstated default moved.
+- **A Transient handler now makes its pipeline chain Transient.** The chain's constructor consumes the
+  handler, so its lifetime has to constrain the chain — and `HandlerLifetimeOptimizer` leaves a handler
+  Transient exactly when a dependency of its own is transient, that is, when a fresh instance per
+  resolve is the whole point. Folding it only far enough to stop the chain being Singleton left a
+  cacheable Scoped chain that constructed the handler once per scope and shared the very dependency the
+  optimizer had just refused to share. The same fold now also reads the stream handler and any
+  registered `IMediatorDispatchObserver`, both of which the chain likewise consumes. **This is a
+  behavior change** for an application whose handler is genuinely Transient: its chain is now rebuilt
+  per dispatch, which is what its registration asked for.
+- **A pipeline component registered after the scan is reported where it used to be silent.** The old
+  Transient default masked this: it had already dragged the chain to Transient, so a late Transient
+  component happened to be per-dispatch by accident of the slow path and the validator stayed quiet.
+  With a cacheable chain the component really is constructed once and shared, and
+  `ValidateMediatorHandlers()` says so. The error is true and names both fixes; the registration order
+  it asks for has always been the documented contract.
+
 - **`ParallelNotificationPublisher` now actually runs handlers in parallel.** It used to invoke each
   handler inline on the calling thread and await the resulting tasks together, so handlers that
   complete synchronously — the style `INotificationHandler` recommends — never overlapped at all. Each
@@ -102,6 +138,28 @@ those before upgrading.
   common shape is one read and one branch.
 
 ### Fixed
+
+- **Handlers that inject a logger were never promoted.** `HandlerLifetimeOptimizer` indexed the
+  registered lifetimes by exact service type, and `AddLogging()` registers `ILogger<>` OPEN. A handler
+  depending on `ILogger<THandler>` looked up the CLOSED type, missed, and counted as having an
+  unregistered dependency — which pins the handler at Transient. Since injecting a logger is the
+  commonest thing a handler does, the optimizer's central promise was quietly off for most real
+  handlers, and through the chain-lifetime fold their whole pipeline chain stayed non-cacheable with
+  them. The lookup now falls back to the open-generic registration, as the container does, and as
+  `DispatchCacheability` already did. `IOptions<T>` and every other openly-registered framework service
+  are fixed by the same change; a closed registration still wins over the open one behind it.
+- **DSOFT010 could not see the fluent registration style at all.** The rule pairs a component with a
+  scan of the SAME service collection, by symbol, and the receiver of a chained call
+  (`services.AddMediator().PrecompilePipelines()`) is the previous invocation rather than a symbol — so
+  the scan was never recorded and nothing could be reported against it. Registrations made through a
+  `MediatorBuilder` had the same problem from the other side: their receiver is the builder, never the
+  collection. Both are now resolved back to the collection, including the builder handed to a
+  `configure` lambda, which is the shape a late module uses.
+- **DSOFT010 reported components against scans that do not govern them.** A stream behavior registered
+  after `PrecompileNotifications()` but before its own `PrecompileStreams()` is correctly ordered, and
+  the rule flagged it anyway — a false positive in a diagnostic that users build with
+  `TreatWarningsAsErrors`. A component is now paired only with the scan that would have built its
+  chain. `PrecompileNotifications()` governs no pipeline component and pairs with none.
 
 - **FluentValidation reported every failure more than once.** One `ValidationContext` was shared by
   every validator, and FluentValidation accumulates failures in the context it is handed — so the

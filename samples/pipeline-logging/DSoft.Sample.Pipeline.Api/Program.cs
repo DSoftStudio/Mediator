@@ -13,8 +13,8 @@ builder.Services
     .RegisterMediatorHandlers();
 
 // Register pipeline behaviors (execution order = registration order)
-builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
-builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
+builder.Services.AddScoped(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
+builder.Services.AddScoped(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
 
 // Precompile after all pipeline components are registered
 builder.Services.PrecompilePipelines();

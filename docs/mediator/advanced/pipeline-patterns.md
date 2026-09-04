@@ -156,15 +156,19 @@ public class RetryBehavior<TRequest, TResponse>
 Pipeline behaviors execute in registration order. A typical production setup:
 
 ```csharp
-services
-    .AddMediator()
-    .RegisterMediatorHandlers()
-    .AddPipelineBehavior(typeof(LoggingBehavior<,>))
-    .AddPipelineBehavior(typeof(AuthorizationBehavior<,>))
-    .AddPipelineBehavior(typeof(ValidationBehavior<,>))
-    .AddPipelineBehavior(typeof(TransactionBehavior<,>))
-    .PrecompilePipelines();
+services.AddMediator(builder =>
+{
+    builder.AddOpenBehavior(typeof(LoggingBehavior<,>));
+    builder.AddOpenBehavior(typeof(AuthorizationBehavior<,>));
+    builder.AddOpenBehavior(typeof(ValidationBehavior<,>));
+    builder.AddOpenBehavior(typeof(TransactionBehavior<,>));
+});
 ```
+
+`AddMediator(configure)` registers the handlers and precompiles everything itself, so do not also call
+`RegisterMediatorHandlers()` or `PrecompilePipelines()` — DSOFT007 flags the mix. Register every
+component inside that FIRST lambda: a second `AddMediator(configure)` runs after the chains are already
+frozen, and `ValidateMediatorHandlers()` reports the components it registered too late.
 
 Execution flow:
 

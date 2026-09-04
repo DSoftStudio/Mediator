@@ -64,10 +64,9 @@ public class SendBehaviorTests : IDisposable
     public async Task Send_WithPassThroughBehavior_ReturnsCorrectValue()
     {
         var services = new ServiceCollection();
-        services.AddMediator()
-            .RegisterMediatorHandlers()
-            .PrecompilePipelines();
+        services.AddMediator().RegisterMediatorHandlers();
         services.AddTransient<IPipelineBehavior<Ping, int>, PassThroughBehavior<Ping, int>>();
+        services.PrecompilePipelines();
 
         using var sp = services.BuildServiceProvider();
         var mediator = sp.GetRequiredService<IMediator>();

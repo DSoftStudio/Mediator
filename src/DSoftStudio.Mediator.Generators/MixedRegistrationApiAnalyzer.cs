@@ -67,6 +67,22 @@ public sealed class MixedRegistrationApiAnalyzer : DiagnosticAnalyzer
     private const string RequestMetadataName =
         "DSoftStudio.Mediator.Abstractions.IRequest`1";
 
+    /// <summary>
+    /// Which scan governs a component. A pipeline component is late only against the scan that would
+    /// have built ITS chain: a stream behavior registered after <c>PrecompileNotifications()</c> but
+    /// before <c>PrecompileStreams()</c> is correctly ordered, and reporting it would be a false
+    /// positive in a rule users build with <c>TreatWarningsAsErrors</c>. Nothing in
+    /// <see cref="ComponentMetadataNames"/> is a notification component, so
+    /// <c>PrecompileNotifications()</c> governs none and pairs with none.
+    /// </summary>
+    [Flags]
+    private enum PipelineKind
+    {
+        None = 0,
+        Request = 1,
+        Stream = 2,
+    }
+
     /// <summary>The pipeline components whose registration order decides whether a chain exists.</summary>
     private static readonly string[] ComponentMetadataNames =
     [
@@ -86,19 +102,28 @@ public sealed class MixedRegistrationApiAnalyzer : DiagnosticAnalyzer
     /// enforced by nothing, and getting it wrong is a silent no-op: no chain is built, the behavior
     /// never runs, and the application starts and serves traffic unvalidated or uncached.
     /// </summary>
-    private static readonly (string ContainingType, string Method)[] FirstPartyComponentMethods =
+    private static readonly (string ContainingType, string Method, PipelineKind Kind)[] FirstPartyComponentMethods =
     [
-        ("FluentValidationServiceCollectionExtensions", "AddMediatorFluentValidation"),
-        ("HybridCacheServiceCollectionExtensions", "AddMediatorHybridCache"),
-        ("OpenTelemetryServiceCollectionExtensions", "AddMediatorInstrumentation"),
+        ("FluentValidationServiceCollectionExtensions", "AddMediatorFluentValidation", PipelineKind.Request),
+        ("HybridCacheServiceCollectionExtensions", "AddMediatorHybridCache", PipelineKind.Request),
+        // Instrumentation registers a request behavior, a stream behavior AND a dispatch observer, so it
+        // is late against either scan.
+        ("OpenTelemetryServiceCollectionExtensions", "AddMediatorInstrumentation",
+            PipelineKind.Request | PipelineKind.Stream),
     ];
 
     /// <summary><c>MediatorBuilder</c> methods that register a pipeline component.</summary>
-    private static readonly string[] BuilderComponentMethods =
+    private static readonly (string Method, PipelineKind Kind)[] BuilderComponentMethods =
     [
-        "AddBehavior", "AddOpenBehavior", "AddStreamBehavior", "AddOpenStreamBehavior",
-        "AddRequestPreProcessor", "AddRequestPostProcessor", "AddRequestExceptionHandler",
-        "AddDispatchObserver",
+        ("AddBehavior", PipelineKind.Request),
+        ("AddOpenBehavior", PipelineKind.Request),
+        ("AddStreamBehavior", PipelineKind.Stream),
+        ("AddOpenStreamBehavior", PipelineKind.Stream),
+        ("AddRequestPreProcessor", PipelineKind.Request),
+        ("AddRequestPostProcessor", PipelineKind.Request),
+        ("AddRequestExceptionHandler", PipelineKind.Request),
+        // An observer lives inside the request chain, so the request scan is the one it can miss.
+        ("AddDispatchObserver", PipelineKind.Request),
     ];
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
@@ -160,8 +185,9 @@ public sealed class MixedRegistrationApiAnalyzer : DiagnosticAnalyzer
 
                 // DSOFT010 (per-scope): where the pipeline scans happen, and where components get
                 // registered, so the end action can pair them up by position on the same collection.
-                var scanPoints = new List<(int End, string Method, ISymbol? Receiver)>();
-                var componentAdds = new List<(Location Location, int Start, string Method, ISymbol? Receiver)>();
+                var scanPoints = new List<(int End, string Method, ISymbol? Receiver, PipelineKind Kind)>();
+                var componentAdds =
+                    new List<(Location Location, int Start, string Method, ISymbol? Receiver, PipelineKind Kind)>();
 
                 blockStart.RegisterOperationAction(opContext =>
                 {
@@ -191,13 +217,15 @@ public sealed class MixedRegistrationApiAnalyzer : DiagnosticAnalyzer
                         // AddMediator(configure) lambda body on the "before" side, where they belong.
                         var statement = invocation.Syntax.FirstAncestorOrSelf<StatementSyntax>() ?? invocation.Syntax;
                         lock (gate)
-                            scanPoints.Add((statement.Span.End, method.Name + "()", ReceiverSymbol(invocation)));
+                            scanPoints.Add((statement.Span.End, method.Name + "()",
+                                            ReceiverSymbol(invocation), ScanKind(method)));
                     }
-                    else if (IsComponentRegistration(invocation, method, componentTypes))
+                    else if (ComponentRegistrationKind(invocation, method, componentTypes) is var componentKind
+                             && componentKind != PipelineKind.None)
                     {
                         lock (gate)
                             componentAdds.Add((invocation.Syntax.GetLocation(), invocation.Syntax.SpanStart,
-                                               method.Name + "()", ReceiverSymbol(invocation)));
+                                               method.Name + "()", ReceiverSymbol(invocation), componentKind));
                     }
 
                     // Only the mediator's own registration methods (avoids matching an unrelated
@@ -258,6 +286,10 @@ public sealed class MixedRegistrationApiAnalyzer : DiagnosticAnalyzer
                             if (scan.Receiver is null || add.Start <= scan.End)
                                 continue;
 
+                            // The scan has to be the one that would have built THIS component's chain.
+                            if ((add.Kind & scan.Kind) == PipelineKind.None)
+                                continue;
+
                             if (!SymbolEqualityComparer.Default.Equals(add.Receiver, scan.Receiver))
                                 continue;
 
@@ -295,19 +327,33 @@ public sealed class MixedRegistrationApiAnalyzer : DiagnosticAnalyzer
            || (method.Name == "AddMediator" && HasMediatorBuilderParameter(method));
 
     /// <summary>
+    /// Which chains a scan freezes. <c>AddMediator(configure)</c> ends by precompiling everything, so it
+    /// governs both. <c>PrecompileNotifications()</c> governs neither: no pipeline component belongs to a
+    /// notification, so a component that follows it is not late for anything.
+    /// </summary>
+    private static PipelineKind ScanKind(IMethodSymbol method)
+        => method.Name switch
+        {
+            "PrecompilePipelines" => PipelineKind.Request,
+            "PrecompileStreams" => PipelineKind.Stream,
+            "AddMediator" => PipelineKind.Request | PipelineKind.Stream,
+            _ => PipelineKind.None,
+        };
+
+    /// <summary>
     /// True when the invocation registers a pipeline component. Three shapes are recognised, and
     /// anything else is left alone — DSOFT010 is a Warning, and users build with
     /// <c>TreatWarningsAsErrors</c>, so a miss is far cheaper than a false positive.
     /// </summary>
-    private static bool IsComponentRegistration(
+    private static PipelineKind ComponentRegistrationKind(
         IInvocationOperation invocation, IMethodSymbol method, List<INamedTypeSymbol> componentTypes)
     {
         // (a) A MediatorBuilder method that registers a component.
         if (method.ContainingType is { Name: "MediatorBuilder" })
         {
-            foreach (var name in BuilderComponentMethods)
+            foreach (var (name, kind) in BuilderComponentMethods)
                 if (method.Name == name)
-                    return true;
+                    return kind;
         }
 
         // (a2) A first-party companion extension method. Gated on the dot-terminated namespace so a
@@ -316,9 +362,9 @@ public sealed class MixedRegistrationApiAnalyzer : DiagnosticAnalyzer
             && ns.StartsWith(MediatorNamespaceDotted, StringComparison.Ordinal))
         {
             var containing = method.ContainingType?.Name;
-            foreach (var (type, name) in FirstPartyComponentMethods)
+            foreach (var (type, name, kind) in FirstPartyComponentMethods)
                 if (containing == type && method.Name == name)
-                    return true;
+                    return kind;
         }
 
         // (b) A generic Add*/TryAdd* whose type arguments name a component interface, e.g.
@@ -327,28 +373,28 @@ public sealed class MixedRegistrationApiAnalyzer : DiagnosticAnalyzer
             || method.Name.StartsWith("TryAdd", StringComparison.Ordinal))
         {
             foreach (var argument in method.TypeArguments)
-                if (MatchesComponent(argument, componentTypes))
-                    return true;
+                if (ComponentKind(argument, componentTypes) is var kind && kind != PipelineKind.None)
+                    return kind;
         }
 
         // (c) Any typeof(...) argument naming a component interface — covers the open-generic form
         //     services.AddTransient(typeof(IPipelineBehavior<,>), typeof(Logging<,>)) and
         //     services.Add(new ServiceDescriptor(typeof(IPipelineBehavior<,>), ...)).
+        var found = PipelineKind.None;
         foreach (var argument in invocation.Arguments)
-            if (ContainsComponentTypeOf(argument.Value, componentTypes))
-                return true;
+            found |= ContainsComponentKind(argument.Value, componentTypes);
 
-        return false;
+        return found;
     }
 
-    private static bool ContainsComponentTypeOf(IOperation? operation, List<INamedTypeSymbol> componentTypes)
+    private static PipelineKind ContainsComponentKind(IOperation? operation, List<INamedTypeSymbol> componentTypes)
     {
         switch (operation)
         {
             case null:
-                return false;
+                return PipelineKind.None;
             case ITypeOfOperation typeOf:
-                return MatchesComponent(typeOf.TypeOperand, componentTypes);
+                return ComponentKind(typeOf.TypeOperand, componentTypes);
             // ServiceDescriptor.Singleton(typeof(IPipelineBehavior<,>), typeof(X<,>)) and its generic
             // form — the shape TryAddEnumerable takes, and the one the first-party packages themselves
             // now use. Deliberately restricted to ServiceDescriptor's own factories: recursing into ANY
@@ -356,54 +402,126 @@ public sealed class MixedRegistrationApiAnalyzer : DiagnosticAnalyzer
             // interface, and a false positive here breaks a build.
             case IInvocationOperation descriptorFactory
                 when descriptorFactory.TargetMethod.ContainingType?.Name == "ServiceDescriptor":
+                var fromFactory = PipelineKind.None;
                 foreach (var typeArgument in descriptorFactory.TargetMethod.TypeArguments)
-                    if (MatchesComponent(typeArgument, componentTypes))
-                        return true;
+                    fromFactory |= ComponentKind(typeArgument, componentTypes);
 
                 foreach (var argument in descriptorFactory.Arguments)
-                    if (ContainsComponentTypeOf(argument.Value, componentTypes))
-                        return true;
+                    fromFactory |= ContainsComponentKind(argument.Value, componentTypes);
 
-                return false;
+                return fromFactory;
 
             // new ServiceDescriptor(typeof(IPipelineBehavior<,>), ...) reaches us as the argument.
             case IObjectCreationOperation creation:
+                var fromCreation = PipelineKind.None;
                 foreach (var argument in creation.Arguments)
-                    if (ContainsComponentTypeOf(argument.Value, componentTypes))
-                        return true;
-                return false;
+                    fromCreation |= ContainsComponentKind(argument.Value, componentTypes);
+                return fromCreation;
             case IConversionOperation conversion:
-                return ContainsComponentTypeOf(conversion.Operand, componentTypes);
+                return ContainsComponentKind(conversion.Operand, componentTypes);
             default:
-                return false;
+                return PipelineKind.None;
         }
     }
 
-    private static bool MatchesComponent(ITypeSymbol? type, List<INamedTypeSymbol> componentTypes)
+    /// <summary>
+    /// The kind of pipeline a component interface belongs to, or <see cref="PipelineKind.None"/> when the
+    /// type is not one of ours. The name test runs only AFTER symbol equality has confirmed the type is
+    /// from <c>ComponentMetadataNames</c>, so it can never match somebody else's same-named interface.
+    /// </summary>
+    private static PipelineKind ComponentKind(ITypeSymbol? type, List<INamedTypeSymbol> componentTypes)
     {
         if (type is not INamedTypeSymbol named)
-            return false;
+            return PipelineKind.None;
 
         var definition = named.OriginalDefinition;
         foreach (var component in componentTypes)
-            if (SymbolEqualityComparer.Default.Equals(definition, component))
-                return true;
+        {
+            if (!SymbolEqualityComparer.Default.Equals(definition, component))
+                continue;
 
-        return false;
+            return definition.Name == "IStreamPipelineBehavior" ? PipelineKind.Stream : PipelineKind.Request;
+        }
+
+        return PipelineKind.None;
     }
 
     /// <summary>
     /// The <c>IServiceCollection</c> an invocation acts on, so DSOFT010 only pairs a registration with
     /// a scan of the SAME collection. Returns <c>null</c> when it cannot be resolved to a symbol, and
     /// the rule then stays silent rather than guessing.
+    /// <para>
+    /// Two receivers are walked back to that collection first, because without it the rule was blind to
+    /// whole registration styles rather than merely quiet about them:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>A FLUENT CHAIN. <c>AddMediator</c>, <c>RegisterMediatorHandlers</c> and the
+    /// <c>Precompile*</c> methods are extensions that return the collection they were handed, so in
+    /// <c>services.AddMediator().PrecompilePipelines()</c> the scan's receiver is the PREVIOUS
+    /// INVOCATION. That resolved to null, the scan was never recorded as a pairing candidate, and
+    /// DSOFT010 could not fire anywhere in a file written that way.</description></item>
+    /// <item><description>A <c>MediatorBuilder</c>. Its component methods are the whole point of branch
+    /// (a) of <see cref="IsComponentRegistration"/>, but their receiver is the builder, never the
+    /// collection, so branch (a) could never pair with a scan. <c>new MediatorBuilder(services)</c>
+    /// names the collection in its first argument.</description></item>
+    /// </list>
+    /// <para>
+    /// Unwrapping only ever makes the pairing MORE precise: a chain over a different collection still
+    /// resolves to that other collection and still does not match. A builder held in a local is left at
+    /// null on purpose — which collection it wraps is a dataflow question, and this rule is a Warning
+    /// that users build with <c>TreatWarningsAsErrors</c>, so a miss is far cheaper than a guess.
+    /// </para>
     /// </summary>
     private static ISymbol? ReceiverSymbol(IInvocationOperation invocation)
-    {
-        var receiver = invocation.Instance
-                       ?? (invocation.Arguments.Length > 0 ? invocation.Arguments[0].Value : null);
+        => CollectionSymbol(invocation.Instance
+                            ?? (invocation.Arguments.Length > 0 ? invocation.Arguments[0].Value : null));
 
+    private static ISymbol? CollectionSymbol(IOperation? receiver)
+    {
         while (receiver is IConversionOperation conversion)
             receiver = conversion.Operand;
+
+        switch (receiver)
+        {
+            // A fluent extension hands back the very collection it was given, so the chain's earlier
+            // link is the receiver that matters. Gated on the return type matching the receiver type,
+            // which is what "returns what it was handed" looks like to the compiler.
+            case IInvocationOperation call when ReturnsItsOwnReceiver(call):
+                return CollectionSymbol(
+                    call.Instance ?? (call.Arguments.Length > 0 ? call.Arguments[0].Value : null));
+
+            // new MediatorBuilder(services) -- the collection is argument 0.
+            case IObjectCreationOperation creation
+                when IsMediatorBuilder(creation.Type) && creation.Arguments.Length > 0:
+                return CollectionSymbol(creation.Arguments[0].Value);
+        }
+
+        // The builder a configure lambda is handed stands for the collection the enclosing
+        // AddMediator(configure) was called on. This is the shape a late module uses --
+        // services.AddMediator(b => b.AddOpenBehavior(...)) called after another module already
+        // scanned -- and the components inside it are as late as any other, so the rule has to see
+        // through the parameter to say so. Its OWN AddMediator is not a false positive: the scan
+        // boundary is the containing statement's end, which encloses the lambda body.
+        if (receiver is IParameterReferenceOperation { Parameter.Type: { } parameterType }
+            && IsMediatorBuilder(parameterType))
+        {
+            for (IOperation? node = receiver; node is not null; node = node.Parent)
+            {
+                if (node is IAnonymousFunctionOperation
+                    && node.Parent is IDelegateCreationOperation
+                    {
+                        Parent: IArgumentOperation { Parent: IInvocationOperation owner },
+                    })
+                {
+                    return CollectionSymbol(
+                        owner.Instance ?? (owner.Arguments.Length > 0 ? owner.Arguments[0].Value : null));
+                }
+            }
+        }
+
+        // A builder reached through any other symbol stands for a collection this method cannot name.
+        if (IsMediatorBuilder(receiver?.Type))
+            return null;
 
         return receiver switch
         {
@@ -414,6 +532,27 @@ public sealed class MixedRegistrationApiAnalyzer : DiagnosticAnalyzer
             _ => null,
         };
     }
+
+    /// <summary>
+    /// True for the fluent shape <c>X Foo(this X self)</c>: the receiver's type and the return type are
+    /// the same, so the value flowing on is the value that came in. An extension that returns something
+    /// else is left alone rather than assumed.
+    /// </summary>
+    private static bool ReturnsItsOwnReceiver(IInvocationOperation call)
+    {
+        var self = call.Instance?.Type
+                   ?? (call.Arguments.Length > 0 ? call.Arguments[0].Value.Type : null);
+
+        return self is not null
+               && call.Type is not null
+               && SymbolEqualityComparer.Default.Equals(self, call.Type);
+    }
+
+    /// <summary>The builder, by name and by its own namespace — never somebody else's same-named type.</summary>
+    private static bool IsMediatorBuilder(ITypeSymbol? type)
+        => type is { Name: "MediatorBuilder" }
+           && type.ContainingNamespace?.ToDisplayString() is { } ns
+           && ns.StartsWith(MediatorNamespacePrefix, StringComparison.Ordinal);
 
     /// <summary>
     /// Checks whether the method has an <c>Action&lt;MediatorBuilder&gt;</c> parameter,

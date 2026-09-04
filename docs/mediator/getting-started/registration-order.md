@@ -75,9 +75,9 @@ services
     .RegisterMediatorHandlers();  // 2. Source-generated handler registrations
 
 // 3. Register behaviors, processors, exception handlers
-services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
-services.AddTransient(typeof(IRequestPreProcessor<>), typeof(ValidationPreProcessor<>));
-services.AddTransient(typeof(IRequestPostProcessor<,>), typeof(AuditPostProcessor<,>));
+services.AddScoped(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
+services.AddScoped(typeof(IRequestPreProcessor<>), typeof(ValidationPreProcessor<>));
+services.AddScoped(typeof(IRequestPostProcessor<,>), typeof(AuditPostProcessor<,>));
 
 // 4. Override handler lifetimes (optional)
 services.AddScoped<IRequestHandler<MyRequest, MyResponse>, MyHandler>();
@@ -87,19 +87,45 @@ services.AddSingleton<INotificationPublisher, ParallelNotificationPublisher>();
 
 // 6. Precompile — inspects all registrations above
 services
-    .PrecompilePipelines()        // scans for IPipelineBehavior, Pre/Post processors, exception handlers
+    .PrecompilePipelines()        // scans for IPipelineBehavior, Pre/Post processors, exception
+                                  // handlers, IMediatorDispatchObserver, and the handler's lifetime
     .PrecompileNotifications()    // builds static dispatch arrays for each INotification type
-    .PrecompileStreams();         // scans for IStreamPipelineBehavior; builds static factory delegates per IStreamRequest type
+    .PrecompileStreams();         // scans for IStreamPipelineBehavior and the stream handler's
+                                  // lifetime; builds static factory delegates per IStreamRequest type
 ```
 
 ## What Each Method Inspects
 
 | Method | What it inspects | What to register before |
 |---|---|---|
-| `PrecompilePipelines()` | `IPipelineBehavior<,>`, `IRequestPreProcessor<>`, `IRequestPostProcessor<,>`, `IRequestExceptionHandler<,>`, handler lifetimes | Behaviors, processors, exception handlers, handler overrides |
+| `PrecompilePipelines()` | `IPipelineBehavior<,>`, `IRequestPreProcessor<>`, `IRequestPostProcessor<,>`, `IRequestExceptionHandler<,>`, `IMediatorDispatchObserver`, handler lifetimes | Behaviors, processors, exception handlers, dispatch observers, handler overrides |
 | `PrecompileNotifications()` | `INotificationHandler<>` | Notification handler overrides |
 | `PrecompileStreams()` | `IStreamRequestHandler<,>`, `IStreamPipelineBehavior<,>` | Stream handler overrides, **stream behaviors** |
 
 ## Pipeline Chain Lifetimes
 
-`PrecompilePipelines()` determines each `PipelineChainHandler` lifetime based on the registered components: **Singleton** when all components are Singleton, **Scoped** when any is Scoped, **Transient** when any is Transient. Registrations added after the `Precompile*` calls will not be picked up by the dispatch tables.
+`PrecompilePipelines()` gives each `PipelineChainHandler` a lifetime that is safe for everything its
+constructor consumes — which is more than the components. The request handler and any registered
+`IMediatorDispatchObserver` are chain dependencies too, and each constrains it:
+
+| Registered | Chain lifetime |
+|---|---|
+| every component, the handler and every observer Singleton | **Singleton** — one chain for the process |
+| any component, or the handler, Transient | **Transient** — re-resolved and re-linked on every dispatch, never cached |
+| anything else | **Scoped** — one chain per scope, reused by every dispatch in it |
+
+A Transient handler is not an accident to be optimised away. `HandlerLifetimeOptimizer` leaves a
+handler Transient when a dependency of its own is transient — when a fresh instance per resolve is the
+point — or when a dependency is not registered at all, so caching the chain around it would share
+something whose lifetime cannot be seen. An open-generic framework registration does NOT count as
+unregistered: a closed `ILogger<T>` or `IOptions<T>` falls back to its open descriptor, so a handler
+that only injects a logger is promoted rather than pinned. Container intrinsics — `IServiceProvider`,
+`IServiceScopeFactory` — have no descriptor and do still read as unregistered.
+
+`PrecompileStreams()` folds the stream handler and the stream behaviors the same way.
+
+The `Precompile*` calls fix these lifetimes, and nothing registered afterwards re-opens the decision.
+A component added after the scan still *runs* when that request already had a chain — the chain
+resolves its components from the container — but under the lifetime the scan already chose, so a late
+`Transient` component ends up constructed once and shared. A pair that had no chain at scan time never
+gets one.
