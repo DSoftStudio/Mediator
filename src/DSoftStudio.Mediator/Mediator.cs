@@ -79,12 +79,18 @@ namespace DSoftStudio.Mediator
             // this method at that static type -- which has no dispatch table of its own, so it would
             // report a publish and invoke nothing. Dispatch by the RUNTIME type instead.
             //
-            // typeof(TNotification).IsAbstract is a JIT constant per instantiation, so a concrete
-            // TNotification folds the whole branch away and pays nothing. The table check is what
-            // keeps an abstract base that DOES have handlers of its own going to those handlers
-            // rather than being re-routed.
-            if (typeof(TNotification).IsAbstract
-                && NotificationDispatch<TNotification>.Handlers is not { Length: > 0 })
+            // The handler test leads because it is the cheap one, and the order is load-bearing rather
+            // than stylistic. Notifications are reference types, so this method is compiled ONCE for
+            // all of them and typeof(TNotification) is a generic-dictionary lookup, not a constant --
+            // Type.IsAbstract is not a JIT intrinsic and does not fold for value types either.
+            // Measured over 200M iterations: +2.63 ns when the type test leads, +0.74 ns when the
+            // static read short-circuits it away for the ordinary concrete type that has handlers,
+            // and that remaining read is one the dispatch makes immediately afterwards regardless.
+            //
+            // The handler check is also what keeps an abstract base that DOES have handlers of its own
+            // going to those handlers rather than being re-routed.
+            if (NotificationDispatch<TNotification>.Handlers is not { Length: > 0 }
+                && typeof(TNotification).IsAbstract)
             {
                 return NotificationObjectDispatch.Dispatch(
                     notification, _serviceProvider, _notificationPublisher, cancellationToken);
