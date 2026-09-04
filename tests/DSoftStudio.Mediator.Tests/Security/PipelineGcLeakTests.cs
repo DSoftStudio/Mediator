@@ -163,8 +163,16 @@ public class PipelineGcLeakTests : IDisposable
 
     private static void FullGc()
     {
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
+        // Forced, blocking and compacting, three times. The parameterless GC.Collect() can be
+        // satisfied by a BACKGROUND collection, which under load from another test assembly running
+        // in parallel leaves objects uncollected — and the liveness assertion below then measures how
+        // busy the machine is rather than what the dispatch path retains. Repeating is not retrying
+        // an assertion: something genuinely rooted survives any number of collections, so a pass here
+        // still means unreachable.
+        for (int i = 0; i < 3; i++)
+        {
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+            GC.WaitForPendingFinalizers();
+        }
     }
 }

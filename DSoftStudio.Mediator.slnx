@@ -62,6 +62,7 @@
     <Project Path="src/DSoftStudio.Mediator/DSoftStudio.Mediator.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/DSoftStudio.Mediator.Companions.IntegrationTests/DSoftStudio.Mediator.Companions.IntegrationTests.csproj" />
     <Project Path="tests/DSoftStudio.Mediator.FluentValidation.Tests/DSoftStudio.Mediator.FluentValidation.Tests.csproj" />
     <Project Path="tests/DSoftStudio.Mediator.HybridCache.Tests/DSoftStudio.Mediator.HybridCache.Tests.csproj" />
     <Project Path="tests/DSoftStudio.Mediator.InternalsVisibleTo.Host/DSoftStudio.Mediator.InternalsVisibleTo.Host.csproj" />
