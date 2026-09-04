@@ -52,7 +52,13 @@ public static class OpenTelemetryServiceCollectionExtensions
             // behavior chain). One stateless singleton adapter; the core injects it as IEnumerable and pays
             // nothing when it is absent. Streams have no dispatch port, so the stream span stays a behavior.
             services.AddSingleton<IMediatorDispatchObserver>(new MediatorDispatchTracingObserver(options));
-            services.AddTransient(typeof(IStreamPipelineBehavior<,>), typeof(MediatorStreamTracingBehavior<,>));
+
+            // Singleton, not Transient. The generated stream registration marks the whole
+            // StreamPipelineChainHandler Transient and skips MarkStreamChainCacheable() the moment ONE
+            // component in the chain is Transient, so every stream dispatch in the application would
+            // re-resolve and re-link its chain -- for enabling tracing. The behavior's only dependency
+            // is the options singleton, so it captures nothing narrower than itself.
+            services.AddSingleton(typeof(IStreamPipelineBehavior<,>), typeof(MediatorStreamTracingBehavior<,>));
         }
 
         if (options.EnableMetrics)
@@ -63,8 +69,11 @@ public static class OpenTelemetryServiceCollectionExtensions
             services.AddMetrics();
             services.TryAddSingleton<MediatorMetrics>();
 
-            services.AddTransient(typeof(IPipelineBehavior<,>), typeof(MediatorMetricsBehavior<,>));
-            services.AddTransient(typeof(IStreamPipelineBehavior<,>), typeof(MediatorStreamMetricsBehavior<,>));
+            // Same reason as the tracing behavior above, on the request side: a single Transient
+            // component clears the cacheable flag for EVERY request pair in the application, so the
+            // chain is rebuilt per dispatch. Both depend only on the options and metrics singletons.
+            services.AddSingleton(typeof(IPipelineBehavior<,>), typeof(MediatorMetricsBehavior<,>));
+            services.AddSingleton(typeof(IStreamPipelineBehavior<,>), typeof(MediatorStreamMetricsBehavior<,>));
         }
 
         // ── Notification publisher decorator ────────────────────────────
