@@ -25,7 +25,11 @@ public sealed class MediatorValidationException : Exception
     public MediatorValidationException(IReadOnlyList<ValidationFailure> failures)
         : base(BuildMessage(failures))
     {
-        Failures = failures;
+        // Snapshot, not the caller's instance: the argument is typed IReadOnlyList but the caller
+        // (the behavior itself passes its working List) still holds a mutable reference to it, so
+        // storing it directly would let the reported failures change — or empty out — after the
+        // exception was constructed, and diverge from the Message and ErrorsByProperty built here.
+        Failures = [.. failures];
 
         ErrorsByProperty = failures
             .GroupBy(f => f.PropertyName ?? string.Empty)

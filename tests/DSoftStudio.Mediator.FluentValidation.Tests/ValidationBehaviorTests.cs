@@ -131,6 +131,60 @@ public class ValidationBehaviorTests
         ex.Failures[0].PropertyName.ShouldBe("Amount");
     }
 
+    [Fact]
+    public async Task Multiple_validators_report_each_broken_rule_exactly_once()
+    {
+        var sp = TestServiceProvider.BuildWithAllValidators();
+        var mediator = sp.GetRequiredService<IMediator>();
+
+        // Three broken rules across two validators: From and To (account validator), Amount (amount validator).
+        var ex = await Should.ThrowAsync<MediatorValidationException>(
+            () => mediator.Send(new TransferMoney("", "", -5m)).AsTask());
+
+        ex.Failures.Count.ShouldBe(3);
+
+        foreach (var entry in ex.ErrorsByProperty)
+            entry.Value.Distinct().Count().ShouldBe(
+                entry.Value.Length,
+                $"'{entry.Key}' reported the same message more than once");
+
+        ex.Message.ShouldStartWith("Validation failed with 3 errors.");
+    }
+
+    [Fact]
+    public async Task Behavior_registered_twice_runs_the_validators_once()
+    {
+        var counter = new ValidatorCallCounter();
+
+        // A shared library calls AddMediatorFluentValidation(); TestServiceProvider (playing the host)
+        // calls it again. A second descriptor puts a second ValidationBehavior in the same chain, and
+        // every validator then runs once per behavior.
+        var sp = TestServiceProvider.Build(s =>
+        {
+            s.AddSingleton(counter);
+            s.AddScoped<IValidator<Ping>, PingCountingValidator>();
+            s.AddMediatorFluentValidation();
+        });
+        var mediator = sp.GetRequiredService<IMediator>();
+
+        await mediator.Send(new Ping(21), TestContext.Current.CancellationToken);
+
+        counter.Count.ShouldBe(1);
+    }
+
+    // ── Constructor guards ────────────────────────────────────────────
+
+    [Fact]
+    public void Behavior_rejects_null_validators_naming_the_parameter()
+    {
+        var ex = Should.Throw<ArgumentNullException>(
+            () => new ValidationBehavior<CreateUser, Guid>(null!));
+
+        // Without an explicit guard the throw comes out of Enumerable.ToArray, blaming "source" —
+        // a parameter the caller has never heard of.
+        ex.ParamName.ShouldBe("validators");
+    }
+
     // ── Handler is NOT invoked on failure ─────────────────────────────
 
     [Fact]

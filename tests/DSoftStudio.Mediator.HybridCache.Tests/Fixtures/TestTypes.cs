@@ -73,3 +73,33 @@ public sealed class GetCachedCountHandler : IRequestHandler<GetCachedCount, int>
     public ValueTask<int> Handle(GetCachedCount request, CancellationToken cancellationToken)
         => new(Interlocked.Increment(ref s_counter));
 }
+
+// ── Ambient-state probe ───────────────────────────────────────────────
+
+/// <summary>
+/// Stand-in for the ambient state a real handler reads — <c>Activity.Current</c>,
+/// <c>IHttpContextAccessor.HttpContext</c>, a tenant/user <see cref="AsyncLocal{T}"/>. All of it
+/// rides on the caller's <see cref="ExecutionContext"/>, so one AsyncLocal is the smallest
+/// faithful observer of whether that context reached the handler through the cache factory.
+/// </summary>
+public static class AmbientProbe
+{
+    public static readonly AsyncLocal<string?> Current = new();
+
+    /// <summary>
+    /// Non-null stand-in for "the handler saw no ambient state" — a null response would make
+    /// HybridCache serialize a null payload, which is a different question than the one asked.
+    /// </summary>
+    public const string Missing = "<none>";
+}
+
+public record GetAmbient(string Scope) : IQuery<string>, ICachedRequest
+{
+    public string CacheKey => $"ambient:{Scope}";
+}
+
+public sealed class GetAmbientHandler : IRequestHandler<GetAmbient, string>
+{
+    public ValueTask<string> Handle(GetAmbient request, CancellationToken cancellationToken)
+        => new(AmbientProbe.Current.Value ?? AmbientProbe.Missing);
+}

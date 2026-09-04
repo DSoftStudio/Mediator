@@ -72,6 +72,33 @@ public sealed class TransferMoneyAmountValidator : AbstractValidator<TransferMon
     }
 }
 
+// ── Validator that records how many times it ran ──────────────────────
+
+/// <summary>
+/// Counts validator invocations, so a test can tell one run of the pipeline's validators
+/// apart from the behavior being registered into the same chain twice.
+/// </summary>
+public sealed class ValidatorCallCounter
+{
+    private int _count;
+
+    public int Count => Volatile.Read(ref _count);
+
+    public void Increment() => Interlocked.Increment(ref _count);
+}
+
+public sealed class PingCountingValidator : AbstractValidator<Ping>
+{
+    public PingCountingValidator(ValidatorCallCounter counter)
+    {
+        RuleFor(x => x.Value).Must(_ =>
+        {
+            counter.Increment();
+            return true;
+        });
+    }
+}
+
 // ── Validator with DI dependency ──────────────────────────────────────
 
 public interface IBlockedAccountService

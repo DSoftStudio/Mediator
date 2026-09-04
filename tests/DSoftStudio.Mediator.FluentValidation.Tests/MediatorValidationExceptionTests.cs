@@ -69,6 +69,24 @@ public class MediatorValidationExceptionTests
     }
 
     [Fact]
+    public void Failures_are_snapshotted_from_the_caller_list()
+    {
+        var failures = new List<ValidationFailure>
+        {
+            new("Name", "Name is required."),
+        };
+
+        var ex = new MediatorValidationException(failures);
+
+        // The behavior hands over its own working List; nothing stops a caller from reusing it.
+        failures.Clear();
+        failures.Add(new ValidationFailure("Email", "Email is required."));
+
+        ex.Failures.Count.ShouldBe(1);
+        ex.Failures[0].PropertyName.ShouldBe("Name");
+    }
+
+    [Fact]
     public void Message_zero_failures()
     {
         var ex = new MediatorValidationException([]);

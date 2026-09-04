@@ -19,7 +19,27 @@ public class RegistrationTests
             s.ImplementationType == typeof(ValidationBehavior<,>));
 
         descriptor.ShouldNotBeNull();
-        descriptor.Lifetime.ShouldBe(ServiceLifetime.Transient);
+
+        // Scoped keeps the generated PipelineChainHandler cacheable for EVERY request in the app;
+        // a Transient behavior demotes the whole chain to a per-dispatch resolve.
+        // See PipelineLifetimeTests for the end-to-end pin.
+        descriptor.Lifetime.ShouldBe(ServiceLifetime.Scoped);
+    }
+
+    [Fact]
+    public void AddMediatorFluentValidation_called_twice_registers_the_behavior_once()
+    {
+        var services = new ServiceCollection();
+
+        // A shared library and the host application both wiring validation up.
+        services.AddMediatorFluentValidation();
+        services.AddMediatorFluentValidation();
+
+        var count = services.Count(s =>
+            s.ServiceType == typeof(IPipelineBehavior<,>) &&
+            s.ImplementationType == typeof(ValidationBehavior<,>));
+
+        count.ShouldBe(1);
     }
 
     [Fact]
