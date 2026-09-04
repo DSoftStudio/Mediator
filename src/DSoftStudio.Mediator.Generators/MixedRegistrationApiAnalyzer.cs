@@ -49,6 +49,12 @@ public sealed class MixedRegistrationApiAnalyzer : DiagnosticAnalyzer
 {
     private const string MediatorNamespacePrefix = "DSoftStudio.Mediator";
 
+    /// <summary>
+    /// Dot-terminated, for matches that must not also accept a namespace merely STARTING with the
+    /// prefix — "DSoftStudio.MediatorPlus" is somebody else's code.
+    /// </summary>
+    private const string MediatorNamespaceDotted = "DSoftStudio.Mediator.";
+
     private const string MediatorHandlerRegistrationAttributeFullName =
         "DSoftStudio.Mediator.Abstractions.MediatorHandlerRegistrationAttribute";
 
@@ -70,6 +76,21 @@ public sealed class MixedRegistrationApiAnalyzer : DiagnosticAnalyzer
         "DSoftStudio.Mediator.Abstractions.IRequestExceptionHandler`2",
         "DSoftStudio.Mediator.Abstractions.IStreamPipelineBehavior`2",
         "DSoftStudio.Mediator.Abstractions.IMediatorDispatchObserver",
+    ];
+
+    /// <summary>
+    /// First-party companion packages that register a pipeline component from INSIDE their own
+    /// extension method. Nothing in the call's argument list names a component interface — the
+    /// descriptor is added in another assembly — so the only way to see these is to know the methods
+    /// by name. Without them, the order these packages document ("before PrecompilePipelines()") is
+    /// enforced by nothing, and getting it wrong is a silent no-op: no chain is built, the behavior
+    /// never runs, and the application starts and serves traffic unvalidated or uncached.
+    /// </summary>
+    private static readonly (string ContainingType, string Method)[] FirstPartyComponentMethods =
+    [
+        ("FluentValidationServiceCollectionExtensions", "AddMediatorFluentValidation"),
+        ("HybridCacheServiceCollectionExtensions", "AddMediatorHybridCache"),
+        ("OpenTelemetryServiceCollectionExtensions", "AddMediatorInstrumentation"),
     ];
 
     /// <summary><c>MediatorBuilder</c> methods that register a pipeline component.</summary>
@@ -289,6 +310,17 @@ public sealed class MixedRegistrationApiAnalyzer : DiagnosticAnalyzer
                     return true;
         }
 
+        // (a2) A first-party companion extension method. Gated on the dot-terminated namespace so a
+        //      same-named method in anybody else's code cannot trip a rule that users build as an error.
+        if (method.ContainingNamespace?.ToDisplayString() is { } ns
+            && ns.StartsWith(MediatorNamespaceDotted, StringComparison.Ordinal))
+        {
+            var containing = method.ContainingType?.Name;
+            foreach (var (type, name) in FirstPartyComponentMethods)
+                if (containing == type && method.Name == name)
+                    return true;
+        }
+
         // (b) A generic Add*/TryAdd* whose type arguments name a component interface, e.g.
         //     services.AddTransient<IPipelineBehavior<Ping, int>, LoggingBehavior>().
         if (method.Name.StartsWith("Add", StringComparison.Ordinal)
@@ -317,6 +349,23 @@ public sealed class MixedRegistrationApiAnalyzer : DiagnosticAnalyzer
                 return false;
             case ITypeOfOperation typeOf:
                 return MatchesComponent(typeOf.TypeOperand, componentTypes);
+            // ServiceDescriptor.Singleton(typeof(IPipelineBehavior<,>), typeof(X<,>)) and its generic
+            // form — the shape TryAddEnumerable takes, and the one the first-party packages themselves
+            // now use. Deliberately restricted to ServiceDescriptor's own factories: recursing into ANY
+            // invocation would start matching helper calls and lambdas that merely MENTION the
+            // interface, and a false positive here breaks a build.
+            case IInvocationOperation descriptorFactory
+                when descriptorFactory.TargetMethod.ContainingType?.Name == "ServiceDescriptor":
+                foreach (var typeArgument in descriptorFactory.TargetMethod.TypeArguments)
+                    if (MatchesComponent(typeArgument, componentTypes))
+                        return true;
+
+                foreach (var argument in descriptorFactory.Arguments)
+                    if (ContainsComponentTypeOf(argument.Value, componentTypes))
+                        return true;
+
+                return false;
+
             // new ServiceDescriptor(typeof(IPipelineBehavior<,>), ...) reaches us as the argument.
             case IObjectCreationOperation creation:
                 foreach (var argument in creation.Arguments)
