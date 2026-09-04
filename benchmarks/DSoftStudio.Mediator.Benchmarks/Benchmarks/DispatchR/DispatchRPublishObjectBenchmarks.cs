@@ -7,6 +7,12 @@ using DispatchR.Extensions;
 
 namespace Benchmarks;
 
+// DispatchR marks Publish(object) obsolete for having "performance issues". Measuring that method is
+// the entire purpose of this class -- comparing each library's object route against its typed one --
+// so the warning is suppressed here rather than the benchmark dropped. Scoped to this file, so a
+// genuine accidental use anywhere else still reports.
+#pragma warning disable CS0618 // Type or member is obsolete
+
 /// <summary>
 /// Isolated DispatchR-only benchmark: Publish(object) vs typed Publish.
 /// Separate class = separate BenchmarkDotNet process — zero static dispatch contamination.
@@ -48,3 +54,5 @@ public class DispatchRPublishObjectBenchmarks
     public async Task DispatchR_Publish_Object()
         => await _mediator.Publish((object)Notification, default);
 }
+
+#pragma warning restore CS0618

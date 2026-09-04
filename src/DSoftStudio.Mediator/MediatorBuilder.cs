@@ -175,7 +175,7 @@ public sealed class MediatorBuilder
 
     /// <summary>
     /// Registers <see cref="ParallelNotificationPublisher"/>, which queues every notification
-    /// handler to the thread pool and awaits them together via <see cref="Task.WhenAll"/>.
+    /// handler to the thread pool and awaits them together via <see cref="Task.WhenAll(IEnumerable{Task})"/>.
     /// <para>
     /// Handlers then run concurrently whether or not they suspend, so they must be safe to run
     /// alongside each other. Awaiting the publish rethrows the first failure; the rest are on the

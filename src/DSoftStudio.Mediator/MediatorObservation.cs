@@ -48,8 +48,15 @@ namespace DSoftStudio.Mediator
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
-        private static IMediatorNotificationObserver? ResolveSlow(IServiceProvider serviceProvider)
+        private static IMediatorNotificationObserver? ResolveSlow(IServiceProvider? serviceProvider)
         {
+            // Resolve tests for null deliberately -- a RELEASED slot has a null Provider and
+            // ReferenceEquals(null, null) is true, so a null provider would otherwise read a
+            // "cached" null and fail far from here -- which means a null argument arrives HERE.
+            // Naming it blames the parameter the caller passed, instead of surfacing as "provider"
+            // from inside GetRequiredService. One test, and only on the miss path.
+            ArgumentNullException.ThrowIfNull(serviceProvider);
+
             if (serviceProvider is null)
                 return null;
 

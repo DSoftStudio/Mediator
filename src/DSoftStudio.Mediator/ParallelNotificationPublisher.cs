@@ -7,7 +7,7 @@ namespace DSoftStudio.Mediator
 {
     /// <summary>
     /// Runs every notification handler concurrently, awaiting them together with
-    /// <see cref="Task.WhenAll"/>.
+    /// <see cref="Task.WhenAll(IEnumerable{Task})"/>.
     /// <para>
     /// Each handler is queued to the thread pool, so handlers run in parallel whether or not they
     /// suspend — including ones written in the synchronous <c>return Task.CompletedTask</c> style
