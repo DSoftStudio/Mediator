@@ -17,7 +17,7 @@ description: "All notable changes to DSoftStudio.Mediator."
 
 ## [1.4.0-rc.1] — 2026-09-02
 
-> Companions: `OpenTelemetry` 1.1.0 · `HybridCache` 1.0.9 · `FluentValidation` 1.0.9.
+> Companions: `OpenTelemetry` 1.1.1-rc.1 · `HybridCache` 1.0.10-rc.1 · `FluentValidation` 1.0.10-rc.1.
 
 Two changes in this release alter observable behavior. Both are described under **Changed**; read
 those before upgrading.
@@ -62,6 +62,21 @@ those before upgrading.
   the observer and the observer substitutes nothing. Registering one is knowable before the container
   is built, so an application that registers none pays nothing. Every registered observer runs, not
   just the first, and a publish reports how many subscribers it resolved before the first one starts.
+- **Per-request-pair registration for the companion packages.** `AddMediatorHybridCache<TRequest,
+  TResponse>()` and `AddMediatorFluentValidation<TRequest, TResponse>()` register the behavior closed
+  over one pair instead of as an open generic. The open form joins the pipeline of every request in
+  the application, so a request that never caches or validates has a chain built for it rather than
+  being dispatched straight to its handler; the closed form leaves every other request untouched. The
+  caching overload constrains `TRequest` to `ICachedRequest`, so registering a request that never
+  opted in does not compile. The two forms are alternatives: with the open registration present, the
+  closed call stands down.
+- **DSOFT010 now sees the registrations it most needs to.** The rule reports a pipeline component
+  registered after the scan that decides whether a chain is built, but it could not see the companion
+  packages — their descriptor is added inside their own extension method, in another assembly, so
+  nothing at the call site names a component interface — nor the
+  `TryAddEnumerable(ServiceDescriptor.Singleton(...))` form, which is what those packages now use. It
+  recognises the three first-party registration methods by name, gated on the namespace so another
+  vendor's same-named method cannot trip it, and reads through `ServiceDescriptor`'s factories.
 - **Benchmarks.** Multi-targeted `net10.0`/`net11.0` with `runtime-async` on net11, a behavior-count
   scaling suite, `run-all-benchmarks.cmd`, and `compare-runs.ps1`, which compares two runs by overhead
   above each suite's own baseline so machine drift cancels out.
@@ -97,6 +112,40 @@ those before upgrading.
   common shape is one read and one branch.
 
 ### Fixed
+
+- **FluentValidation reported every failure more than once.** One `ValidationContext` was shared by
+  every validator, and FluentValidation accumulates failures in the context it is handed — so the
+  second validator returned its own failures plus the first's, the third all three, and so on. Three
+  broken rules across two validators produced five failures, with two messages duplicated, an
+  `ErrorsByProperty` entry carrying the same string twice, and a message reading "Validation failed
+  with 5 errors". **The failure count and contents change**: anything asserting on them, or rendering
+  them into a `ValidationProblemDetails`, sees the correct list now.
+- **A cached handler ran without the caller's execution context.** `HybridCache` dispatches the
+  factory through `ThreadPool.UnsafeQueueUserWorkItem` when the caller's token can be cancelled, and
+  that overload captures no `ExecutionContext` — so on a cache miss the handler saw
+  `Activity.Current` and `IHttpContextAccessor.HttpContext` as null. Traces detached from the
+  request, and a handler resolving its tenant or user from ambient state computed the wrong answer,
+  which was then cached for the whole entry lifetime. The behavior now restores the caller's context
+  around the downstream call, without giving up the caller's ability to cancel.
+- **Installing a companion made every dispatch in the application rebuild its pipeline chain.**
+  `HybridCache`, `FluentValidation` and the metrics and stream behaviors in `OpenTelemetry` all
+  registered their pipeline component as `Transient`. One transient component is enough for the
+  generated registration to mark the whole chain transient and skip the cacheable flag, so the chain
+  was re-resolved and re-linked on every request — measured at 107 ns and 200 B per dispatch against
+  80 ns and 24 B when cached. In OpenTelemetry it applied to streams under the default options, so
+  merely enabling tracing was enough. All are now Singleton, or Scoped where the component's own
+  dependencies are scoped.
+- **Registering a companion twice put its behavior in every chain twice.** A shared library and the
+  host application both calling `AddMediatorHybridCache()` nested the caching behavior inside itself,
+  so the outer lookup re-entered the inner one on the same key while the first call was still in
+  flight; the FluentValidation equivalent ran every validator twice. Both now register through
+  `TryAddEnumerable`.
+- **The HybridCache package README documented an API that does not exist.** Its quick start used a
+  generic `ICachedRequest<T>` with an `Expiration` property and an `AddMediatorCaching()` method,
+  none of which are real, and claimed cache keys were derived from the request type and its property
+  values when they are supplied verbatim by the caller. Every symbol in it failed to compile. The
+  FluentValidation README's error-handling sample used a property that does not exist either. Both
+  are rewritten against the code, with every sample compiled.
 
 - **Publishing a notification with no subscribers no longer depends on how the call is written.**
   `Publish(object)` threw `InvalidOperationException` where the generic overload was a no-op, so the

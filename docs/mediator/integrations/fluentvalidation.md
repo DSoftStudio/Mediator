@@ -103,6 +103,45 @@ app.UseExceptionHandler(error => error.Run(async context =>
 }));
 ```
 
+## Validating One Request Instead of All of Them
+
+`AddMediatorFluentValidation()` registers the behavior as an **open** generic, so it joins the pipeline of every request — including the ones with no validator at all, which then have a chain built for them instead of being dispatched directly to their handler.
+
+The generic overload registers it closed over one pair instead:
+
+```csharp
+services
+    .AddMediatorFluentValidation<CreateUser, Guid>()
+    .PrecompilePipelines();
+```
+
+This form is opt-in per request, and that cuts both ways: a request whose pair is not registered is **not validated even if a validator for it exists in DI**, and nothing warns. Prefer the open form when validators are discovered by assembly scanning, or when having a validator is the norm.
+
+The two forms are alternatives, not layers. If the open registration is already present the closed call stands down, because a second descriptor would run every validator twice.
+
+## Order Against Caching
+
+Pipeline behaviors run in registration order, and when a request is both cached and validated that
+order decides whether a cache hit is validated at all.
+
+```csharp
+// Validation outer: every dispatch is validated, hits included.
+services.AddMediatorFluentValidation();
+services.AddMediatorHybridCache();
+
+// Caching outer: a hit returns before validation is ever reached.
+services.AddMediatorHybridCache();
+services.AddMediatorFluentValidation();
+```
+
+With caching registered first, the first dispatch populates the entry and every later one is served
+from it — **without running the validators**. Nothing warns; the rules are simply skipped. If
+validation is authorization, a permission check, or anything else that can change its answer between
+two calls with the same key, register **validation before caching**.
+
+An invalid request never populates the cache in either order: the handler does not run, so there is
+no value to store, and the next dispatch is rejected again rather than served a cached failure.
+
 ## Behavior Summary
 
 | Scenario | Result |
@@ -111,6 +150,9 @@ app.UseExceptionHandler(error => error.Run(async context =>
 | All validators pass | Handler executes normally |
 | One or more validators fail | `MediatorValidationException` thrown, handler not invoked |
 | Validator has DI dependencies | Fully supported — validators are resolved from the DI container |
+| Registered open-generic | Every request in the application gets a pipeline chain |
+| Registered per pair | Only that pair is validated; a validator for any other request never runs |
+| Registered after caching | A cache hit is served without validating the request |
 
 ## See Also
 

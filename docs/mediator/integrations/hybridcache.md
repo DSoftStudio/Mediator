@@ -48,7 +48,9 @@ public record GetProduct(Guid Id) : IQuery<ProductDto>, ICachedRequest
 }
 ```
 
-That's it — the `CachingBehavior` intercepts the pipeline, checks for `ICachedRequest`, and uses `HybridCache.GetOrCreateAsync()` to cache the result. Requests that don't implement `ICachedRequest` pass through with negligible overhead — a single `is not ICachedRequest` type-check before the behavior awaits the rest of the pipeline.
+That's it — the `CachingBehavior` intercepts the pipeline, checks for `ICachedRequest`, and uses `HybridCache.GetOrCreateAsync()` to cache the result. Requests that don't implement `ICachedRequest` are passed straight through by a single `is not ICachedRequest` type-check.
+
+That check is not the whole cost, though. `AddMediatorHybridCache()` registers the behavior as an **open** generic, so it joins the pipeline of every request in the application, and a request that would otherwise have no pipeline components at all now has a chain built for it instead of being dispatched directly to its handler. Register [per request pair](#caching-one-request-instead-of-all-of-them) when caching covers a known handful of queries, and every other request keeps its direct dispatch.
 
 ## Adding Redis as L2
 
@@ -79,6 +81,57 @@ public class DeleteProductHandler : ICommandHandler<DeleteProduct, Unit>
 }
 ```
 
+## Caching One Request Instead of All of Them
+
+The generic overload registers the behavior closed over one (request, response) pair, so only that pair gets a pipeline chain:
+
+```csharp
+services
+    .AddMediatorHybridCache<GetProduct, ProductDto>()
+    .PrecompilePipelines();
+```
+
+`TRequest` is constrained to `ICachedRequest`, so registering a request that never opted in does not compile — a mistake the open form cannot catch.
+
+The two forms are alternatives, not layers. If the open registration is already present the closed call stands down, because a second descriptor would put the behavior in that chain twice and the outer lookup would re-enter the inner one on the same key.
+
+## What the Cache Key Must Contain
+
+`CacheKey` reaches `HybridCache` verbatim. Nothing about the request type or its properties is mixed in, so two request types returning the same string share one entry — put the request type in the key.
+
+Everything the response depends on belongs there too, **including what the handler reads from ambient state rather than from the request**. Stampede prevention means concurrent callers on one key share a single handler execution: the first caller's handler runs and everyone waiting receives its result. A handler that resolves the current tenant or user from `IHttpContextAccessor` or an `AsyncLocal` therefore serves the first caller's answer to the rest, for the lifetime of the entry.
+
+```csharp
+public record GetDashboard(Guid Id, string TenantId) : IQuery<DashboardDto>, ICachedRequest
+{
+    // The tenant is part of what the response depends on, so it is part of the key.
+    public string CacheKey => $"{nameof(GetDashboard)}:{TenantId}:{Id}";
+}
+```
+
+## Order Against Validation
+
+Pipeline behaviors run in registration order, and when a request is both cached and validated that
+order decides whether a cache hit is validated at all.
+
+```csharp
+// Validation outer: every dispatch is validated, hits included.
+services.AddMediatorFluentValidation();
+services.AddMediatorHybridCache();
+
+// Caching outer: a hit returns before validation is ever reached.
+services.AddMediatorHybridCache();
+services.AddMediatorFluentValidation();
+```
+
+With caching registered first, the first dispatch populates the entry and every later one is served
+from it — **without running the validators**. Nothing warns; the rules are simply skipped. If
+validation is authorization, a permission check, or anything else that can change its answer between
+two calls with the same key, register **validation before caching**.
+
+An invalid request never populates the cache in either order: the handler does not run, so there is
+no value to store, and the next dispatch is rejected again rather than served a cached failure.
+
 ## Behavior Summary
 
 | Scenario | Result |
@@ -87,6 +140,9 @@ public class DeleteProductHandler : ICommandHandler<DeleteProduct, Unit>
 | Request does not implement `ICachedRequest` | Pass-through — handler executes normally |
 | Same cache key within TTL | Cached result returned, handler not invoked |
 | Concurrent requests for same key | Stampede prevention — one execution, all callers share result |
+| Registered open-generic | Every request in the application gets a pipeline chain |
+| Registered per pair | Only that pair gets a chain; every other request keeps its direct dispatch |
+| Registered before validation | A cache hit is served without validating the request |
 
 ## See Also
 
