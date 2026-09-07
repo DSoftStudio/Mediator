@@ -40,6 +40,26 @@ public sealed class AutoOpenScopedReqHandler(IAutoOpen<AutoScopedDep> dep) : IRe
     public ValueTask<int> Handle(AutoOpenScopedReq request, CancellationToken ct) => new(_dep is null ? -1 : 42);
 }
 
+// -- Container intrinsics: services MS.DI provides itself, with no descriptor anywhere ----------
+// These need no registration in any test, which is the whole point: the container always answers for
+// them, and the optimizer has to know that rather than reading their absence as "unknown".
+
+public sealed record AutoProviderReq : IRequest<int>;
+public sealed class AutoProviderReqHandler(IServiceProvider sp) : IRequestHandler<AutoProviderReq, int>
+{
+    private readonly IServiceProvider _sp = sp;
+    public ValueTask<int> Handle(AutoProviderReq request, CancellationToken ct) => new(_sp is null ? -1 : 42);
+}
+
+public sealed record AutoScopeFactoryReq : IRequest<int>;
+public sealed class AutoScopeFactoryReqHandler(IServiceScopeFactory factory)
+    : IRequestHandler<AutoScopeFactoryReq, int>
+{
+    private readonly IServiceScopeFactory _factory = factory;
+    public ValueTask<int> Handle(AutoScopeFactoryReq request, CancellationToken ct)
+        => new(_factory is null ? -1 : 42);
+}
+
 // -- Requests + handlers exercising the auto-detection path end-to-end ---
 
 public sealed record AutoSingletonReq : IRequest<int>;
@@ -264,5 +284,62 @@ public class HandlerLifetimeAutoDetectionTests
         using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
         DispatchCacheability.AllowsCaching(provider, typeof(PipelineChainHandler<AutoOpenDepReq, int>))
             .ShouldBeTrue("and the dispatch caches ask the container, not the descriptor");
+    }
+
+    // -- Container intrinsics ------------------------------------------------------------------
+
+    /// <summary>
+    /// <c>IServiceProvider</c> has no <c>ServiceDescriptor</c> — MS.DI answers for it from the engine —
+    /// so a lookup over the registrations alone read it as unregistered and pinned the handler at
+    /// Transient. It is not unknown: it is the scope that asked, and lives exactly as long.
+    /// <para>
+    /// The cost of getting this wrong was not the handler but the chain: a Transient handler takes its
+    /// whole pipeline chain to Transient, so the chain was re-resolved and re-linked on every dispatch.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ContainerProvidedServiceProvider_CapsHandlerAtScoped()
+    {
+        var services = new ServiceCollection();
+        services.AddMediator().RegisterMediatorHandlers().PrecompilePipelines();
+
+        HandlerLifetimeOf<AutoProviderReq, int>(services)
+            .ShouldBe(ServiceLifetime.Scoped, "IServiceProvider is the scope, not an unknown service");
+    }
+
+    /// <summary>
+    /// <c>IServiceScopeFactory</c> is rooted: one factory serves every scope, which is exactly what makes
+    /// it safe for a Singleton to hold — and it is the sanctioned way for a singleton to reach scoped
+    /// work.
+    /// </summary>
+    [Fact]
+    public void ContainerProvidedScopeFactory_AllowsSingleton()
+    {
+        var services = new ServiceCollection();
+        services.AddMediator().RegisterMediatorHandlers().PrecompilePipelines();
+
+        HandlerLifetimeOf<AutoScopeFactoryReq, int>(services)
+            .ShouldBe(ServiceLifetime.Singleton, "the factory is rooted, so holding it forever is correct");
+    }
+
+    /// <summary>
+    /// The end both stand in for: the handler resolves and dispatches under <c>ValidateScopes</c>, and
+    /// one instance serves the whole scope rather than being rebuilt per dispatch.
+    /// </summary>
+    [Fact]
+    public async Task A_handler_injecting_the_provider_is_built_once_per_scope()
+    {
+        var services = new ServiceCollection();
+        services.AddMediator().RegisterMediatorHandlers().PrecompilePipelines();
+
+        using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+        using var scope = provider.CreateScope();
+        var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+
+        (await mediator.Send(new AutoProviderReq(), TestContext.Current.CancellationToken)).ShouldBe(42);
+
+        var first = scope.ServiceProvider.GetRequiredService<IRequestHandler<AutoProviderReq, int>>();
+        var second = scope.ServiceProvider.GetRequiredService<IRequestHandler<AutoProviderReq, int>>();
+        second.ShouldBeSameAs(first, "Scoped means one instance for the scope");
     }
 }

@@ -186,6 +186,25 @@ namespace DSoftStudio.Mediator
                 && lifetimes.TryGetValue(dependency.GetGenericTypeDefinition(), out lifetime))
                 return true;
 
+            // Services the container provides itself. They never appear as descriptors, so without this
+            // an IServiceProvider parameter read as unregistered and pinned the handler at Transient --
+            // and, through the chain-lifetime fold, took its whole pipeline chain onto the uncached path
+            // with it. Both lookups above run first, so a caller who registers one of these explicitly
+            // still decides.
+            if (dependency == typeof(IServiceProvider))
+            {
+                // Resolved from the scope that asked, so it lives exactly as long as that scope.
+                lifetime = ServiceLifetime.Scoped;
+                return true;
+            }
+
+            if (dependency == typeof(IServiceScopeFactory))
+            {
+                // Rooted: one factory serves every scope, which is what makes it safe to hold forever.
+                lifetime = ServiceLifetime.Singleton;
+                return true;
+            }
+
             lifetime = default;
             return false;
         }

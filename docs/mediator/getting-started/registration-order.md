@@ -119,8 +119,9 @@ handler Transient when a dependency of its own is transient — when a fresh ins
 point — or when a dependency is not registered at all, so caching the chain around it would share
 something whose lifetime cannot be seen. An open-generic framework registration does NOT count as
 unregistered: a closed `ILogger<T>` or `IOptions<T>` falls back to its open descriptor, so a handler
-that only injects a logger is promoted rather than pinned. Container intrinsics — `IServiceProvider`,
-`IServiceScopeFactory` — have no descriptor and do still read as unregistered.
+that only injects a logger is promoted rather than pinned. Nor do the services the container provides
+itself: `IServiceProvider` reads as `Scoped` — it *is* the scope that asked — and
+`IServiceScopeFactory` as `Singleton`, since one rooted factory serves every scope.
 
 `PrecompileStreams()` folds the stream handler and the stream behaviors the same way.
 

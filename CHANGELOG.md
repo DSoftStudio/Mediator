@@ -148,6 +148,9 @@ those before upgrading.
   them. The lookup now falls back to the open-generic registration, as the container does, and as
   `DispatchCacheability` already did. `IOptions<T>` and every other openly-registered framework service
   are fixed by the same change; a closed registration still wins over the open one behind it.
+  The services the container provides without any descriptor are answered directly for the same
+  reason: `IServiceProvider` is `Scoped` — it is the scope that asked and lives exactly as long — and
+  `IServiceScopeFactory` is `Singleton`, since one rooted factory serves every scope.
 - **DSOFT010 could not see the fluent registration style at all.** The rule pairs a component with a
   scan of the SAME service collection, by symbol, and the receiver of a chained call
   (`services.AddMediator().PrecompilePipelines()`) is the previous invocation rather than a symbol — so

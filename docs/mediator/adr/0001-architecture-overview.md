@@ -231,8 +231,10 @@ and therefore reads as Singleton. Without that fallback it read as *unregistered
 a logger is the commonest thing a handler does, almost every real handler stayed Transient — and, via
 §9, dragged its whole pipeline chain onto the uncached path with it.
 
-Container intrinsics (`IServiceProvider`, `IServiceScopeFactory`) have no descriptor at all and are
-still read as unregistered, so a handler injecting one stays Transient.
+The services the container provides itself have no descriptor either, and are answered directly:
+`IServiceProvider` as `Scoped`, because it is the scope that asked and lives exactly as long, and
+`IServiceScopeFactory` as `Singleton`, because one rooted factory serves every scope. Both lookups
+above run first, so a caller who registers one of these explicitly still decides.
 
 ### Rationale
 - Singleton registration eliminates per-dispatch allocation for stateless handlers, and §9 then keeps
