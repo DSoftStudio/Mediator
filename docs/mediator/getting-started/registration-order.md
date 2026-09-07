@@ -111,7 +111,7 @@ constructor consumes — which is more than the components. The request handler 
 | Registered | Chain lifetime |
 |---|---|
 | every component, the handler and every observer Singleton | **Singleton** — one chain for the process |
-| any component, or the handler, Transient | **Transient** — re-resolved and re-linked on every dispatch, never cached |
+| any component, the handler, or an observer, Transient | **Transient** — re-resolved and re-linked on every dispatch, never cached |
 | anything else | **Scoped** — one chain per scope, reused by every dispatch in it |
 
 A Transient handler is not an accident to be optimised away. `HandlerLifetimeOptimizer` leaves a

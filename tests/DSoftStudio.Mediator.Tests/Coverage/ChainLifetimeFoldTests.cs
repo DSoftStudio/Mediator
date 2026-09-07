@@ -173,6 +173,44 @@ public sealed class FoldTransientPingHandler : IRequestHandler<FoldTransientPing
     }
 }
 
+public sealed record FoldObsPing : IRequest<int>;
+
+public sealed class FoldObsPingHandler : IRequestHandler<FoldObsPing, int>
+{
+    public ValueTask<int> Handle(FoldObsPing r, CancellationToken ct) => new(5);
+}
+
+public sealed class FoldObsBehavior : IPipelineBehavior<FoldObsPing, int>
+{
+    public ValueTask<int> Handle(FoldObsPing r, IRequestHandler<FoldObsPing, int> next, CancellationToken ct)
+        => next.Handle(r, ct);
+}
+
+/// <summary>Counts its own constructions, which is the only way a lifetime is observable.</summary>
+public sealed class FoldCountingObserver : IMediatorDispatchObserver
+{
+    private readonly BdlConstructionLog? _log;
+    private int _dispatches;
+
+    public FoldCountingObserver(IServiceProvider sp)
+    {
+        _log = sp.GetService<BdlConstructionLog>();
+        _log?.Constructed();
+    }
+
+    // Active, so BeginDispatch actually runs: an inactive observer is never asked, and the per-instance
+    // count below would then be measuring nothing.
+    public bool IsActive => true;
+
+    public IMediatorDispatchScope? BeginDispatch<TRequest, TResponse>(
+        TRequest request, IRequestHandler<TRequest, TResponse> handler)
+        where TRequest : IRequest<TResponse>
+    {
+        _log?.Saw(++_dispatches);
+        return null;
+    }
+}
+
 public sealed class FoldScopedPreProcessor : IRequestPreProcessor<FoldTransientPing>
 {
     public ValueTask Process(FoldTransientPing request, CancellationToken ct) => default;
@@ -295,6 +333,53 @@ public class TransientHandlerFoldTests
             .Lifetime.ShouldBe(
                 ServiceLifetime.Scoped,
                 "the container resolves the Scoped override, so the chain may be cached per scope");
+    }
+
+    /// <summary>
+    /// The last member of the family, and the one where the caller — not the optimizer — chose Transient.
+    /// <para>
+    /// The chain's constructor consumes <c>IEnumerable&lt;IMediatorDispatchObserver&gt;</c>, so an
+    /// observer is a chain dependency like any other. Lowering the chain off Singleton without taking it
+    /// to Transient left it CACHEABLE, so the chain was built once per scope and the observer with it:
+    /// an explicit <c>ServiceLifetime.Transient</c> silently honoured as per-scope.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void A_transient_dispatch_observer_makes_the_request_chain_transient()
+    {
+        var services = new ServiceCollection();
+        services.AddMediator().RegisterMediatorHandlers();
+        services.AddScoped<IPipelineBehavior<FoldObsPing, int>, FoldObsBehavior>();
+        services.AddTransient<IMediatorDispatchObserver, FoldCountingObserver>();
+        services.PrecompilePipelines();
+
+        services.Last(d => d.ServiceType == typeof(PipelineChainHandler<FoldObsPing, int>))
+            .Lifetime.ShouldBe(
+                ServiceLifetime.Transient,
+                "a cacheable chain would construct the Transient observer once and share it for the scope");
+    }
+
+    /// <summary>The end the descriptor assertion stands in for, counted rather than inferred.</summary>
+    [Fact]
+    public async Task A_transient_dispatch_observer_is_constructed_per_dispatch()
+    {
+        var log = new BdlConstructionLog();
+        var services = new ServiceCollection();
+        services.AddSingleton(log);
+        services.AddMediator().RegisterMediatorHandlers();
+        services.AddScoped<IPipelineBehavior<FoldObsPing, int>, FoldObsBehavior>();
+        services.AddTransient<IMediatorDispatchObserver, FoldCountingObserver>();
+        services.PrecompilePipelines();
+
+        using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+        using var scope = provider.CreateScope();
+        var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+
+        for (int i = 0; i < 3; i++)
+            await mediator.Send(new FoldObsPing(), TestContext.Current.CancellationToken);
+
+        log.Constructions.ShouldBe(3, "the caller asked for a Transient observer and got three dispatches");
+        log.MaxDispatchesPerInstance.ShouldBe(1, "no instance may be reused across dispatches");
     }
 
     [Fact]

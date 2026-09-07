@@ -257,7 +257,7 @@ still read as unregistered, so a handler injecting one stays Transient.
 | Registered | Chain Lifetime |
 |------------|---------------|
 | All Singleton | Singleton |
-| Any component, or the handler, Transient | Transient |
+| Any component, the handler, or an observer, Transient | Transient |
 | Anything else | Scoped |
 
 `PrecompileStreams()` folds the stream handler and the stream behaviors the same way.
@@ -266,9 +266,8 @@ A Transient chain is never cached: it is re-resolved and re-linked on every disp
 correct answer when something it wraps really is Transient, and the reason a component's default
 lifetime matters — one Transient component puts the whole request on that path.
 
-> A Transient **observer** is the one asymmetry: it stops the chain being Singleton but does not take
-> it to Transient, so it is constructed once per scope rather than per dispatch. `AddDispatchObserver`
-> defaults to Singleton precisely because an observer is meant to be a stateless adapter.
+`AddDispatchObserver` defaults to Singleton because an observer is meant to be a stateless adapter, but
+a caller who states Transient gets it: the observer is a chain dependency like any other.
 
 ### Rationale
 - Ensures correct DI semantics without manual configuration.
