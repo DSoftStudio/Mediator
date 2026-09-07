@@ -147,11 +147,17 @@ public class ChainLifetimeFoldTests
 }
 
 // ── Fixtures: a handler the optimizer deliberately LEAVES Transient ────────────────────────────
-// HandlerLifetimeOptimizer promotes a handler to the longest lifetime its constructor allows, and
-// stops at Transient when a dependency is transient or unregistered ("a transient dependency keeps
-// the handler transient", HandlerLifetimeOptimizer.cs). IServiceProvider is not in the descriptor
-// list, so it reads as unregistered and these handlers stay Transient -- which is the state the fold
-// below has to respect.
+// HandlerLifetimeOptimizer promotes a handler to the longest lifetime its constructor allows and
+// stops at Transient when a dependency is transient ("a transient dependency keeps the handler
+// transient", HandlerLifetimeOptimizer.cs) -- which is the state the fold below has to respect.
+//
+// The Transient-ness is STATED, through a dependency registered AddTransient, not inherited from
+// IServiceProvider happening to read as unregistered. That accident is an implementation detail of
+// the optimizer's lookup: relying on it would mean these tests stop exercising a Transient handler
+// the day the lookup learns about container intrinsics, and nothing would say so.
+
+/// <summary>A dependency that is registered, and registered Transient. Nothing more.</summary>
+public sealed class CoverageTransientDep;
 
 public sealed record FoldTransientPing : IRequest<int>;
 
@@ -160,8 +166,9 @@ public sealed class FoldTransientPingHandler : IRequestHandler<FoldTransientPing
     private readonly BdlConstructionLog? _log;
     private int _dispatches;
 
-    public FoldTransientPingHandler(IServiceProvider sp)
+    public FoldTransientPingHandler(CoverageTransientDep dep, IServiceProvider sp)
     {
+        _ = dep;
         _log = sp.GetService<BdlConstructionLog>();
         _log?.Constructed();
     }
@@ -223,8 +230,9 @@ public sealed class FoldTransientStreamHandler : IStreamRequestHandler<FoldTrans
     private readonly BdlConstructionLog? _log;
     private int _enumerations;
 
-    public FoldTransientStreamHandler(IServiceProvider sp)
+    public FoldTransientStreamHandler(CoverageTransientDep dep, IServiceProvider sp)
     {
+        _ = dep;
         _log = sp.GetService<BdlConstructionLog>();
         _log?.Constructed();
     }
@@ -270,6 +278,7 @@ public class TransientHandlerFoldTests
     public void A_transient_handler_makes_the_request_chain_transient()
     {
         var services = new ServiceCollection();
+        services.AddTransient<CoverageTransientDep>();
         services.AddMediator(b => b.AddRequestPreProcessor<FoldScopedPreProcessor>(ServiceLifetime.Scoped));
 
         services.Last(d => d.ServiceType == typeof(IRequestHandler<FoldTransientPing, int>))
@@ -290,6 +299,7 @@ public class TransientHandlerFoldTests
         var log = new BdlConstructionLog();
         var services = new ServiceCollection();
         services.AddSingleton(log);
+        services.AddTransient<CoverageTransientDep>();
         services.AddMediator(b => b.AddRequestPreProcessor<FoldScopedPreProcessor>(ServiceLifetime.Scoped));
 
         using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
@@ -319,6 +329,7 @@ public class TransientHandlerFoldTests
     public void An_overridden_handler_decides_the_chain_not_the_superseded_descriptor()
     {
         var services = new ServiceCollection();
+        services.AddTransient<CoverageTransientDep>();
         services.AddMediator().RegisterMediatorHandlers();
         services.AddScoped<IRequestPreProcessor<FoldTransientPing>, FoldScopedPreProcessor>();
 
@@ -386,6 +397,7 @@ public class TransientHandlerFoldTests
     public void A_transient_stream_handler_makes_the_stream_chain_transient()
     {
         var services = new ServiceCollection();
+        services.AddTransient<CoverageTransientDep>();
         services.AddMediator().RegisterMediatorHandlers();
         services.AddScoped<IStreamPipelineBehavior<FoldTransientStream, int>, FoldScopedStreamBehavior>();
         services.PrecompileStreams();
@@ -405,6 +417,7 @@ public class TransientHandlerFoldTests
         var log = new BdlConstructionLog();
         var services = new ServiceCollection();
         services.AddSingleton(log);
+        services.AddTransient<CoverageTransientDep>();
         services.AddMediator().RegisterMediatorHandlers();
         services.AddScoped<IStreamPipelineBehavior<FoldTransientStream, int>, FoldScopedStreamBehavior>();
         services.PrecompileStreams();
