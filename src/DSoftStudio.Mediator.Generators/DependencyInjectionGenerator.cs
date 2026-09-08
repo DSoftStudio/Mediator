@@ -821,7 +821,7 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
                     sb.AppendLine("                anyChain = true;");
                     sb.AppendLine($"                if (__AnyService<{behaviorType}>(sp)");
                     sb.AppendLine($"                    && global::DSoftStudio.Mediator.DispatchCacheability.AllowsCaching(sp, typeof({chainType}))");
-                    sb.AppendLine($"                    && !global::DSoftStudio.Mediator.DispatchCacheability.AllowsCaching(sp, typeof({behaviorType})))");
+                    sb.AppendLine($"                    && global::DSoftStudio.Mediator.DispatchCacheability.AnyTransient(sp, typeof({behaviorType})))");
                     sb.AppendLine("                    errors.Add(new global::System.InvalidOperationException(");
                     sb.AppendLine($"                        \"A Transient pipeline behavior is registered for {EscapeForLiteral(handler.InterfaceType)}, but its \" +");
                     sb.AppendLine("                        \"pipeline chain is not Transient, so that behavior is constructed once and shared for the \" +");

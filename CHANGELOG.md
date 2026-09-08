@@ -151,6 +151,13 @@ those before upgrading.
   The services the container provides without any descriptor are answered directly for the same
   reason: `IServiceProvider` is `Scoped` — it is the scope that asked and lives exactly as long — and
   `IServiceScopeFactory` is `Singleton`, since one rooted factory serves every scope.
+- **A late Transient behavior could be hidden by a later registration.** The validator asked whether
+  the behavior service type was cacheable, and that answer is last-wins — the reading the container
+  uses for a service it resolves singly. `IPipelineBehavior<,>` is not one of those: several
+  descriptors coexist and every one of them runs, so a Scoped registration made after a Transient one
+  silenced the rule about a behavior that really was constructed once and shared. It now asks whether
+  ANY registration for the type is Transient. The dispatch caches are untouched — they only ever ask
+  about service types that resolve singly, where last-wins is correct.
 - **DSOFT010 could not see the fluent registration style at all.** The rule pairs a component with a
   scan of the SAME service collection, by symbol, and the receiver of a chained call
   (`services.AddMediator().PrecompilePipelines()`) is the previous invocation rather than a symbol — so

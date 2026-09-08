@@ -64,6 +64,33 @@ namespace DSoftStudio.Mediator
 
             return serviceProvider.GetService<DispatchLifetimeSnapshot>()?.AllowsCaching(serviceType) == true;
         }
+
+        /// <summary>
+        /// Whether ANY registration for <paramref name="serviceType"/> is Transient.
+        /// <para>
+        /// <see cref="AllowsCaching"/> answers for the descriptor the container would RESOLVE — the last
+        /// one — which is right for a service resolved singly, such as a handler or a chain. It is the
+        /// wrong question for an ENUMERABLE service type: several descriptors coexist for
+        /// <c>IPipelineBehavior&lt;,&gt;</c> and every one of them runs, so a later Scoped registration
+        /// hid an earlier Transient one behind it and the generated validator went quiet about a behavior
+        /// that really was being constructed once and shared.
+        /// </para>
+        /// <para>
+        /// Used by validation only. Nothing on the dispatch path asks this: the caches key on service
+        /// types that resolve singly, where last-wins is the correct reading.
+        /// </para>
+        /// <para>
+        /// Fails CLOSED in the opposite direction to <see cref="AllowsCaching"/>: an unknown type answers
+        /// <see langword="false"/>, so validation stays silent rather than inventing a fault.
+        /// </para>
+        /// </summary>
+        public static bool AnyTransient(IServiceProvider serviceProvider, Type serviceType)
+        {
+            if (serviceProvider is null || serviceType is null)
+                return false;
+
+            return serviceProvider.GetService<DispatchLifetimeSnapshot>()?.AnyTransient(serviceType) == true;
+        }
     }
 
     /// <summary>
@@ -91,23 +118,30 @@ namespace DSoftStudio.Mediator
     /// </summary>
     internal sealed class DispatchLifetimeSnapshot(DispatchLifetimeMap map)
     {
-        private readonly FrozenDictionary<Type, bool> _lifetimes = map.Current();
+        private readonly FrozenDictionary<Type, DispatchLifetimeMap.Flags> _lifetimes = map.Current();
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool AllowsCaching(Type serviceType)
+            => (Lookup(serviceType) & DispatchLifetimeMap.Flags.Cacheable) != 0;
+
+        public bool AnyTransient(Type serviceType)
+            => (Lookup(serviceType) & DispatchLifetimeMap.Flags.AnyTransient) != 0;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private DispatchLifetimeMap.Flags Lookup(Type serviceType)
         {
-            if (_lifetimes.TryGetValue(serviceType, out bool cacheable))
-                return cacheable;
+            if (_lifetimes.TryGetValue(serviceType, out var flags))
+                return flags;
 
             // A closed generic can be served by an open-generic registration, e.g.
             // AddTransient(typeof(IRequestHandler<,>), typeof(GenericHandler<,>)) — the closed type
             // is never a key. Fall back to the definition so those registrations are not forced
             // onto the uncached path.
             if (serviceType.IsConstructedGenericType
-                && _lifetimes.TryGetValue(serviceType.GetGenericTypeDefinition(), out cacheable))
-                return cacheable;
+                && _lifetimes.TryGetValue(serviceType.GetGenericTypeDefinition(), out flags))
+                return flags;
 
-            return false;
+            return DispatchLifetimeMap.Flags.None;
         }
     }
 
@@ -130,7 +164,21 @@ namespace DSoftStudio.Mediator
         // instance. Retaining a List<ServiceDescriptor> for the life of the container is the price.
         private readonly IServiceCollection _services;
 
-        private FrozenDictionary<Type, bool>? _snapshot;
+        /// <summary>
+        /// The two readings of one descriptor list, kept together so a container pays for one map.
+        /// They differ because the questions do: <see cref="Cacheable"/> is LAST-WINS, matching how the
+        /// container resolves a single service, while <see cref="AnyTransient"/> is an OR, because an
+        /// enumerable service type runs every descriptor registered for it.
+        /// </summary>
+        [Flags]
+        internal enum Flags : byte
+        {
+            None = 0,
+            Cacheable = 1,
+            AnyTransient = 2,
+        }
+
+        private FrozenDictionary<Type, Flags>? _snapshot;
         private int _snapshotCount = -1;
 
         public DispatchLifetimeMap(IServiceCollection services) => _services = services;
@@ -139,7 +187,7 @@ namespace DSoftStudio.Mediator
         /// The lifetimes as the collection reads right now, rebuilding first if it has changed.
         /// Called once per built provider, by <see cref="DispatchLifetimeSnapshot"/>'s constructor.
         /// </summary>
-        public FrozenDictionary<Type, bool> Current()
+        public FrozenDictionary<Type, Flags> Current()
         {
             var snapshot = Volatile.Read(ref _snapshot);
             return snapshot is null || IsStale() ? BuildSnapshot() : snapshot;
@@ -159,7 +207,7 @@ namespace DSoftStudio.Mediator
         private bool IsStale() => _services.Count != Volatile.Read(ref _snapshotCount);
 
         [MethodImpl(MethodImplOptions.NoInlining)]
-        private FrozenDictionary<Type, bool> BuildSnapshot()
+        private FrozenDictionary<Type, Flags> BuildSnapshot()
         {
             lock (_gate)
             {
@@ -168,12 +216,24 @@ namespace DSoftStudio.Mediator
                     return existing;
 
                 var services = _services;
-                var builder = new Dictionary<Type, bool>(services.Count);
+                var builder = new Dictionary<Type, Flags>(services.Count);
 
-                // Last registration wins, matching how GetRequiredService resolves — so assign
-                // unconditionally and let later descriptors overwrite earlier ones.
                 foreach (var descriptor in services)
-                    builder[descriptor.ServiceType] = descriptor.Lifetime != ServiceLifetime.Transient;
+                {
+                    builder.TryGetValue(descriptor.ServiceType, out var flags);
+                    bool isTransient = descriptor.Lifetime == ServiceLifetime.Transient;
+
+                    // Cacheable: last registration wins, matching how GetRequiredService resolves, so a
+                    // later descriptor overwrites what an earlier one said.
+                    flags = isTransient ? flags & ~Flags.Cacheable : flags | Flags.Cacheable;
+
+                    // AnyTransient: an OR, because an enumerable service type runs EVERY descriptor
+                    // registered for it — a later Scoped one does not undo an earlier Transient one.
+                    if (isTransient)
+                        flags |= Flags.AnyTransient;
+
+                    builder[descriptor.ServiceType] = flags;
+                }
 
                 var snapshot = builder.ToFrozenDictionary();
 

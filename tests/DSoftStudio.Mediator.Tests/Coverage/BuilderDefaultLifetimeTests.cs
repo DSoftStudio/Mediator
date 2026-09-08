@@ -179,6 +179,35 @@ public sealed class BdlLateBehavior : IPipelineBehavior<BdlLatePing, int>
         => next.Handle(r, ct);
 }
 
+// ── Fixtures for the masked-registration test ─────────────────────────────
+// Two behaviors on ONE pair, both registered after the scan. IPipelineBehavior is an ENUMERABLE
+// service type, so both run -- which is exactly why reading only the last descriptor was the wrong
+// question to ask about them.
+
+public sealed record BdlMaskedPing : IRequest<int>;
+
+public sealed class BdlMaskedPingHandler : IRequestHandler<BdlMaskedPing, int>
+{
+    public ValueTask<int> Handle(BdlMaskedPing r, CancellationToken ct) => new(0);
+}
+
+public sealed class BdlMaskedPreProcessor : IRequestPreProcessor<BdlMaskedPing>
+{
+    public ValueTask Process(BdlMaskedPing request, CancellationToken ct) => default;
+}
+
+public sealed class BdlMaskedTransientBehavior : IPipelineBehavior<BdlMaskedPing, int>
+{
+    public ValueTask<int> Handle(BdlMaskedPing r, IRequestHandler<BdlMaskedPing, int> next, CancellationToken ct)
+        => next.Handle(r, ct);
+}
+
+public sealed class BdlMaskedScopedBehavior : IPipelineBehavior<BdlMaskedPing, int>
+{
+    public ValueTask<int> Handle(BdlMaskedPing r, IRequestHandler<BdlMaskedPing, int> next, CancellationToken ct)
+        => next.Handle(r, ct);
+}
+
 /// <summary>
 /// The lifetime a <see cref="MediatorBuilder"/> component gets when the caller states none.
 /// <para>
@@ -392,8 +421,8 @@ public class BuilderDefaultLifetimeTests
         provider.GetService<IPipelineBehavior<BdlPing, int>>().ShouldNotBeNull();
         DispatchCacheability.AllowsCaching(provider, typeof(PipelineChainHandler<BdlPing, int>))
             .ShouldBeTrue("a cacheable chain is the condition the rule keys on");
-        DispatchCacheability.AllowsCaching(provider, typeof(IPipelineBehavior<BdlPing, int>))
-            .ShouldBeTrue("and a behavior that is not Transient is what switches the rule off");
+        DispatchCacheability.AnyTransient(provider, typeof(IPipelineBehavior<BdlPing, int>))
+            .ShouldBeFalse("and no registration for it being Transient is what switches the rule off");
 
         // Other handlers in this assembly need dependencies this minimal container does not register,
         // so validation still reports things — but never the shared-Transient defect.
@@ -433,5 +462,45 @@ public class BuilderDefaultLifetimeTests
 
         error.InnerExceptions.ShouldContain(e =>
             e.Message.Contains(nameof(BdlLatePing)) && e.Message.Contains(SharedTransientMessage));
+    }
+
+    /// <summary>
+    /// A late Transient behavior stays reported when a LATER non-Transient registration for the same
+    /// service type sits behind it.
+    /// <para>
+    /// The rule used to ask whether the behavior service type was cacheable, and that answer is
+    /// last-wins — right for a service the container resolves singly, wrong for
+    /// <c>IPipelineBehavior&lt;,&gt;</c>, which is enumerable and runs EVERY descriptor registered for
+    /// it. The Scoped registration below hid the Transient one, and the validator went quiet about a
+    /// behavior that really was constructed once and shared. It now asks whether ANY registration is
+    /// Transient.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void A_late_Transient_behavior_is_reported_even_when_a_later_registration_hides_it()
+    {
+        var services = new ServiceCollection();
+        services.AddMediator(b => b.AddRequestPreProcessor<BdlMaskedPreProcessor>());
+
+        // Both after the scan, so neither was folded and the chain stayed cacheable. The Transient one
+        // is therefore built once with the chain and shared; the Scoped one is registered LAST.
+#pragma warning disable DSOFT010
+        services.AddTransient<IPipelineBehavior<BdlMaskedPing, int>, BdlMaskedTransientBehavior>();
+        services.AddScoped<IPipelineBehavior<BdlMaskedPing, int>, BdlMaskedScopedBehavior>();
+#pragma warning restore DSOFT010
+
+        using var provider = services.BuildServiceProvider();
+
+        // Non-vacuous: the chain really is cacheable, so the rule's first two conjuncts hold and the
+        // third is the one being measured.
+        DispatchCacheability.AllowsCaching(provider, typeof(PipelineChainHandler<BdlMaskedPing, int>))
+            .ShouldBeTrue("the late registrations missed the fold, so the chain kept its lifetime");
+        DispatchCacheability.AllowsCaching(provider, typeof(IPipelineBehavior<BdlMaskedPing, int>))
+            .ShouldBeTrue("and last-wins reads the Scoped one, which is what used to silence the rule");
+
+        var error = Should.Throw<AggregateException>(() => provider.ValidateMediatorHandlers());
+
+        error.InnerExceptions.ShouldContain(e =>
+            e.Message.Contains(nameof(BdlMaskedPing)) && e.Message.Contains(SharedTransientMessage));
     }
 }
