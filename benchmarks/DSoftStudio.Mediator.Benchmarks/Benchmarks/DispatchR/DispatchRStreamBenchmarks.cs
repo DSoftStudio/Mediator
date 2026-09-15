@@ -12,7 +12,12 @@ namespace Benchmarks;
 /// Separate class = separate BenchmarkDotNet process — zero static dispatch contamination.
 /// </summary>
 [MemoryDiagnoser]
-[SimpleJob]
+// Same job as SendBenchmarks and BehaviorScalingBenchmarks. The default was already caught
+// measuring mid-tiering elsewhere -- StdDev 2.86 falling to 0.02 with twelve warmup
+// iterations -- and a one-item stream is mostly enumerator setup, which is exactly the part
+// that takes longest to settle.
+[SimpleJob(warmupCount: 12, iterationCount: 30)]
+[MedianColumn]
 [RankColumn]
 [Orderer(BenchmarkDotNet.Order.SummaryOrderPolicy.FastestToSlowest)]
 public class DispatchRStreamBenchmarks
@@ -35,9 +40,15 @@ public class DispatchRStreamBenchmarks
         _scope = provider.CreateScope();
         _mediator = _scope.ServiceProvider.GetRequiredService<DispatchR.IMediator>();
 
-        // Warmup
-        Consume(_directHandler.Handle(StreamMessage, default)).GetAwaiter().GetResult();
-        Consume(_mediator.CreateStream<PingStreamDispatchR, int>(StreamMessage, default)).GetAwaiter().GetResult();
+        // Warm both paths AND check they produced the item. Consume() returns the LAST value,
+        // so a stream that yields nothing returns 0 silently -- and an empty enumeration is very
+        // fast, which is the shape of a fiction that looks like a result.
+        var directValue = Consume(_directHandler.Handle(StreamMessage, default)).GetAwaiter().GetResult();
+        var mediatorValue = Consume(_mediator.CreateStream<PingStreamDispatchR, int>(StreamMessage, default)).GetAwaiter().GetResult();
+        BenchmarkVerification.Require(
+            directValue == 42, "DispatchR stream", "the direct handler yielded " + directValue);
+        BenchmarkVerification.Require(
+            mediatorValue == 42, "DispatchR stream", "the mediator stream yielded " + mediatorValue);
     }
 
     [GlobalCleanup]

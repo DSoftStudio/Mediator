@@ -29,32 +29,35 @@ echo ============================================================
 echo  Mediator Source Gen (Isolated) on %~1
 echo ============================================================
 
-echo [1/9] Mediator (Source Gen) - Send (No Behaviors) [%~1]
+echo [1/10] Mediator (Source Gen) - Send (No Behaviors) [%~1]
 %CMD% --filter "Benchmarks.MediatorSGSendNoBehaviorsBenchmarks.*"
 
-echo [2/9] Mediator (Source Gen) - Send (Behaviors) [%~1]
+echo [2/10] Mediator (Source Gen) - Send (Behaviors) [%~1]
 %CMD% --filter "Benchmarks.MediatorSGSendBenchmarks.*"
 
-echo [3/9] Mediator (Source Gen) - Send (Object) [%~1]
+echo [3/10] Mediator (Source Gen) - Send (Object) [%~1]
 %CMD% --filter "Benchmarks.MediatorSGSendObjectBenchmarks.*"
 
-echo [4/9] Mediator (Source Gen) - Publish [%~1]
+echo [4/10] Mediator (Source Gen) - Publish [%~1]
 %CMD% --filter "Benchmarks.MediatorSGPublishBenchmarks.*"
 
-echo [5/9] Mediator (Source Gen) - Publish (Object) [%~1]
+echo [5/10] Mediator (Source Gen) - Publish (Object) [%~1]
 %CMD% --filter "Benchmarks.MediatorSGPublishObjectBenchmarks.*"
 
-echo [6/9] Mediator (Source Gen) - Stream [%~1]
+echo [6/10] Mediator (Source Gen) - Stream [%~1]
 %CMD% --filter "Benchmarks.MediatorSGStreamBenchmarks.*"
 
-echo [7/9] Mediator (Source Gen) - Concurrency [%~1]
+echo [7/10] Mediator (Source Gen) - Concurrency [%~1]
 %CMD% --filter "Benchmarks.MediatorSGConcurrencyBenchmarks.*"
 
-echo [8/9] Mediator (Source Gen) - Cold Start [%~1]
+echo [8/10] Mediator (Source Gen) - Cold Start [%~1]
 %CMD% --filter "Benchmarks.MediatorSGColdStartBenchmarks.*"
 
-echo [9/9] Mediator (Source Gen) - Realistic Pipeline [%~1]
+echo [9/10] Mediator (Source Gen) - Realistic Pipeline [%~1]
 %CMD% --filter "Benchmarks.MediatorSGRealisticPipelineBenchmarks.*"
+
+echo [10/10] Mediator (Source Gen) - Behavior Scaling [%~1]
+%CMD% --filter "Benchmarks.MediatorSGBehaviorScalingBenchmarks.*"
 
 popd
 exit /b 0

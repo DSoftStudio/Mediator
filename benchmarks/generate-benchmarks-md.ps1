@@ -78,6 +78,7 @@ $titleMap = [ordered]@{
     "Benchmarks.MediatRConcurrencyBenchmarks"           = "MediatR - Concurrency"
     "Benchmarks.MediatRColdStartBenchmarks"             = "MediatR - Cold Start"
     "Benchmarks.MediatRRealisticPipelineBenchmarks"       = "MediatR - Realistic Pipeline"
+    "Benchmarks.MediatRBehaviorScalingBenchmarks"        = "MediatR - Behavior Scaling"
     # ── DispatchR ─────────────────────────────────────────────────
     "Benchmarks.DispatchRSendNoBehaviorsBenchmarks"     = "DispatchR - Send (No Behaviors)"
     "Benchmarks.DispatchRSendBenchmarks"                = "DispatchR - Send (Behaviors)"
@@ -87,6 +88,7 @@ $titleMap = [ordered]@{
     "Benchmarks.DispatchRConcurrencyBenchmarks"         = "DispatchR - Concurrency"
     "Benchmarks.DispatchRColdStartBenchmarks"           = "DispatchR - Cold Start"
     "Benchmarks.DispatchRRealisticPipelineBenchmarks"     = "DispatchR - Realistic Pipeline"
+    "Benchmarks.DispatchRBehaviorScalingBenchmarks"      = "DispatchR - Behavior Scaling"
     # ── Mediator Source Gen ───────────────────────────────────────
     "Benchmarks.MediatorSGSendNoBehaviorsBenchmarks"    = "Mediator (Source Gen) - Send (No Behaviors)"
     "Benchmarks.MediatorSGSendBenchmarks"               = "Mediator (Source Gen) - Send (Behaviors)"
@@ -97,6 +99,7 @@ $titleMap = [ordered]@{
     "Benchmarks.MediatorSGConcurrencyBenchmarks"        = "Mediator (Source Gen) - Concurrency"
     "Benchmarks.MediatorSGColdStartBenchmarks"          = "Mediator (Source Gen) - Cold Start"
     "Benchmarks.MediatorSGRealisticPipelineBenchmarks"    = "Mediator (Source Gen) - Realistic Pipeline"
+    "Benchmarks.MediatorSGBehaviorScalingBenchmarks"     = "Mediator (Source Gen) - Behavior Scaling"
 }
 
 # ── "All Libraries" sections: concatenate isolated tables by operation ───

@@ -29,32 +29,35 @@ echo ============================================================
 echo  MediatR (Isolated) on %~1
 echo ============================================================
 
-echo [1/9] MediatR - Send (No Behaviors) [%~1]
+echo [1/10] MediatR - Send (No Behaviors) [%~1]
 %CMD% --filter "Benchmarks.MediatRSendNoBehaviorsBenchmarks.*"
 
-echo [2/9] MediatR - Send (Behaviors) [%~1]
+echo [2/10] MediatR - Send (Behaviors) [%~1]
 %CMD% --filter "Benchmarks.MediatRSendBenchmarks.*"
 
-echo [3/9] MediatR - Send (Object) [%~1]
+echo [3/10] MediatR - Send (Object) [%~1]
 %CMD% --filter "Benchmarks.MediatRSendObjectBenchmarks.*"
 
-echo [4/9] MediatR - Publish [%~1]
+echo [4/10] MediatR - Publish [%~1]
 %CMD% --filter "Benchmarks.MediatRPublishBenchmarks.*"
 
-echo [5/9] MediatR - Publish (Object) [%~1]
+echo [5/10] MediatR - Publish (Object) [%~1]
 %CMD% --filter "Benchmarks.MediatRPublishObjectBenchmarks.*"
 
-echo [6/9] MediatR - Stream [%~1]
+echo [6/10] MediatR - Stream [%~1]
 %CMD% --filter "Benchmarks.MediatRStreamBenchmarks.*"
 
-echo [7/9] MediatR - Concurrency [%~1]
+echo [7/10] MediatR - Concurrency [%~1]
 %CMD% --filter "Benchmarks.MediatRConcurrencyBenchmarks.*"
 
-echo [8/9] MediatR - Cold Start [%~1]
+echo [8/10] MediatR - Cold Start [%~1]
 %CMD% --filter "Benchmarks.MediatRColdStartBenchmarks.*"
 
-echo [9/9] MediatR - Realistic Pipeline [%~1]
+echo [9/10] MediatR - Realistic Pipeline [%~1]
 %CMD% --filter "Benchmarks.MediatRRealisticPipelineBenchmarks.*"
+
+echo [10/10] MediatR - Behavior Scaling [%~1]
+%CMD% --filter "Benchmarks.MediatRBehaviorScalingBenchmarks.*"
 
 popd
 exit /b 0
