@@ -1,4 +1,4 @@
-// Copyright (c) DSoftStudio. All rights reserved.
+﻿// Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License.
 
 using BenchmarkDotNet.Attributes;
@@ -13,7 +13,7 @@ namespace Benchmarks;
 /// Isolated DSoft-only — no other mediator libraries loaded.
 /// </summary>
 [MemoryDiagnoser]
-[SimpleJob]
+[SimpleJob(warmupCount: 12, iterationCount: 30)]
 [RankColumn]
 [Orderer(BenchmarkDotNet.Order.SummaryOrderPolicy.FastestToSlowest)]
 public class DSoftRealisticPipelineBenchmarks
