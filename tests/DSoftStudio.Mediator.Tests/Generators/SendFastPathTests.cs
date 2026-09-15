@@ -108,8 +108,10 @@ public class SendFastPathTests
         var code = result.AllSource();
         code.ShouldContain(".Dispatch(sp, request, cancellationToken)",
             customMessage: "the typed Send extension tail must dispatch through the concrete cache");
-        code.ShouldContain(".Dispatch(__sp, __r0, cancellationToken)",
-            customMessage: "the Send(object) switch case must share the SAME cache (one TLS pair per request type)");
+        // __r, not __r0: the body moved out of the case into its own method (see
+        // SendObjectOutliningTests), so it no longer carries the case's positional variable name.
+        code.ShouldContain(".Dispatch(__sp, __r, cancellationToken)",
+            customMessage: "the Send(object) path must share the SAME cache (one TLS pair per request type)");
         output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).ShouldBeEmpty();
     }
 

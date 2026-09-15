@@ -340,6 +340,16 @@ public sealed class MediatorExtensionsGenerator : IIncrementalGenerator
         // Source-generated type switch: eliminates FrozenDictionary lookup + delegate
         // invocation (~3-5 ns saving). Falls back to RequestObjectDispatch for types
         // not known at compile time (e.g. from referenced assemblies without source).
+        //
+        // Each case is a CALL to an outlined body, never the body itself. Pasting the bodies in
+        // made this one method grow ~1.2 KB of machine code per request type, with two costs that
+        // only showed up as the type count rose:
+        //   - past 9 types the method left the inliner's budget, so the whole thing stopped being
+        //     inlined into the caller and Send(object) jumped 5.5 -> 9.5 ns at a single new type;
+        //   - it kept growing to 29-32 KB by 26-40 types, roughly a whole 32 KB L1 instruction
+        //     cache, so each call thrashed it: 14.9 ns at 40 types, 20.5 ns at 80.
+        // Outlined, the switch is type tests plus a call and stays flat: 5.4 ns at 26 types,
+        // 6.8 ns at 80. Verified against DOTNET_JitDisasm, not inferred.
         if (requests.Count > 0)
         {
             sb.AppendLine("            switch (request)");
@@ -348,9 +358,7 @@ public sealed class MediatorExtensionsGenerator : IIncrementalGenerator
             {
                 var pair = requests[i];
                 sb.AppendLine($"                case {pair.RequestType} __r{i}:");
-                sb.AppendLine("                {");
-                EmitSendObjectCaseBody(sb, pair.RequestType, pair.ResponseType, $"__r{i}", "                    ", CacheNameFor(pair));
-                sb.AppendLine("                }");
+                sb.AppendLine($"                    return {SendObjectCaseName(pair)}(__sp, __r{i}, cancellationToken);");
             }
             sb.AppendLine("                default:");
             sb.AppendLine("                    return global::DSoftStudio.Mediator.RequestObjectDispatch.Dispatch(request, __sp, cancellationToken);");
@@ -362,6 +370,27 @@ public sealed class MediatorExtensionsGenerator : IIncrementalGenerator
         }
         sb.AppendLine("        }");
         sb.AppendLine();
+
+        // ── Send(object) outlined case bodies ────────────────────
+        // NoInlining is load-bearing, not caution: without it the JIT pulls every one of these
+        // back into the switch and rebuilds exactly the oversized method this outlining exists to
+        // avoid. SendObjectOutliningTests covers that.
+        foreach (var pair in requests)
+        {
+            sb.AppendLine("        /// <summary>");
+            sb.AppendLine($"        /// Send(object) dispatch for <see cref=\"{EscapeXml(pair.RequestType)}\"/>, kept out of the switch.");
+            sb.AppendLine("        /// </summary>");
+            sb.AppendLine("        [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]");
+            sb.Append("        private static global::System.Threading.Tasks.ValueTask<object?> ")
+              .Append(SendObjectCaseName(pair))
+              .Append("(global::System.IServiceProvider __sp, ")
+              .Append(pair.RequestType)
+              .AppendLine(" __r, global::System.Threading.CancellationToken cancellationToken)");
+            sb.AppendLine("        {");
+            EmitSendObjectCaseBody(sb, pair.RequestType, pair.ResponseType, "__r", "            ", CacheNameFor(pair));
+            sb.AppendLine("        }");
+            sb.AppendLine();
+        }
 
         // ── CreateStream extensions ──────────────────────────────
         // Same defensive dispatch rationale as Send extensions above.
@@ -422,7 +451,19 @@ public sealed class MediatorExtensionsGenerator : IIncrementalGenerator
         => input.Replace("<", "{").Replace(">", "}");
 
     /// <summary>
-    /// Emits the inline dispatch body for a single request type inside the Send(object) type switch.
+    /// The name of the outlined <c>Send(object)</c> body for a pair. Derived from the TYPES, like
+    /// <see cref="InterceptorHelpers.ConcreteCacheName"/>, so it is stable across builds and unique
+    /// per pair without depending on the order the switch happens to emit its cases in.
+    /// </summary>
+    private static string SendObjectCaseName(in RequestResponsePair pair)
+        => "__SendObjectCase_"
+           + HandlerDiscovery.SanitizeIdentifier(pair.RequestType)
+           + "_"
+           + HandlerDiscovery.SanitizeIdentifier(pair.ResponseType);
+
+    /// <summary>
+    /// Emits the dispatch body for a single request type, into its own method rather than into the
+    /// Send(object) switch — see the outlining note at the switch for why that placement matters.
     /// The protocol itself lives in <see cref="InterceptorHelpers.AppendSendObjectDispatchBody"/>,
     /// shared with the AOT-safe <c>RequestObjectDispatch</c> delegate; only the identifiers differ.
     /// </summary>
