@@ -118,7 +118,7 @@ namespace DSoftStudio.Mediator
     /// </summary>
     internal sealed class DispatchLifetimeSnapshot(DispatchLifetimeMap map)
     {
-        private readonly FrozenDictionary<Type, DispatchLifetimeMap.Flags> _lifetimes = map.Current();
+        private readonly Dictionary<Type, DispatchLifetimeMap.Flags> _lifetimes = map.Current();
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool AllowsCaching(Type serviceType)
@@ -178,7 +178,7 @@ namespace DSoftStudio.Mediator
             AnyTransient = 2,
         }
 
-        private FrozenDictionary<Type, Flags>? _snapshot;
+        private Dictionary<Type, Flags>? _snapshot;
         private int _snapshotCount = -1;
 
         public DispatchLifetimeMap(IServiceCollection services) => _services = services;
@@ -187,7 +187,7 @@ namespace DSoftStudio.Mediator
         /// The lifetimes as the collection reads right now, rebuilding first if it has changed.
         /// Called once per built provider, by <see cref="DispatchLifetimeSnapshot"/>'s constructor.
         /// </summary>
-        public FrozenDictionary<Type, Flags> Current()
+        public Dictionary<Type, Flags> Current()
         {
             var snapshot = Volatile.Read(ref _snapshot);
             return snapshot is null || IsStale() ? BuildSnapshot() : snapshot;
@@ -207,7 +207,7 @@ namespace DSoftStudio.Mediator
         private bool IsStale() => _services.Count != Volatile.Read(ref _snapshotCount);
 
         [MethodImpl(MethodImplOptions.NoInlining)]
-        private FrozenDictionary<Type, Flags> BuildSnapshot()
+        private Dictionary<Type, Flags> BuildSnapshot()
         {
             lock (_gate)
             {
@@ -235,7 +235,24 @@ namespace DSoftStudio.Mediator
                     builder[descriptor.ServiceType] = flags;
                 }
 
-                var snapshot = builder.ToFrozenDictionary();
+                // A plain Dictionary, NOT a FrozenDictionary, and that is deliberate.
+                //
+                // This map is built once per collection and read only on a cache MISS — the hot path
+                // never reaches it. FrozenDictionary buys fast reads with an expensive build, which
+                // is the wrong side of that trade here, and the build lands on the first dispatch:
+                // the single worst moment, because it is also the first JIT of the whole Frozen
+                // construction path. Worse, Flags is a byte enum, so FrozenDictionary<Type, Flags>
+                // shares no code with the FrozenDictionary<Type, DispatchDelegate> that
+                // RequestObjectDispatch already built — it pays a SECOND, complete JIT of it.
+                //
+                // Measured on a genuinely cold process (one per sample): the mediator's share of
+                // first dispatch fell 7.4 -> 3.4 ms, and 9.4 KB of JITted Frozen machinery — more
+                // than all of this library's own dispatch code on that path — went away. The hot
+                // path did not move (Send 3/5 behaviours: 5.55/6.54 -> 5.59/6.63 ns).
+                //
+                // Published only through Volatile.Write and never mutated afterwards, so concurrent
+                // readers are as safe as they were with the frozen one.
+                var snapshot = builder;
 
                 // Count before snapshot: a reader that interleaves then sees a stale count against the
                 // OLD snapshot and rebuilds once more, which is wasteful but never wrong. The reverse
