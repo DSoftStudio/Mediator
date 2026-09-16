@@ -187,6 +187,54 @@ services.AddStackExchangeRedisCache(options =>
 services.AddHybridCache();
 ```
 
+## Native AOT and trimming
+
+This is the one companion that needs a step from you there, and the failure it prevents is nasty:
+the build succeeds, the AOT publish succeeds, the application starts, and the **first dispatch of a
+cacheable request** throws.
+
+`HybridCache` serializes every payload it caches. With no `IHybridCacheSerializer<T>` registered for
+the type it falls back to reflection-based `System.Text.Json` — exactly what AOT and trimming turn
+off. ILC does warn (IL2026 / IL3050), but about Microsoft's serializer rather than about this
+pipeline, and it does not fail the publish.
+
+The generator raises **DSOFT012** at build time instead, naming the request and the response type
+that has no serializer.
+
+**Why a `string` response caches fine and a DTO does not.** Not immutability — that is the obvious
+guess and it is wrong. `AddHybridCache()` pre-registers a serializer for exactly two types, `string`
+and `byte[]`; everything else reaches the reflective fallback.
+
+> **`[ImmutableObject(true)]` is a hazard here, not a workaround.** Verified in a native binary: a
+> sealed record carrying it throws exactly like an unmarked one. It changes only the *read* side —
+> the cached instance is handed back directly instead of being deserialized per read — which measured
+> as one caller mutating its result and the next caller receiving the same instance with that
+> mutation.
+
+Declare a `JsonSerializerContext` for the cached response types and register it as the serializer
+options:
+
+```csharp
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Microsoft.Extensions.Caching.Hybrid;
+using Microsoft.Extensions.DependencyInjection;
+
+[JsonSerializable(typeof(ProductDto))]
+internal sealed partial class AppJsonContext : JsonSerializerContext;
+
+services.AddKeyedSingleton<JsonSerializerOptions>(
+    typeof(IHybridCacheSerializer<>),
+    new JsonSerializerOptions { TypeInfoResolver = AppJsonContext.Default });
+```
+
+**Both details are load-bearing.** The explicit `<JsonSerializerOptions>` type argument and the
+open-generic `typeof(IHybridCacheSerializer<>)` key: without them the registration either does not
+compile or is accepted and silently ignored, and you are back to a first-dispatch failure.
+
+The alternatives are registering an `IHybridCacheSerializer<T>` for the type yourself, or not caching
+that request.
+
 ## What the behavior does not do
 
 - **No key derivation.** Keys are not generated from the request type or its property values; see above.

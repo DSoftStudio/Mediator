@@ -5,7 +5,7 @@
 [![NuGet](https://img.shields.io/nuget/v/DSoftStudio.Mediator.FluentValidation.svg)](https://www.nuget.org/packages/DSoftStudio.Mediator.FluentValidation)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/DSoftStudio/Mediator/blob/main/LICENSE.md)
 
-FluentValidation integration for [DSoftStudio.Mediator](https://www.nuget.org/packages/DSoftStudio.Mediator). One pipeline behavior resolves the `IValidator<TRequest>` instances registered in DI, runs them before the handler, and throws on the first request that fails.
+FluentValidation integration for [DSoftStudio.Mediator](https://www.nuget.org/packages/DSoftStudio.Mediator). One pipeline behavior resolves the `IValidator<TRequest>` instances registered in DI, runs them all before the handler, and throws once with every failure they found.
 
 ## Features
 

@@ -1,3 +1,5 @@
+![DSoftStudio Mediator](https://raw.githubusercontent.com/DSoftStudio/Mediator/main/assets/images/DSoftStudio.svg)
+
 # DSoftStudio.Mediator.Abstractions
 
 [![NuGet](https://img.shields.io/nuget/v/DSoftStudio.Mediator.Abstractions.svg)](https://www.nuget.org/packages/DSoftStudio.Mediator.Abstractions)
