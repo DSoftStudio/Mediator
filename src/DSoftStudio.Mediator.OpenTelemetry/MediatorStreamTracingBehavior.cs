@@ -30,6 +30,18 @@ public sealed class MediatorStreamTracingBehavior<TRequest, TResponse>(MediatorI
         return Instrumented(request, next, cancellationToken);
     }
 
+    // ── Why the enumerator is driven by hand ──────────────────────────
+    //
+    // C# forbids a catch clause in an iterator that contains `yield return`, so the obvious
+    // `try { await foreach ... } catch` does not compile. The previous version settled for
+    // try/finally, and paid for it three times over: it never saw the exception, so no span
+    // carried error.type or an exception event; it could not tell a fault from a cancellation;
+    // and `success` was set only after the loop, so a consumer that simply stopped reading --
+    // `break` after the first page -- disposed the iterator, ran the finally with success still
+    // false, and painted the span red. A paged query reading its first N rows reported as failed.
+    //
+    // Driving MoveNextAsync inside its own try and yielding OUTSIDE it is the shape that gets a
+    // catch back. The yield sits between the two, where no try encloses it.
     private async IAsyncEnumerable<TResponse> Instrumented(
         TRequest request,
         IStreamRequestHandler<TRequest, TResponse> next,
@@ -52,40 +64,151 @@ public sealed class MediatorStreamTracingBehavior<TRequest, TResponse>(MediatorI
             options.EnrichActivity?.Invoke(activity, request);
         }
 
-        bool success = false;
         // Per-item production metrics — measured here (the span already wraps the full enumeration) so an imported
         // trace can populate the profiler's STREAM TELEMETRY *production* block (items / TTFI / throughput), not
         // just lifecycle + duration. Stopwatch.GetTimestamp() math keeps this allocation-free and TFM-agnostic.
         long itemCount = 0;
         long startTimestamp = Stopwatch.GetTimestamp();
         long firstItemTimestamp = 0;
+
+        // "early" until proven otherwise: if the consumer abandons the enumerator, none of the paths
+        // below run again and the finally sees exactly this. Completion, cancellation and faults each
+        // overwrite it on their way out.
+        var termination = StreamTermination.Early;
+
+        var enumerator = next.Handle(request, cancellationToken).GetAsyncEnumerator(cancellationToken);
         try
         {
-            await foreach (var item in next.Handle(request, cancellationToken).WithCancellation(cancellationToken))
+            while (true)
             {
+                bool moved;
+
+                // Activity.Current is restored around every MoveNextAsync, not just the first.
+                //
+                // An async iterator only carries the ambient context it set while its own state
+                // machine is running, and after the first `yield return` control has gone back to the
+                // consumer -- so the second MoveNext resumed under the CONSUMER's Activity.Current and
+                // the handler's child spans parented to the caller's span instead of this one.
+                // Measured: item 0's dependency span parented here, item 1's parented to the caller.
+                // A stream created under one span and enumerated after it ends came out as a root span
+                // in a fresh trace, which is the ordinary shape of any API returning IAsyncEnumerable
+                // to a framework that enumerates it later.
+                var previous = Activity.Current;
+                if (activity is not null)
+                    Activity.Current = activity;
+
+                try
+                {
+                    moved = await enumerator.MoveNextAsync().ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    // Distinct from a fault on purpose. A cancelled stream is usually the caller
+                    // hanging up or a deadline firing, and burying it among exceptions makes a
+                    // dashboard of stream errors unreadable.
+                    termination = StreamTermination.Cancelled;
+                    RecordFailure(activity, null);
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    termination = StreamTermination.Faulted;
+                    RecordFailure(activity, ex);
+                    throw;
+                }
+                finally
+                {
+                    Activity.Current = previous;
+                }
+
+                if (!moved)
+                {
+                    termination = StreamTermination.Completed;
+                    break;
+                }
+
                 if (itemCount == 0)
                     firstItemTimestamp = Stopwatch.GetTimestamp();
                 itemCount++;
-                yield return item;
+
+                // Outside every try above: this is what makes the catch clauses legal.
+                yield return enumerator.Current;
             }
-            success = true;
         }
         finally
         {
+            await enumerator.DisposeAsync().ConfigureAwait(false);
+
             if (activity is { IsAllDataRequested: true })
             {
-                double freq            = Stopwatch.Frequency;
-                double elapsedMs       = (Stopwatch.GetTimestamp() - startTimestamp) * 1000.0 / freq;
-                double firstItemMs     = firstItemTimestamp > 0 ? (firstItemTimestamp - startTimestamp) * 1000.0 / freq : 0.0;
-                double throughputPerSec = elapsedMs > 0 ? itemCount * 1000.0 / elapsedMs : 0.0;
+                double freq      = Stopwatch.Frequency;
+                double elapsedMs = (Stopwatch.GetTimestamp() - startTimestamp) * 1000.0 / freq;
+
                 activity.SetTag("mediator.stream.item_count", itemCount);
-                activity.SetTag("mediator.stream.first_item_ms", firstItemMs);
-                activity.SetTag("mediator.stream.throughput_per_sec", throughputPerSec);
+                activity.SetTag("mediator.stream.termination", TerminationName(termination));
+
+                // Omitted rather than reported as zero when nothing was produced. Written
+                // unconditionally, "first item in 0 ms" and "0 items per second" are indistinguishable
+                // from measurements, and they entered downstream averages as if they were.
+                if (itemCount > 0)
+                {
+                    activity.SetTag(
+                        "mediator.stream.first_item_ms",
+                        firstItemTimestamp > 0 ? (firstItemTimestamp - startTimestamp) * 1000.0 / freq : 0.0);
+
+                    if (elapsedMs > 0)
+                        activity.SetTag("mediator.stream.throughput_per_sec", itemCount * 1000.0 / elapsedMs);
+                }
             }
-            activity?.SetStatus(success ? ActivityStatusCode.Ok : ActivityStatusCode.Error);
+
+            // Only a fault is an error. A consumer that stopped reading did nothing wrong, and a
+            // cancellation is a normal end to a stream -- both used to arrive as Error with no
+            // description, character-for-character identical to a crash.
+            activity?.SetStatus(
+                termination == StreamTermination.Faulted
+                    ? ActivityStatusCode.Error
+                    : ActivityStatusCode.Ok);
         }
     }
 
+    /// <summary>How the enumeration ended. Exported as <c>mediator.stream.termination</c>.</summary>
+    private enum StreamTermination
+    {
+        /// <summary>The consumer stopped reading before the stream ran out — a `break`, or a disposal.</summary>
+        Early,
+
+        /// <summary>The stream ran to its end.</summary>
+        Completed,
+
+        /// <summary>The token was cancelled, or the handler observed cancellation.</summary>
+        Cancelled,
+
+        /// <summary>The handler threw.</summary>
+        Faulted,
+    }
+
+    private static string TerminationName(StreamTermination termination) => termination switch
+    {
+        StreamTermination.Completed => "completed",
+        StreamTermination.Cancelled => "cancelled",
+        StreamTermination.Faulted => "faulted",
+        _ => "early",
+    };
+
+    /// <summary>
+    /// Tags the span for a failed enumeration. A cancellation passes <see langword="null"/>: it gets the
+    /// error type for filtering but no exception event, because a stack trace for an expected stop is noise.
+    /// </summary>
+    private static void RecordFailure(Activity? activity, Exception? exception)
+    {
+        if (activity is not { IsAllDataRequested: true })
+            return;
+
+        activity.SetTag("error.type", (exception?.GetType() ?? typeof(OperationCanceledException)).FullName);
+
+        if (exception is not null)
+            activity.AddException(exception);
+    }
     /// <summary>
     /// The concrete stream handler type at the end of the chain — via <see cref="IPipelineHandlerTypeAccessor"/>
     /// when <paramref name="next"/> is a chain adapter, or its runtime type when this behavior is the innermost link.

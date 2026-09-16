@@ -42,6 +42,60 @@ public class StreamMetricsBehaviorTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
+    /// <summary>
+    /// A failing stream increments mediator.request.errors, tagged with what failed.
+    /// </summary>
+    /// <remarks>
+    /// It never did. The behavior wrapped its enumeration in try/finally -- the only shape available,
+    /// since C# forbids a catch clause in an iterator containing yield return -- so the exception went
+    /// past unseen while the request-side twin has always recorded it. Measured by the reporter: five
+    /// streams exercised, twenty-six measurements emitted, duration and active among them, and not one
+    /// error. An operator watching error rate saw a clean line while every stream failed, and the
+    /// metric contradicted the traces beside it.
+    /// </remarks>
+    [Fact]
+    public async Task Records_an_error_when_the_stream_faults()
+    {
+        var options = new MediatorInstrumentationOptions();
+        var behavior = new MediatorStreamMetricsBehavior<FailingStreamRequest, int>(options, _metrics.Metrics);
+
+        await Should.ThrowAsync<InvalidOperationException>(async () =>
+        {
+            await foreach (var _ in behavior.Handle(
+                new FailingStreamRequest(), new FailingStreamHandler(), TestContext.Current.CancellationToken))
+            { }
+        });
+
+        var errors = _counterMeasurements.Where(m => m.Name == "mediator.request.errors").ToList();
+
+        errors.ShouldHaveSingleItem();
+        errors[0].Value.ShouldBe(1);
+
+        var tags = errors[0].Tags.ToDictionary(t => t.Key, t => t.Value);
+        tags["error.type"].ShouldBe(typeof(InvalidOperationException).FullName);
+        tags["mediator.request.kind"].ShouldBe("stream");
+        tags["mediator.request.type"].ShouldBe(typeof(FailingStreamRequest).FullName,
+            "without the type dimension the counter cannot say WHICH stream is failing");
+    }
+
+    /// <summary>
+    /// The other half: a stream that simply ends must not be counted as an error, or the counter
+    /// becomes noise and the fix is worse than the bug.
+    /// </summary>
+    [Fact]
+    public async Task Does_not_record_an_error_for_a_stream_that_completes()
+    {
+        var options = new MediatorInstrumentationOptions();
+        var behavior = new MediatorStreamMetricsBehavior<TestStreamRequest, int>(options, _metrics.Metrics);
+
+        await foreach (var _ in behavior.Handle(
+            new TestStreamRequest(3), new TestStreamHandler(), TestContext.Current.CancellationToken))
+        { }
+
+        _counterMeasurements.Where(m => m.Name == "mediator.request.errors").ShouldBeEmpty();
+    }
+
+
     [Fact]
     public async Task Records_duration_covering_full_enumeration()
     {
