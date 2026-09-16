@@ -11,5 +11,5 @@ IterationCount=30  WarmupCount=12
 ```
 | Method            | Mean     | Error    | StdDev   | Median   | Ratio | Rank | Gen0   | Allocated | Alloc Ratio |
 |------------------ |---------:|---------:|---------:|---------:|------:|-----:|-------:|----------:|------------:|
-| Direct_Stream     | 45.01 ns | 0.152 ns | 0.222 ns | 44.96 ns |  1.00 |    1 | 0.0177 |     232 B |        1.00 |
-| MediatorSG_Stream | 45.25 ns | 0.268 ns | 0.401 ns | 45.15 ns |  1.01 |    1 | 0.0177 |     232 B |        1.00 |
+| MediatorSG_Stream | 44.29 ns | 0.075 ns | 0.112 ns | 44.29 ns |  1.00 |    1 | 0.0177 |     232 B |        1.00 |
+| Direct_Stream     | 44.42 ns | 0.126 ns | 0.189 ns | 44.47 ns |  1.00 |    1 | 0.0177 |     232 B |        1.00 |

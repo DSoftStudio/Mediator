@@ -11,5 +11,5 @@ IterationCount=30  WarmupCount=12
 ```
 | Method        | Mean     | Error    | StdDev   | Median   | Ratio | Rank | Gen0   | Allocated | Alloc Ratio |
 |-------------- |---------:|---------:|---------:|---------:|------:|-----:|-------:|----------:|------------:|
-| DSoft_Stream  | 45.92 ns | 0.347 ns | 0.486 ns | 45.82 ns |  0.96 |    1 | 0.0177 |     232 B |        1.00 |
-| Direct_Stream | 47.90 ns | 0.340 ns | 0.509 ns | 48.14 ns |  1.00 |    2 | 0.0177 |     232 B |        1.00 |
+| DSoft_Stream  | 44.76 ns | 0.065 ns | 0.089 ns | 44.77 ns |  0.99 |    1 | 0.0177 |     232 B |        1.00 |
+| Direct_Stream | 45.33 ns | 0.168 ns | 0.252 ns | 45.30 ns |  1.00 |    1 | 0.0177 |     232 B |        1.00 |

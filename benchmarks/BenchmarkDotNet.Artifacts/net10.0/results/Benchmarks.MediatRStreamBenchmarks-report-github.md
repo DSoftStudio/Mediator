@@ -9,7 +9,7 @@ BenchmarkDotNet v0.15.8, Windows 11 (10.0.26200.9457/25H2/2025Update/HudsonValle
 IterationCount=30  WarmupCount=12  
 
 ```
-| Method         | Mean      | Error    | StdDev   | Median    | Ratio | RatioSD | Rank | Gen0   | Allocated | Alloc Ratio |
-|--------------- |----------:|---------:|---------:|----------:|------:|--------:|-----:|-------:|----------:|------------:|
-| Direct_Stream  |  44.95 ns | 0.169 ns | 0.253 ns |  45.00 ns |  1.00 |    0.01 |    1 | 0.0177 |     232 B |        1.00 |
-| MediatR_Stream | 123.03 ns | 0.209 ns | 0.294 ns | 122.99 ns |  2.74 |    0.02 |    2 | 0.0477 |     624 B |        2.69 |
+| Method         | Mean      | Error    | StdDev   | Median    | Ratio | Rank | Gen0   | Allocated | Alloc Ratio |
+|--------------- |----------:|---------:|---------:|----------:|------:|-----:|-------:|----------:|------------:|
+| Direct_Stream  |  45.17 ns | 0.134 ns | 0.200 ns |  45.21 ns |  1.00 |    1 | 0.0177 |     232 B |        1.00 |
+| MediatR_Stream | 126.28 ns | 0.202 ns | 0.289 ns | 126.19 ns |  2.80 |    2 | 0.0477 |     624 B |        2.69 |

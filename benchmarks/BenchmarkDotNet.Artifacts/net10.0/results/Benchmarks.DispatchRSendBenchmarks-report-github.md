@@ -11,6 +11,6 @@ IterationCount=30  WarmupCount=12
 ```
 | Method                    | Mean      | Error     | StdDev    | Median    | Ratio | RatioSD | Rank | Gen0   | Allocated | Alloc Ratio |
 |-------------------------- |----------:|----------:|----------:|----------:|------:|--------:|-----:|-------:|----------:|------------:|
-| DirectCall                |  5.824 ns | 0.0296 ns | 0.0434 ns |  5.815 ns |  1.00 |    0.01 |    1 | 0.0055 |      72 B |        1.00 |
-| DispatchR_Send_3Behaviors | 34.972 ns | 0.1617 ns | 0.2319 ns | 34.911 ns |  6.01 |    0.06 |    2 | 0.0055 |      72 B |        1.00 |
-| DispatchR_Send_5Behaviors | 42.786 ns | 2.2194 ns | 3.3219 ns | 43.975 ns |  7.35 |    0.56 |    3 | 0.0055 |      72 B |        1.00 |
+| DirectCall                |  5.709 ns | 0.0214 ns | 0.0320 ns |  5.710 ns |  1.00 |    0.01 |    1 | 0.0055 |      72 B |        1.00 |
+| DispatchR_Send_3Behaviors | 34.498 ns | 0.0642 ns | 0.0941 ns | 34.504 ns |  6.04 |    0.04 |    2 | 0.0055 |      72 B |        1.00 |
+| DispatchR_Send_5Behaviors | 34.567 ns | 0.0510 ns | 0.0748 ns | 34.560 ns |  6.06 |    0.04 |    2 | 0.0055 |      72 B |        1.00 |
