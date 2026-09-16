@@ -121,6 +121,171 @@ public class ConstrainedOpenGenericBehaviorTests
             customMessage: "the non-satisfying pair was named anyway");
     }
 
+    // ══════════════════════════════════════════════════════════════════
+    //  The same contract on the STREAM side.
+    //
+    //  The request-side guard shipped without this one. The narrowing data was
+    //  being computed for stream behaviors all along -- ReferencedAssemblyScanner
+    //  does not branch on the interface kind -- StreamGenerator simply never read
+    //  it, so a narrowed stream behavior was named over every pair and the
+    //  consumer got CS0311 in StreamRegistry.g.cs, a file they cannot edit.
+    // ══════════════════════════════════════════════════════════════════
+
+    private const string ConstrainedStreamBehavior = """
+        using System.Collections.Generic;
+        using System.Threading;
+        using System.Threading.Tasks;
+        using Microsoft.Extensions.DependencyInjection;
+        using DSoftStudio.Mediator;
+        using DSoftStudio.Mediator.Abstractions;
+
+        namespace TestApp;
+
+        public interface IAuditable { }
+
+        public sealed record AuditedStream : IStreamRequest<int>, IAuditable;
+        public sealed record PlainStream : IStreamRequest<int>;
+
+        public sealed class AuditedStreamHandler : IStreamRequestHandler<AuditedStream, int>
+        {
+            public async IAsyncEnumerable<int> Handle(AuditedStream request, CancellationToken ct)
+            {
+                await Task.Yield();
+                yield return 1;
+            }
+        }
+
+        public sealed class PlainStreamHandler : IStreamRequestHandler<PlainStream, int>
+        {
+            public async IAsyncEnumerable<int> Handle(PlainStream request, CancellationToken ct)
+            {
+                await Task.Yield();
+                yield return 2;
+            }
+        }
+
+        // The constraint on TRequest goes BEYOND what IStreamPipelineBehavior itself requires.
+        public sealed class AuditOnlyStream<TRequest, TResponse> : IStreamPipelineBehavior<TRequest, TResponse>
+            where TRequest : IStreamRequest<TResponse>, IAuditable
+        {
+            public IAsyncEnumerable<TResponse> Handle(TRequest request,
+                IStreamRequestHandler<TRequest, TResponse> next, CancellationToken ct)
+                => next.Handle(request, ct);
+        }
+
+        public static class Startup
+        {
+            public static void Configure(IServiceCollection services)
+            {
+                services.AddScoped(typeof(IStreamPipelineBehavior<,>), typeof(AuditOnlyStream<,>));
+            }
+        }
+        """;
+
+    [Fact]
+    public void Constrained_Open_Generic_Stream_Behavior_Does_Not_Break_The_Consumer_Build()
+    {
+        var (_, output) = GeneratorTestHarness.Run<StreamGenerator>(ConstrainedStreamBehavior);
+
+        // Constraint violations only, for the same reason as the request-side case: one generator run
+        // in isolation leaves the others' extension methods undefined, and that noise is not this bug.
+        string[] constraintViolations =
+        [
+            "CS0310", "CS0311", "CS0314", "CS0315", "CS0452", "CS0453",
+        ];
+
+        var errors = output.GetDiagnostics()
+            .Where(d => d.Severity == DiagnosticSeverity.Error && constraintViolations.Contains(d.Id))
+            .Select(d => $"{d.Id}: {d.GetMessage()}")
+            .Distinct()
+            .ToList();
+
+        errors.ShouldBeEmpty(
+            customMessage:
+            "the generated stream registry does not compile. A stream behavior may only be named " +
+            "closed over a pair that satisfies its constraints. Got: " + string.Join(" | ", errors));
+    }
+
+    /// <summary>
+    /// Narrowing must not become "never applies" here either: the satisfying pair keeps its behavior,
+    /// or a clean build would have been bought by silently dropping the pipeline.
+    /// </summary>
+    [Fact]
+    public void Satisfying_Stream_Pair_Still_Gets_The_Behavior()
+    {
+        var (result, _) = GeneratorTestHarness.Run<StreamGenerator>(ConstrainedStreamBehavior);
+        var code = result.AllSource();
+
+        code.ShouldContain("AuditOnlyStream<global::TestApp.AuditedStream, int>",
+            customMessage: "the satisfying stream pair lost its behavior");
+        code.ShouldNotContain("AuditOnlyStream<global::TestApp.PlainStream, int>",
+            customMessage: "the non-satisfying stream pair was named anyway");
+    }
+
+
+    /// <summary>
+    /// A `file`-local stream behavior must not reach the generated registry.
+    ///
+    /// DSOFT011 already reported this one and told the developer it "works on the ordinary runtime but
+    /// throws under Native AOT". It does not work on the ordinary runtime: the build never gets that
+    /// far, because StreamGenerator named the type in StreamRegistry.g.cs and a file-local type cannot
+    /// be named from another file — CS0400. The diagnostic described a runtime consequence for code
+    /// that does not compile.
+    ///
+    /// The cause was a hand-rolled accessibility test: a `file` type reports Internal, so "Public or
+    /// Internal" let it through. The request side has used the shared check, which excludes file-local
+    /// types, since handler discovery hit the same wall.
+    /// </summary>
+    [Fact]
+    public void File_Local_Stream_Behavior_Is_Not_Named_In_The_Registry()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using System.Threading;
+            using System.Threading.Tasks;
+            using Microsoft.Extensions.DependencyInjection;
+            using DSoftStudio.Mediator;
+            using DSoftStudio.Mediator.Abstractions;
+
+            namespace TestApp;
+
+            public sealed record Ticks : IStreamRequest<int>;
+
+            public sealed class TicksHandler : IStreamRequestHandler<Ticks, int>
+            {
+                public async IAsyncEnumerable<int> Handle(Ticks request, CancellationToken ct)
+                {
+                    await Task.Yield();
+                    yield return 1;
+                }
+            }
+
+            // `file`, so no other file in this assembly can name it — including a generated one.
+            file sealed class HiddenStreamBehavior<TRequest, TResponse>
+                : IStreamPipelineBehavior<TRequest, TResponse>
+                where TRequest : IStreamRequest<TResponse>
+            {
+                public IAsyncEnumerable<TResponse> Handle(TRequest request,
+                    IStreamRequestHandler<TRequest, TResponse> next, CancellationToken ct)
+                    => next.Handle(request, ct);
+            }
+            """;
+
+        var (result, output) = GeneratorTestHarness.Run<StreamGenerator>(source);
+
+        result.AllSource().ShouldNotContain("HiddenStreamBehavior",
+            customMessage: "the generated stream registry named a file-local type, which cannot compile");
+
+        var unresolvable = output.GetDiagnostics()
+            .Where(d => d.Severity == DiagnosticSeverity.Error && d.Id == "CS0400")
+            .Select(d => d.GetMessage())
+            .ToList();
+
+        unresolvable.ShouldBeEmpty(
+            customMessage: "CS0400 in generated code: " + string.Join(" | ", unresolvable));
+    }
+
+
     /// <summary>
     /// Shapes an earlier version of the constraint check got wrong. Each one reached a consumer as a
     /// broken build or a dead generator, so each gets its own case rather than a shared fixture.

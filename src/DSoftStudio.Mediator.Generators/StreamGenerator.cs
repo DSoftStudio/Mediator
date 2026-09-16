@@ -137,8 +137,13 @@ public sealed class StreamGenerator : IIncrementalGenerator
             if (type.TypeKind == TypeKind.Class
                 && !type.IsAbstract
                 && type.IsGenericType
-                && (type.DeclaredAccessibility == Accessibility.Public
-                    || type.DeclaredAccessibility == Accessibility.Internal))
+                // IsNameableBehaviorType, not a hand-rolled accessibility test. A `file` type reports
+                // Internal, so "Public or Internal" waved it through and the generated registry -- a
+                // different file in the same assembly -- named a type the compiler refuses to resolve:
+                // CS0400 in StreamRegistry.g.cs. The shared check has excluded file-local types since
+                // handler discovery hit the same wall; this call site never adopted it, and it also
+                // covers private nested types and types nested in a generic one.
+                && ReferencedAssemblyScanner.IsNameableBehaviorType(type, allowInternal: true))
             {
                 ReferencedAssemblyScanner.TryAddBehaviorInfoFrom(type, results, constraints);
             }
@@ -357,6 +362,17 @@ public sealed class StreamGenerator : IIncrementalGenerator
 
             foreach (var handler in registrations)
             {
+                // A behavior that narrows itself applies only where its constraints hold. Naming it
+                // over a pair that fails them does not compile -- CS0311 in StreamRegistry.g.cs, a file
+                // the consumer cannot edit -- and MSDI would not have resolved it there either.
+                //
+                // The request side has carried this guard since the narrowing data existed; this side
+                // never consulted it, though ReferencedAssemblyScanner fills IsNarrowed and
+                // ApplicablePairKeys for stream behaviors exactly as it does for the rest. Half a fix,
+                // and the missing half is the one that breaks somebody else's build.
+                if (!b.AppliesTo(handler.RequestType, handler.ResponseType))
+                    continue;
+
                 sb.AppendLine("                    services.Add(new global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor(");
                 sb.AppendLine($"                        typeof(global::DSoftStudio.Mediator.Abstractions.IStreamPipelineBehavior<{handler.RequestType}, {handler.ResponseType}>),");
                 sb.AppendLine($"                        typeof({b.BaseTypeName}<{handler.RequestType}, {handler.ResponseType}>),");
