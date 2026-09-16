@@ -59,6 +59,19 @@ jobs:
       #
       # Once an analysis confirms samples/ and tests/ are gone from the issue
       # list, the e4 entry becomes dead config and should be deleted.
+      #
+      # ── e5: S4158 in MediatorExtensionsGenerator only ──
+      #
+      # "Remove this call, the collection is known to be empty here" is a false
+      # positive there. cacheClasses is filled exclusively inside the local
+      # function CacheNameFor, and the dataflow engine does not follow the
+      # mutation through the two indirect calls that reach it, so it reads the
+      # list as never written. The generated MediatorExtensions.g.cs contains the
+      # __SendConcreteCache_ classes that loop emits, and the file references
+      # them -- the build would not compile if the collection were empty.
+      #
+      # Scoped to the one file rather than silenced project-wide: S4158 catches
+      # real defects elsewhere and should keep doing so.
       - name: Begin SonarCloud analysis
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -74,7 +87,7 @@ jobs:
           /d:sonar.test.exclusions="**/obj/**,**/bin/**,samples/**,benchmarks/**,docs/**,tests/**"
           /d:sonar.coverage.exclusions="src/**/DSoftStudio.Mediator.Generators/**"
           /d:sonar.cpd.exclusions="src/**/DSoftStudio.Mediator.Generators/**"
-          /d:sonar.issue.ignore.multicriteria="e1,e2,e3,e4"
+          /d:sonar.issue.ignore.multicriteria="e1,e2,e3,e4,e5"
           /d:sonar.issue.ignore.multicriteria.e1.ruleKey="csharpsquid:S2326"
           /d:sonar.issue.ignore.multicriteria.e1.resourceKey="src/**/I*Request.cs"
           /d:sonar.issue.ignore.multicriteria.e2.ruleKey="csharpsquid:S3267"
@@ -83,6 +96,8 @@ jobs:
           /d:sonar.issue.ignore.multicriteria.e3.resourceKey="src/**/DSoftStudio.Mediator/*Cache.cs"
           /d:sonar.issue.ignore.multicriteria.e4.ruleKey="*"
           /d:sonar.issue.ignore.multicriteria.e4.resourceKey="tests/**/*"
+          /d:sonar.issue.ignore.multicriteria.e5.ruleKey="csharpsquid:S4158"
+          /d:sonar.issue.ignore.multicriteria.e5.resourceKey="src/**/MediatorExtensionsGenerator.cs"
 
       - name: Build
         run: dotnet build DSoftStudio.Mediator.slnx -c Release --no-incremental
