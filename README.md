@@ -226,11 +226,12 @@ services.AddMediator()               // Core services only
 
 > This is the v1.1.x pattern and remains fully supported for advanced scenarios where you need to insert registrations between steps.
 
-> **All three, not just `PrecompilePipelines()`.** They arm three separate dispatch tables. Stopping
-> after the first leaves `Publish` reaching no handlers and `CreateStream` producing nothing — with no
-> build error and no exception, because an empty table is indistinguishable from an application that
-> has no notifications. `AddMediator(builder => { })` calls all three for you, which is the main
-> reason to prefer it.
+> **All three, not just `PrecompilePipelines()`.** They arm three separate dispatch tables, and the
+> two you can forget fail very differently. `CreateStream` throws and names the missing call, so you
+> find out immediately. **`Publish` says nothing at all** — it reaches no handlers and returns a
+> completed task, because an empty dispatch table is indistinguishable from an application that has
+> no notifications. That one is worth the care. `AddMediator(builder => { })` calls all three for
+> you, which is the main reason to prefer it.
 
 ### Multi-project setup (hexagonal / clean architecture)
 

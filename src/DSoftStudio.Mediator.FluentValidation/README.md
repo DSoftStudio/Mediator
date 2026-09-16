@@ -65,8 +65,17 @@ services.AddTransient<IValidator<CreateUser>, CreateUserValidator>();
 
 services
     .AddMediatorFluentValidation()
-    .PrecompilePipelines();
+    .PrecompilePipelines()
+    .PrecompileNotifications()
+    .PrecompileStreams();
 ```
+
+
+> The three `Precompile*` calls arm three separate dispatch tables. `PrecompilePipelines()` is the
+> one this package needs, but stopping there leaves the rest of your application without
+> notification or stream dispatch — and the two fail differently: `CreateStream` throws and names
+> the missing call, while `Publish` silently reaches no handlers. `AddMediator(builder => { })`
+> calls all three for you.
 
 ## Registering validators
 
@@ -123,7 +132,9 @@ When validation covers a known handful of requests, register those pairs instead
 services
     .AddMediatorFluentValidation<CreateUser, Guid>()
     .AddMediatorFluentValidation<TransferMoney, string>()
-    .PrecompilePipelines();
+    .PrecompilePipelines()
+    .PrecompileNotifications()
+    .PrecompileStreams();
 ```
 
 **This form is opt-in per request, and that cuts both ways.** A request whose pair is not registered here is not validated *even if a validator for it exists in DI* — nothing warns, because from the pipeline's point of view there is nothing to run. Prefer the open form when validators are discovered by assembly scanning, or when having a validator is the norm rather than the exception.

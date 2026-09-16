@@ -61,8 +61,17 @@ services.AddHybridCache();
 
 services
     .AddMediatorHybridCache()
-    .PrecompilePipelines();
+    .PrecompilePipelines()
+    .PrecompileNotifications()
+    .PrecompileStreams();
 ```
+
+
+> The three `Precompile*` calls arm three separate dispatch tables. `PrecompilePipelines()` is the
+> one this package needs, but stopping there leaves the rest of your application without
+> notification or stream dispatch — and the two fail differently: `CreateStream` throws and names
+> the missing call, while `Publish` silently reaches no handlers. `AddMediator(builder => { })`
+> calls all three for you.
 
 On a hit the handler is never invoked — the behavior returns the cached response. `ICachedRequest` works on any request shape: `IQuery<T>`, `ICommand<T>` or plain `IRequest<T>`.
 
@@ -89,7 +98,9 @@ When caching covers a known handful of queries, register those pairs instead:
 services
     .AddMediatorHybridCache<GetProduct, ProductDto>()
     .AddMediatorHybridCache<GetCustomer, string>()
-    .PrecompilePipelines();
+    .PrecompilePipelines()
+    .PrecompileNotifications()
+    .PrecompileStreams();
 ```
 
 Every other request keeps its direct dispatch. The type parameter is constrained to `ICachedRequest`, so registering a request that never opted in does not compile — a mistake the open form cannot catch.

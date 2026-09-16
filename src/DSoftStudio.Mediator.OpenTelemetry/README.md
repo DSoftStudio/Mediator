@@ -53,13 +53,22 @@ services
     .AddMediator()
     .RegisterMediatorHandlers()
     .AddMediatorInstrumentation()
-    .PrecompilePipelines();
+    .PrecompilePipelines()
+    .PrecompileNotifications()
+    .PrecompileStreams();
 
 services
     .AddOpenTelemetry()
     .WithTracing(b => b.AddMediatorInstrumentation())
     .WithMetrics(b => b.AddMediatorInstrumentation());
 ```
+
+
+> The three `Precompile*` calls arm three separate dispatch tables. `PrecompilePipelines()` is the
+> one this package needs, but stopping there leaves the rest of your application without
+> notification or stream dispatch — and the two fail differently: `CreateStream` throws and names
+> the missing call, while `Publish` silently reaches no handlers. `AddMediator(builder => { })`
+> calls all three for you.
 
 ## Registration order
 
