@@ -32,9 +32,9 @@ public sealed class MediatorStreamTracingBehavior<TRequest, TResponse>(MediatorI
 
     // ── Why the enumerator is driven by hand ──────────────────────────
     //
-    // C# forbids a catch clause in an iterator that contains `yield return`, so the obvious
-    // `try { await foreach ... } catch` does not compile. The previous version settled for
-    // try/finally, and paid for it three times over: it never saw the exception, so no span
+    // C# forbids a catch clause in an iterator that contains a yield return, so the obvious
+    // shape -- an await foreach wrapped in try/catch -- does not compile. The previous version
+    // settled for try/finally, and paid for it three times over: it never saw the exception, so no span
     // carried error.type or an exception event; it could not tell a fault from a cancellation;
     // and `success` was set only after the loop, so a consumer that simply stopped reading --
     // `break` after the first page -- disposed the iterator, ran the finally with success still
@@ -138,6 +138,26 @@ public sealed class MediatorStreamTracingBehavior<TRequest, TResponse>(MediatorI
         finally
         {
             await enumerator.DisposeAsync().ConfigureAwait(false);
+            RecordTermination(activity, termination, itemCount, startTimestamp, firstItemTimestamp);
+        }
+    }
+
+    /// <summary>
+    /// Writes the production tags and the final status.
+    /// </summary>
+    /// <remarks>
+    /// Extracted from the finally block rather than left inline. With the hand-driven loop above it,
+    /// Instrumented reached a cognitive complexity of 22 against a limit of 15 -- and this half is a
+    /// straight write-out that has nothing to do with driving the enumerator, so splitting there costs
+    /// no context.
+    /// </remarks>
+    private static void RecordTermination(
+        Activity? activity,
+        StreamTermination termination,
+        long itemCount,
+        long startTimestamp,
+        long firstItemTimestamp)
+    {
 
             if (activity is { IsAllDataRequested: true })
             {
@@ -168,7 +188,6 @@ public sealed class MediatorStreamTracingBehavior<TRequest, TResponse>(MediatorI
                 termination == StreamTermination.Faulted
                     ? ActivityStatusCode.Error
                     : ActivityStatusCode.Ok);
-        }
     }
 
     /// <summary>How the enumeration ended. Exported as <c>mediator.stream.termination</c>.</summary>
