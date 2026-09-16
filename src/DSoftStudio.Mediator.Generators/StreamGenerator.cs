@@ -45,8 +45,17 @@ public sealed class StreamGenerator : IIncrementalGenerator
         var allStreamBehaviors = context.CompilationProvider
             .Select(static (compilation, _) =>
             {
-                var results = ReferencedAssemblyScanner.GetExternalOpenGenericBehaviors(compilation);
-                CollectLocalBehaviors(compilation.Assembly.GlobalNamespace, results);
+                // The same resolution the request pipeline builds. Without it a stream behavior that
+                // narrows itself is dropped from discovery entirely, its open descriptor survives,
+                // and the container closes it reflectively — exactly the MakeGenericType NativeAOT
+                // refuses for a value-type stream response.
+                var constraints = new ReferencedAssemblyScanner.ConstraintResolution(
+                    compilation,
+                    ReferencedAssemblyScanner.CollectRequestPairs(compilation));
+
+                var results = ReferencedAssemblyScanner.GetExternalOpenGenericBehaviors(
+                    compilation, constraints);
+                CollectLocalBehaviors(compilation.Assembly.GlobalNamespace, results, constraints);
 
                 var array = results
                     .Where(static b => b.Kind == PipelineInterfaceKind.StreamBehavior)
@@ -120,7 +129,8 @@ public sealed class StreamGenerator : IIncrementalGenerator
     /// </summary>
     private static void CollectLocalBehaviors(
         INamespaceSymbol ns,
-        List<BehaviorTypeInfo> results)
+        List<BehaviorTypeInfo> results,
+        ReferencedAssemblyScanner.ConstraintResolution? constraints = null)
     {
         foreach (var type in ns.GetTypeMembers())
         {
@@ -130,12 +140,12 @@ public sealed class StreamGenerator : IIncrementalGenerator
                 && (type.DeclaredAccessibility == Accessibility.Public
                     || type.DeclaredAccessibility == Accessibility.Internal))
             {
-                ReferencedAssemblyScanner.TryAddBehaviorInfoFrom(type, results);
+                ReferencedAssemblyScanner.TryAddBehaviorInfoFrom(type, results, constraints);
             }
         }
 
         foreach (var child in ns.GetNamespaceMembers())
-            CollectLocalBehaviors(child, results);
+            CollectLocalBehaviors(child, results, constraints);
     }
 
     private static string GenerateCode(

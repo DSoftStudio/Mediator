@@ -797,15 +797,33 @@ namespace DSoftStudio.Mediator.Generators
                         continue;
 
                     var applicable = new List<string>();
+                    var undecided = false;
+
                     foreach (var (request, response) in constraints.Pairs)
                     {
-                        if (!SatisfiesConstraints(constraints.Compilation, type, request, response))
+                        var verdict = CheckConstraints(constraints.Compilation, type, request, response);
+
+                        // One pair we cannot judge disqualifies the WHOLE behavior, because closing
+                        // is all-or-nothing: the open descriptor is removed either way, so a pair
+                        // guessed wrong loses its behavior with nothing left to resolve it. Falling
+                        // back to discovering nothing keeps the open descriptor and lets the
+                        // container decide, which is what happened before any of this existed.
+                        if (verdict == ConstraintVerdict.Undecidable)
+                        {
+                            undecided = true;
+                            break;
+                        }
+
+                        if (verdict == ConstraintVerdict.NotSatisfied)
                             continue;
 
                         applicable.Add(BehaviorTypeInfo.PairKey(
                             request.ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat),
                             response.ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat)));
                     }
+
+                    if (undecided)
+                        continue;
 
                     results.Add(new BehaviorTypeInfo(
                         kind.Value, openName, baseName,
@@ -926,17 +944,29 @@ namespace DSoftStudio.Mediator.Generators
         }
 
         /// <summary>
-        /// Whether <paramref name="openBehavior"/> may legally be closed over the pair — the same
-        /// question the compiler answers with CS0311 and friends, and the same one MSDI answers by
-        /// returning the behavior or skipping it.
+        /// The three answers to "may this behavior be named closed over this pair".
         /// <para>
-        /// Conservative on anything it cannot decide: an undecidable constraint answers
-        /// <see langword="false"/>, which costs that pair a specialized chain and leaves it on the
-        /// per-link path. Answering <see langword="true"/> wrongly emits a name that does not
-        /// compile, in a file the consumer cannot edit.
+        /// <see cref="Undecidable"/> is NOT a slower kind of no. Once a behavior is discovered,
+        /// <c>CloseAllOpenGenericBehaviors</c> REMOVES its open descriptor and inserts closed ones
+        /// only where it decided yes — so a pair answered no loses the behavior outright, with
+        /// nothing left for the container to resolve. Guessing no is therefore as damaging as
+        /// guessing yes, just quieter. Anything undecidable has to take the whole behavior out of
+        /// discovery instead, leaving the open descriptor exactly as it was.
         /// </para>
         /// </summary>
-        internal static bool SatisfiesConstraints(
+        internal enum ConstraintVerdict
+        {
+            Satisfied,
+            NotSatisfied,
+            Undecidable,
+        }
+
+        /// <summary>
+        /// Whether <paramref name="openBehavior"/> may legally be closed over the pair — the same
+        /// question the compiler answers with CS0311/CS0315 and the same one MSDI answers by
+        /// returning the behavior or skipping it. Both have to agree with this, in both directions.
+        /// </summary>
+        internal static ConstraintVerdict CheckConstraints(
             Compilation compilation,
             INamedTypeSymbol openBehavior,
             ITypeSymbol request,
@@ -944,11 +974,11 @@ namespace DSoftStudio.Mediator.Generators
         {
             // ClassifyConversion is C#-specific; without it there is nothing to decide with.
             if (compilation is not Microsoft.CodeAnalysis.CSharp.CSharpCompilation csharp)
-                return false;
+                return ConstraintVerdict.Undecidable;
 
             var arguments = new[] { request, response };
             if (openBehavior.TypeParameters.Length != arguments.Length)
-                return false;
+                return ConstraintVerdict.Undecidable;
 
             for (var i = 0; i < openBehavior.TypeParameters.Length; i++)
             {
@@ -956,36 +986,56 @@ namespace DSoftStudio.Mediator.Generators
                 var argument = arguments[i];
 
                 if (parameter.HasReferenceTypeConstraint && !argument.IsReferenceType)
-                    return false;
+                    return ConstraintVerdict.NotSatisfied;
 
                 if (parameter.HasValueTypeConstraint
                     && (!argument.IsValueType || IsNullableValueType(argument)))
                 {
-                    return false;
+                    return ConstraintVerdict.NotSatisfied;
                 }
 
                 if (parameter.HasUnmanagedTypeConstraint
                     && argument is not INamedTypeSymbol { IsUnmanagedType: true })
                 {
-                    return false;
+                    return ConstraintVerdict.NotSatisfied;
                 }
 
                 if (parameter.HasConstructorConstraint && !HasAccessibleParameterlessConstructor(argument))
-                    return false;
+                    return ConstraintVerdict.NotSatisfied;
+
+                // `notnull` is about nullable ANNOTATIONS, which survive into the name the generator
+                // writes. MSDI erases them, so dispatch works either way and the emission is
+                // semantically right — but naming Behavior<Request, string?> under this constraint
+                // is five CS8714 warnings in a file the consumer cannot edit, so it is still a no.
+                if (parameter.HasNotNullConstraint
+                    && argument.NullableAnnotation == NullableAnnotation.Annotated)
+                {
+                    return ConstraintVerdict.NotSatisfied;
+                }
 
                 foreach (var constraint in parameter.ConstraintTypes)
                 {
                     var required = Substitute(constraint, openBehavior, arguments);
                     if (required is null)
-                        return false;
+                        return ConstraintVerdict.Undecidable;
 
                     var conversion = csharp.ClassifyConversion(argument, required);
-                    if (!conversion.IsIdentity && !conversion.IsImplicit)
-                        return false;
+
+                    // Generic constraints accept only identity, reference and boxing conversions.
+                    // IsImplicit alone is far too generous: it also covers USER-DEFINED conversions,
+                    // so a `where TResponse : Money` with an implicit operator from int declared the
+                    // int pair applicable and emitted CS0315 in generated code — the exact failure
+                    // this method exists to prevent.
+                    var usable = conversion.IsIdentity
+                                 || (conversion.IsImplicit
+                                     && (conversion.IsReference || conversion.IsBoxing));
+
+                    if (!usable)
+                        return ConstraintVerdict.NotSatisfied;
                 }
             }
 
-            return true;
+            return ConstraintVerdict.Satisfied;
         }
 
         private static bool IsNullableValueType(ITypeSymbol type)
@@ -1032,7 +1082,13 @@ namespace DSoftStudio.Mediator.Generators
                 return null;
             }
 
-            if (constraint is not INamedTypeSymbol named || !named.IsGenericType)
+            // Arity, not IsGenericType. Roslyn reports IsGenericType for a NON-generic type nested
+            // inside a generic one — Holder<int>.Marker — because it walks the containing types,
+            // while TypeArguments is empty. Construct() with zero arguments then throws
+            // "Cannot create constructed generic type from non-generic type", which the incremental
+            // pipeline surfaces as CS8785: the whole generator dies and the consumer loses
+            // PrecompilePipelines, from one constraint on one behavior.
+            if (constraint is not INamedTypeSymbol named || named.Arity == 0)
                 return constraint;
 
             var substituted = new ITypeSymbol[named.TypeArguments.Length];
