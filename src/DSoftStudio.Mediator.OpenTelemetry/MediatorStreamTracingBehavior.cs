@@ -32,15 +32,15 @@ public sealed class MediatorStreamTracingBehavior<TRequest, TResponse>(MediatorI
 
     // ── Why the enumerator is driven by hand ──────────────────────────
     //
-    // C# forbids a catch clause in an iterator that contains a yield return, so the obvious
-    // shape -- an await foreach wrapped in try/catch -- does not compile. The previous version
-    // settled for try/finally, and paid for it three times over: it never saw the exception, so no span
-    // carried error.type or an exception event; it could not tell a fault from a cancellation;
-    // and `success` was set only after the loop, so a consumer that simply stopped reading --
-    // `break` after the first page -- disposed the iterator, ran the finally with success still
-    // false, and painted the span red. A paged query reading its first N rows reported as failed.
+    // C# forbids a catch clause in an iterator that contains a yield return, so the obvious shape
+    // (an await foreach wrapped in try and catch) does not compile. The previous version settled for
+    // try and finally, and paid for it three times over. It never saw the exception, so no span
+    // carried an error type or an exception event. It could not tell a fault from a cancellation.
+    // And its success flag was set only after the loop, so a consumer that simply stopped reading
+    // (a break after the first page) disposed the iterator, ran the finally with success still false,
+    // and painted the span red. A paged query reading its first rows reported as an outage.
     //
-    // Driving MoveNextAsync inside its own try and yielding OUTSIDE it is the shape that gets a
+    // Driving MoveNextAsync inside its own try, and yielding OUTSIDE it, is the shape that gets a
     // catch back. The yield sits between the two, where no try encloses it.
     private async IAsyncEnumerable<TResponse> Instrumented(
         TRequest request,
