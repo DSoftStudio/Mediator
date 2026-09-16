@@ -152,5 +152,29 @@ namespace DSoftStudio.Mediator.Generators
             // this once the WHOLE compilation has been seen — it reports from a CompilationEndAction. The tag
             // tells the host to schedule it as a full-compilation diagnostic (not a live per-keystroke one).
             customTags: WellKnownDiagnosticTags.CompilationEnd);
+
+        public static readonly DiagnosticDescriptor BehaviorNotNameable = new(
+            id: "DSOFT011",
+            title: "Pipeline behavior stays on the runtime path: generated code cannot name it",
+            messageFormat: "Generated code cannot name the {1} '{0}', so the container closes it at runtime instead. "
+                          + "That works on the ordinary runtime but throws under Native AOT for any request whose "
+                          + "response is a value type. To fix: make it (and every type enclosing it) at least "
+                          + "internal, do not declare it 'file', and do not nest it inside a generic type.",
+            category: "DSoftStudio.Mediator",
+            defaultSeverity: DiagnosticSeverity.Warning,
+            isEnabledByDefault: true,
+            description: "Registering a behavior as an open generic asks the container to construct the closed type "
+                        + "on resolution. The generator normally removes that open registration and substitutes "
+                        + "literal closed ones, which is what makes the pipeline AOT-safe and what lets a specialized "
+                        + "chain be emitted for it. It can only do that for a type it can spell from a separate file "
+                        + "in the same assembly: not a 'file' type, not a private or protected nested one, and not a "
+                        + "type nested inside a generic. For anything else the open registration survives and the "
+                        + "container constructs the type reflectively, which NativeAOT refuses for a value-type "
+                        + "response - measured on two projects differing only in 'file' versus 'internal' on the "
+                        + "behavior, where the first crashes the native binary and the second runs. The build and the "
+                        + "AOT publish both stay silent, so without this rule the first sign of trouble is a crash in "
+                        + "the published application. Unlike DSOFT009 this reports 'file' types too: a file handler "
+                        + "is simply not registered, but a file BEHAVIOR keeps working and quietly costs AOT "
+                        + "compatibility, which is not something the author chose by writing 'file'.");
     }
 }
