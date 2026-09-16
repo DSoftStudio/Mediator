@@ -19,8 +19,17 @@ description: "All notable changes to DSoftStudio.Mediator."
 
 > Companions: `OpenTelemetry` 1.1.1-rc.1 · `HybridCache` 1.0.10-rc.1 · `FluentValidation` 1.0.10-rc.1.
 
-Two changes in this release alter observable behavior. Both are described under **Changed**; read
-those before upgrading.
+**Four** changes in this release alter observable behavior. Each is marked *This is a behavior
+change* under **Changed**, and all four are worth reading before you upgrade:
+
+1. Pipeline components registered through `MediatorBuilder` default to **Scoped**, not Transient.
+   A component holding per-dispatch state must now say `Transient` explicitly.
+2. A **Transient handler** now makes its pipeline chain Transient, so that chain is rebuilt per
+   dispatch.
+3. `ParallelNotificationPublisher` now **really** runs handlers concurrently. Handlers under it must
+   be safe to run alongside each other; synchronous ones used to be serialized by accident.
+4. `IRequestExceptionHandler` now covers **pre-processors**, so a pre-processor exception that
+   reached the caller before may now be translated into a response.
 
 ### Added
 
