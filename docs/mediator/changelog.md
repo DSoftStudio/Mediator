@@ -1,4 +1,4 @@
-﻿---
+---
 layout: default
 title: "Changelog - DSoftStudio.Mediator"
 description: "All notable changes to DSoftStudio.Mediator."
@@ -15,69 +15,6 @@ description: "All notable changes to DSoftStudio.Mediator."
 
 # Changelog
 
-## [Unreleased] — since 1.4.0-rc.1
-
-### Added
-
-- **DSOFT011 — a pipeline behavior left on the runtime path.** A behavior generated code cannot name
-  — a `file` type, a private nested one, one nested inside a generic — keeps its open registration,
-  and the container closes it reflectively on resolution. That works on the ordinary runtime and
-  throws under Native AOT for any request whose response is a value type. Measured on two projects
-  identical but for one modifier: as `file` the native binary dies on the first `int`-returning
-  request; as `internal` it runs. Both builds and both AOT publishes reported zero warnings.
-- **DSOFT012 — a cached response type with no serializer.** `HybridCache` serializes everything it
-  caches and ships serializers for exactly `string` and `byte[]`; everything else reaches the
-  reflection-based JSON fallback that AOT disables. Reported only when the build actually publishes
-  AOT or trimmed, and only for types no registration in the compilation covers.
-- **AOT compatibility is now enforced by a test**, not asserted. It scans the shipped assemblies for
-  `MakeGenericType`, `Expression.Compile`, `Reflection.Emit`, assembly scanning and friends, and a
-  second check covers the code generated into the consumer's assembly.
-
-### Changed
-
-- **`Send(object)` no longer routes through the dispatch dictionary.** It compiles to a generated type
-  switch, each case calling into the same chain the typed `Send` uses; the `FrozenDictionary` remains
-  as the fallback for types the compilation never saw. The case bodies are emitted as separate
-  methods, which is load-bearing: inlined, the switch grew ~1.2 KB of machine code per request type
-  and past nine types left the JIT's inlining budget — 5.5 ns to 9.5 ns on one added type, 15 ns by
-  forty. Outlined it stays flat, and `Send(object)` measured 12.2 → 6.4 ns on .NET 11.
-- **The dispatch lifetime map is a plain dictionary.** It is built once per container and read only on
-  a cache miss, so a frozen dictionary was paying an expensive build for reads that never happen on
-  the hot path — and paying it on the first dispatch, along with the first compilation of the whole
-  frozen construction path. The mediator's share of a cold first dispatch fell 7.4 → 3.4 ms.
-- **`Abstractions` carries the trim marker directly.** It targets `netstandard2.0`, where
-  `IsTrimmable` and `IsAotCompatible` do nothing, so the package every consumer references shipped
-  unannotated while advertising `native-aot` in its tags.
-
-### Fixed
-
-- **A behavior that narrows itself no longer breaks the consumer's build.** Registering a constrained
-  open generic — `where TRequest : IAuditable`, the ordinary way to scope a behavior — emitted
-  `typeof(Behavior<Request, Response>)` for pairs that fail the constraint: `CS0311`, in a generated
-  file nobody can edit. Both the registration and chain-prediction paths now ask which pairs the
-  behavior actually applies to, which is also what the container does.
-- **Three faults in that constraint check**, each of which reached a consumer: a user-defined implicit
-  conversion was accepted where generic constraints reject it (`CS0315`); a constraint naming a
-  non-generic type nested in a generic one crashed the generator outright, costing the consumer every
-  generated file; and a `notnull` constraint was counted but never checked, naming annotated arguments
-  under it. An undecidable constraint now withdraws the whole behavior from discovery rather than
-  guessing per pair, because closing is all-or-nothing.
-- **Stream behaviors got the same treatment.** The stream generator was calling the scanner without
-  constraint resolution, so every narrowed stream behavior was dropped from discovery.
-- **A `default` `EquatableArray` took the whole generator down.** The constructor normalized null but
-  `default` bypasses every constructor, and the incremental pipeline calls `Equals`/`GetHashCode` on
-  everything it caches — surfacing as `CS8785: Generator failed to generate source`, naming no file,
-  no line and no member.
-- **Diagnostics point at the declaration.** `DSOFT006`, `DSOFT009` and `DSOFT011` passed a zero line
-  span to `Location.Create`, so every report landed at (1,1) — on a using directive rather than the
-  type — and could not be navigated to.
-- **The caching behavior explains an AOT serialization failure** instead of letting Microsoft's
-  serializer throw a message that names neither the request nor the remedy. Only rewritten where
-  reflection-based JSON is actually off, through an exception filter, so a dispatch that does not
-  throw pays nothing.
-
----
-
 ## [1.4.0-rc.1] — 2026-09-02
 
 > Companions: `OpenTelemetry` 1.1.1-rc.1 · `HybridCache` 1.0.10-rc.1 · `FluentValidation` 1.0.10-rc.1.
@@ -86,6 +23,15 @@ Two changes in this release alter observable behavior. Both are described under 
 those before upgrading.
 
 ### Added
+
+- **A second `AddMediator(configure)` is now reported.** The overload runs your `configure` lambda on
+  every call — it has to, or the lambda would be ignored — while the pipeline scan behind it returns
+  early once it has run. A second call therefore registered components that no chain was ever rebuilt
+  around: they either never ran, or a Singleton chain from the first scan captured them and the
+  container refused to build under `ValidateScopes`. `ValidateMediatorHandlers()` now names them. The
+  check reports what it OBSERVED, not what it inferred, so it stays quiet for a second bare
+  `PrecompilePipelines()`, for a `configure` lambda that registers no component, and for a second call
+  on a different service collection.
 
 - **ADR-0065 — two-tier `Send` fast path.** The generator emits a concrete dispatch cache per
   (request, response) pair, plus an optional AGGRESSIVE armed holder that returns a Singleton handler
@@ -146,6 +92,33 @@ those before upgrading.
 
 ### Changed
 
+- **Pipeline components registered through `MediatorBuilder` now default to `Scoped`, not
+  `Transient`.** `AddOpenBehavior`, `AddStreamBehavior`, `AddRequestPreProcessor`,
+  `AddRequestPostProcessor` and `AddRequestExceptionHandler` are affected; `AddDispatchObserver` keeps
+  its Singleton default. One Transient component registers the request's whole chain as Transient, so
+  every dispatch re-resolved and re-linked it instead of reusing the one already built for the scope —
+  which put a caller who expressed no opinion on the slow path and gave them nothing for it. Scoped is
+  the longest lifetime that is safe without inspecting the component's constructor. **This is a
+  behavior change:** a Scoped component is shared by every dispatch in the scope, including concurrent
+  ones, so a component holding per-dispatch state or a non-thread-safe field — a `Stopwatch` started
+  before the call and read after it — must now be registered `Transient` explicitly. Passing a lifetime
+  yourself is unaffected; only the unstated default moved.
+- **A Transient handler now makes its pipeline chain Transient.** The chain's constructor consumes the
+  handler, so its lifetime has to constrain the chain — and `HandlerLifetimeOptimizer` leaves a handler
+  Transient exactly when a dependency of its own is transient, that is, when a fresh instance per
+  resolve is the whole point. Folding it only far enough to stop the chain being Singleton left a
+  cacheable Scoped chain that constructed the handler once per scope and shared the very dependency the
+  optimizer had just refused to share. The same fold now also reads the stream handler and any
+  registered `IMediatorDispatchObserver`, both of which the chain likewise consumes. **This is a
+  behavior change** for an application whose handler is genuinely Transient: its chain is now rebuilt
+  per dispatch, which is what its registration asked for.
+- **A pipeline component registered after the scan is reported where it used to be silent.** The old
+  Transient default masked this: it had already dragged the chain to Transient, so a late Transient
+  component happened to be per-dispatch by accident of the slow path and the validator stayed quiet.
+  With a cacheable chain the component really is constructed once and shared, and
+  `ValidateMediatorHandlers()` says so. The error is true and names both fixes; the registration order
+  it asks for has always been the documented contract.
+
 - **`ParallelNotificationPublisher` now actually runs handlers in parallel.** It used to invoke each
   handler inline on the calling thread and await the resulting tasks together, so handlers that
   complete synchronously — the style `INotificationHandler` recommends — never overlapped at all. Each
@@ -175,6 +148,38 @@ those before upgrading.
   common shape is one read and one branch.
 
 ### Fixed
+
+- **Handlers that inject a logger were never promoted.** `HandlerLifetimeOptimizer` indexed the
+  registered lifetimes by exact service type, and `AddLogging()` registers `ILogger<>` OPEN. A handler
+  depending on `ILogger<THandler>` looked up the CLOSED type, missed, and counted as having an
+  unregistered dependency — which pins the handler at Transient. Since injecting a logger is the
+  commonest thing a handler does, the optimizer's central promise was quietly off for most real
+  handlers, and through the chain-lifetime fold their whole pipeline chain stayed non-cacheable with
+  them. The lookup now falls back to the open-generic registration, as the container does, and as
+  `DispatchCacheability` already did. `IOptions<T>` and every other openly-registered framework service
+  are fixed by the same change; a closed registration still wins over the open one behind it.
+  The services the container provides without any descriptor are answered directly for the same
+  reason: `IServiceProvider` is `Scoped` — it is the scope that asked and lives exactly as long — and
+  `IServiceScopeFactory` is `Singleton`, since one rooted factory serves every scope.
+- **A late Transient behavior could be hidden by a later registration.** The validator asked whether
+  the behavior service type was cacheable, and that answer is last-wins — the reading the container
+  uses for a service it resolves singly. `IPipelineBehavior<,>` is not one of those: several
+  descriptors coexist and every one of them runs, so a Scoped registration made after a Transient one
+  silenced the rule about a behavior that really was constructed once and shared. It now asks whether
+  ANY registration for the type is Transient. The dispatch caches are untouched — they only ever ask
+  about service types that resolve singly, where last-wins is correct.
+- **DSOFT010 could not see the fluent registration style at all.** The rule pairs a component with a
+  scan of the SAME service collection, by symbol, and the receiver of a chained call
+  (`services.AddMediator().PrecompilePipelines()`) is the previous invocation rather than a symbol — so
+  the scan was never recorded and nothing could be reported against it. Registrations made through a
+  `MediatorBuilder` had the same problem from the other side: their receiver is the builder, never the
+  collection. Both are now resolved back to the collection, including the builder handed to a
+  `configure` lambda, which is the shape a late module uses.
+- **DSOFT010 reported components against scans that do not govern them.** A stream behavior registered
+  after `PrecompileNotifications()` but before its own `PrecompileStreams()` is correctly ordered, and
+  the rule flagged it anyway — a false positive in a diagnostic that users build with
+  `TreatWarningsAsErrors`. A component is now paired only with the scan that would have built its
+  chain. `PrecompileNotifications()` governs no pipeline component and pairs with none.
 
 - **FluentValidation reported every failure more than once.** One `ValidationContext` was shared by
   every validator, and FluentValidation accumulates failures in the context it is handed — so the
