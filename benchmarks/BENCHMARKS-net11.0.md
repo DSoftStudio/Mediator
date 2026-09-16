@@ -17,12 +17,14 @@ Target framework: `net11.0`
 > `AsyncLocal`, `Activity.Current` or `IHttpContextAccessor`.
 
 ```
-BenchmarkDotNet v0.16.0-preview.1, Windows 11 (10.0.26200.9278/25H2/2025Update/HudsonValley2)
+BenchmarkDotNet v0.16.0-preview.1, Windows 11 (10.0.26200.9457/25H2/2025Update/HudsonValley2)
 12th Gen Intel Core i7-12700F 2.10GHz, 1 CPU, 20 logical and 12 physical cores
-Memory: 15.84 GB Total, 9.29 GB Available
-.NET SDK 11.0.100-preview.7.26381.103
-  [Host]     : .NET 11.0.0 (11.0.0-preview.7.26381.103, 11.0.26.38203), X64 RyuJIT x86-64-v3
-  DefaultJob : .NET 11.0.0 (11.0.0-preview.7.26381.103, 11.0.26.38203), X64 RyuJIT x86-64-v3
+Memory: 15.84 GB Total, 8.32 GB Available
+.NET SDK 11.0.100-rc.1.26425.128
+  [Host]     : .NET 11.0.0 (11.0.0-rc.1.26425.128, 11.0.26.42628), X64 RyuJIT x86-64-v3
+  Job-NZIUHH : .NET 11.0.0 (11.0.0-rc.1.26425.128, 11.0.26.42628), X64 RyuJIT x86-64-v3
+
+IterationCount=30  WarmupCount=12
 ```
 
 > **Note:** Each library's benchmarks run in **isolated processes** (only that library active).
@@ -32,419 +34,513 @@ Memory: 15.84 GB Total, 9.29 GB Available
 
 | Method     | Mean     | Error     | StdDev    | Ratio | Rank | Allocated | Alloc Ratio |
 |----------- |---------:|----------:|----------:|------:|-----:|----------:|------------:|
-| DirectCall | 2.090 ns | 0.0081 ns | 0.0076 ns |  1.00 |    1 |         - |          NA |
-| DSoft_Send | 2.489 ns | 0.0074 ns | 0.0069 ns |  1.19 |    2 |         - |          NA |
+| DirectCall | 1.905 ns | 0.0056 ns | 0.0084 ns |  1.00 |    1 |         - |          NA |
+| DSoft_Send | 2.678 ns | 0.0027 ns | 0.0039 ns |  1.41 |    2 |         - |          NA |
 
 ## DSoft - Send (Behaviors)
 
-| Method                | Mean     | Error     | StdDev    | Ratio | Rank | Allocated | Alloc Ratio |
-|---------------------- |---------:|----------:|----------:|------:|-----:|----------:|------------:|
-| DirectCall            | 2.085 ns | 0.0054 ns | 0.0048 ns |  1.00 |    1 |         - |          NA |
-| DSoft_Send_3Behaviors | 5.381 ns | 0.0092 ns | 0.0086 ns |  2.58 |    2 |         - |          NA |
-| DSoft_Send_5Behaviors | 6.425 ns | 0.0114 ns | 0.0106 ns |  3.08 |    3 |         - |          NA |
+| Method                | Mean     | Error     | StdDev    | Median   | Ratio | Rank | Allocated | Alloc Ratio |
+|---------------------- |---------:|----------:|----------:|---------:|------:|-----:|----------:|------------:|
+| DirectCall            | 2.113 ns | 0.0058 ns | 0.0087 ns | 2.111 ns |  1.00 |    1 |         - |          NA |
+| DSoft_Send_3Behaviors | 5.564 ns | 0.0159 ns | 0.0228 ns | 5.565 ns |  2.63 |    2 |         - |          NA |
+| DSoft_Send_5Behaviors | 6.551 ns | 0.0107 ns | 0.0156 ns | 6.554 ns |  3.10 |    3 |         - |          NA |
 
 ## DSoft - Send (Object)
 
 | Method             | Mean     | Error     | StdDev    | Ratio | RatioSD | Rank | Gen0   | Allocated | Alloc Ratio |
 |------------------- |---------:|----------:|----------:|------:|--------:|-----:|-------:|----------:|------------:|
-| DSoft_Send_Generic | 2.478 ns | 0.0122 ns | 0.0108 ns |  1.00 |    0.00 |    1 |      - |         - |          NA |
-| DSoft_Send_Object  | 5.585 ns | 0.0775 ns | 0.0725 ns |  2.25 |    0.03 |    2 | 0.0018 |      24 B |          NA |
+| DSoft_Send_Generic | 2.552 ns | 0.0061 ns | 0.0091 ns |  1.00 |    0.00 |    1 |      - |         - |          NA |
+| DSoft_Send_Object  | 6.646 ns | 0.0258 ns | 0.0386 ns |  2.60 |    0.02 |    2 | 0.0018 |      24 B |          NA |
 
 ## DSoft - Publish
 
 | Method         | Mean     | Error     | StdDev    | Ratio | Rank | Allocated | Alloc Ratio |
 |--------------- |---------:|----------:|----------:|------:|-----:|----------:|------------:|
-| Direct_Publish | 1.346 ns | 0.0032 ns | 0.0029 ns |  1.00 |    1 |         - |          NA |
-| DSoft_Publish  | 2.349 ns | 0.0042 ns | 0.0040 ns |  1.75 |    2 |         - |          NA |
+| Direct_Publish | 1.460 ns | 0.0037 ns | 0.0056 ns |  1.00 |    1 |         - |          NA |
+| DSoft_Publish  | 2.359 ns | 0.0043 ns | 0.0065 ns |  1.62 |    2 |         - |          NA |
 
 ## DSoft - Publish (Object)
 
 | Method                | Mean     | Error     | StdDev    | Ratio | Rank | Allocated | Alloc Ratio |
 |---------------------- |---------:|----------:|----------:|------:|-----:|----------:|------------:|
-| DSoft_Publish_Generic | 2.379 ns | 0.0038 ns | 0.0034 ns |  1.00 |    1 |         - |          NA |
-| DSoft_Publish_Object  | 3.992 ns | 0.0064 ns | 0.0057 ns |  1.68 |    2 |         - |          NA |
+| DSoft_Publish_Generic | 2.407 ns | 0.0037 ns | 0.0053 ns |  1.00 |    1 |         - |          NA |
+| DSoft_Publish_Object  | 3.753 ns | 0.0035 ns | 0.0050 ns |  1.56 |    2 |         - |          NA |
 
 ## DSoft - Stream
 
-| Method        | Mean     | Error    | StdDev   | Ratio | Rank | Gen0   | Allocated | Alloc Ratio |
-|-------------- |---------:|---------:|---------:|------:|-----:|-------:|----------:|------------:|
-| DSoft_Stream  | 31.13 ns | 0.277 ns | 0.259 ns |  0.98 |    1 | 0.0067 |      88 B |        1.00 |
-| Direct_Stream | 31.80 ns | 0.196 ns | 0.184 ns |  1.00 |    1 | 0.0067 |      88 B |        1.00 |
+| Method        | Mean     | Error    | StdDev   | Median   | Ratio | Rank | Gen0   | Allocated | Alloc Ratio |
+|-------------- |---------:|---------:|---------:|---------:|------:|-----:|-------:|----------:|------------:|
+| Direct_Stream | 30.12 ns | 0.069 ns | 0.103 ns | 30.11 ns |  1.00 |    1 | 0.0067 |      88 B |        1.00 |
+| DSoft_Stream  | 30.72 ns | 0.138 ns | 0.207 ns | 30.61 ns |  1.02 |    1 | 0.0067 |      88 B |        1.00 |
 
 ## DSoft - Concurrency
 
 | Method            | Categories | Mean        | Error    | StdDev   | Ratio | RatioSD | Rank | Gen0   | Gen1   | Allocated | Alloc Ratio |
 |------------------ |----------- |------------:|---------:|---------:|------:|--------:|-----:|-------:|-------:|----------:|------------:|
-| DSoft_FanOut      | FanOut     | 1,287.13 ns | 2.821 ns | 2.501 ns |  0.99 |    0.01 |    1 | 0.6523 | 0.0172 |    8536 B |        1.00 |
-| Direct_FanOut     | FanOut     | 1,295.62 ns | 8.462 ns | 7.915 ns |  1.00 |    0.00 |    1 | 0.6523 | 0.0172 |    8536 B |        1.00 |
+| DSoft_FanOut      | FanOut     | 1,329.28 ns | 3.984 ns | 5.963 ns |  0.97 |    0.01 |    1 | 0.6523 | 0.0172 |    8536 B |        1.00 |
+| Direct_FanOut     | FanOut     | 1,374.96 ns | 4.174 ns | 6.119 ns |  1.00 |    0.00 |    2 | 0.6523 | 0.0172 |    8536 B |        1.00 |
 |                   |            |             |          |          |       |         |      |        |        |           |             |
-| Direct_Throughput | Throughput |    35.79 ns | 0.682 ns | 0.638 ns |  1.00 |    0.00 |    1 |      - |      - |         - |          NA |
-| DSoft_Throughput  | Throughput |    45.49 ns | 0.078 ns | 0.073 ns |  1.27 |    0.02 |    2 |      - |      - |         - |          NA |
+| Direct_Throughput | Throughput |    36.49 ns | 0.778 ns | 1.165 ns |  1.00 |    0.00 |    1 |      - |      - |         - |          NA |
+| DSoft_Throughput  | Throughput |    45.72 ns | 0.095 ns | 0.140 ns |  1.25 |    0.04 |    2 |      - |      - |         - |          NA |
 
 ## DSoft - Cold Start
 
-| Method          | Mean     | Error     | StdDev    | Rank | Gen0   | Gen1   | Allocated |
-|---------------- |---------:|----------:|----------:|-----:|-------:|-------:|----------:|
-| DSoft_ColdStart | 1.930 μs | 0.0114 μs | 0.0101 μs |    1 | 0.8659 | 0.0286 |  11.07 KB |
+> **Read the gap, not the total.** `Startup_ContainerOnly` builds the DI container and resolves the
+> mediator. `Startup_WithFirstDispatch` does the same and then dispatches one request. Nearly all of
+> either number is .NET runtime startup and DI container construction, which every library on this
+> page pays alike. **The difference between the two rows is the part that belongs to the library.**
+>
+> Measured one process per sample, because startup is a property of a process and cannot be observed
+> from inside a warm one. Process timings are skewed, so read the median rather than the mean — and
+> the first row executed also absorbs the machine's own file-cache warm-up, which inflates it and so
+> understates the gap.
+
+| Method                          | Mean     | Error    | StdDev   | Median   | Ratio | RatioSD | Rank | Allocated | Alloc Ratio |
+|-------------------------------- |---------:|---------:|---------:|---------:|------:|--------:|-----:|----------:|------------:|
+| DSoft_Startup_ContainerOnly     | 15.44 ms | 5.494 ms | 9.766 ms | 13.93 ms |  1.00 |    0.00 |    1 |  17.25 KB |        1.00 |
+| DSoft_Startup_WithFirstDispatch | 17.28 ms | 0.131 ms | 0.233 ms | 17.29 ms |  1.22 |    0.16 |    2 |  17.25 KB |        1.00 |
 
 ## DSoft - Realistic Pipeline
 
-| Method                  | Mean      | Error    | StdDev   | Ratio | Rank | Gen0   | Allocated | Alloc Ratio |
-|------------------------ |----------:|---------:|---------:|------:|-----:|-------:|----------:|------------:|
-| DirectCall_WithPipeline |  92.70 ns | 0.507 ns | 0.474 ns |  1.00 |    1 | 0.0141 |     184 B |        1.00 |
-| DSoft_RealisticPipeline | 102.84 ns | 0.404 ns | 0.378 ns |  1.11 |    2 | 0.0122 |     160 B |        0.87 |
+| Method                  | Mean     | Error   | StdDev  | Ratio | Rank | Gen0   | Allocated | Alloc Ratio |
+|------------------------ |---------:|--------:|--------:|------:|-----:|-------:|----------:|------------:|
+| DirectCall_WithPipeline | 100.1 ns | 0.16 ns | 0.23 ns |  1.00 |    1 | 0.0129 |     168 B |        1.00 |
+| DSoft_RealisticPipeline | 111.9 ns | 0.52 ns | 0.70 ns |  1.12 |    2 | 0.0110 |     144 B |        0.86 |
 
 ## DSoft - Behavior Scaling
 
-| Method          | Mean     | Error     | StdDev    | Ratio | RatioSD | Rank | Allocated | Alloc Ratio |
-|---------------- |---------:|----------:|----------:|------:|--------:|-----:|----------:|------------:|
-| DirectCall      | 1.901 ns | 0.0066 ns | 0.0062 ns |  1.00 |    0.00 |    1 |         - |          NA |
-| Send_0Behaviors | 2.371 ns | 0.0101 ns | 0.0094 ns |  1.25 |    0.01 |    2 |         - |          NA |
-| Send_1Behaviors | 4.366 ns | 0.0063 ns | 0.0056 ns |  2.30 |    0.01 |    3 |         - |          NA |
-| Send_2Behaviors | 4.857 ns | 0.0073 ns | 0.0068 ns |  2.56 |    0.01 |    4 |         - |          NA |
-| Send_3Behaviors | 5.390 ns | 0.0173 ns | 0.0153 ns |  2.84 |    0.01 |    5 |         - |          NA |
-| Send_5Behaviors | 6.405 ns | 0.0091 ns | 0.0085 ns |  3.37 |    0.01 |    6 |         - |          NA |
-| Send_8Behaviors | 9.056 ns | 0.0155 ns | 0.0137 ns |  4.76 |    0.02 |    7 |         - |          NA |
+| Method          | Mean     | Error     | StdDev    | Median   | Ratio | RatioSD | Rank | Allocated | Alloc Ratio |
+|---------------- |---------:|----------:|----------:|---------:|------:|--------:|-----:|----------:|------------:|
+| DirectCall      | 1.885 ns | 0.0051 ns | 0.0075 ns | 1.884 ns |  1.00 |    0.00 |    1 |         - |          NA |
+| Send_0Behaviors | 2.471 ns | 0.0034 ns | 0.0048 ns | 2.470 ns |  1.31 |    0.01 |    2 |         - |          NA |
+| Send_1Behaviors | 4.433 ns | 0.0097 ns | 0.0145 ns | 4.431 ns |  2.35 |    0.01 |    3 |         - |          NA |
+| Send_2Behaviors | 5.048 ns | 0.0146 ns | 0.0219 ns | 5.047 ns |  2.68 |    0.02 |    4 |         - |          NA |
+| Send_3Behaviors | 5.576 ns | 0.0103 ns | 0.0145 ns | 5.576 ns |  2.96 |    0.01 |    5 |         - |          NA |
+| Send_5Behaviors | 6.611 ns | 0.0542 ns | 0.0742 ns | 6.583 ns |  3.51 |    0.04 |    6 |         - |          NA |
+| Send_8Behaviors | 9.270 ns | 0.0110 ns | 0.0157 ns | 9.267 ns |  4.92 |    0.02 |    7 |         - |          NA |
 
 ## MediatR - Send (No Behaviors)
 
 | Method       | Mean      | Error     | StdDev    | Ratio | RatioSD | Rank | Gen0   | Allocated | Alloc Ratio |
 |------------- |----------:|----------:|----------:|------:|--------:|-----:|-------:|----------:|------------:|
-| DirectCall   |  1.800 ns | 0.0180 ns | 0.0168 ns |  1.00 |    0.00 |    1 |      - |         - |          NA |
-| MediatR_Send | 42.867 ns | 0.1506 ns | 0.1409 ns | 23.82 |    0.23 |    2 | 0.0190 |     248 B |          NA |
+| DirectCall   |  1.895 ns | 0.0031 ns | 0.0046 ns |  1.00 |    0.00 |    1 |      - |         - |          NA |
+| MediatR_Send | 40.928 ns | 0.0896 ns | 0.1341 ns | 21.60 |    0.09 |    2 | 0.0190 |     248 B |          NA |
 
 ## MediatR - Send (Behaviors)
 
-| Method                  | Mean       | Error     | StdDev    | Ratio | RatioSD | Rank | Gen0   | Allocated | Alloc Ratio |
-|------------------------ |-----------:|----------:|----------:|------:|--------:|-----:|-------:|----------:|------------:|
-| DirectCall              |   1.812 ns | 0.0144 ns | 0.0135 ns |  1.00 |    0.00 |    1 |      - |         - |          NA |
-| MediatR_Send_3Behaviors | 109.754 ns | 0.3491 ns | 0.2915 ns | 60.57 |    0.46 |    2 | 0.0575 |     752 B |          NA |
-| MediatR_Send_5Behaviors | 140.198 ns | 0.6573 ns | 0.5489 ns | 77.37 |    0.63 |    3 | 0.0782 |    1024 B |          NA |
+| Method                  | Mean       | Error     | StdDev    | Median     | Ratio | RatioSD | Rank | Gen0   | Allocated | Alloc Ratio |
+|------------------------ |-----------:|----------:|----------:|-----------:|------:|--------:|-----:|-------:|----------:|------------:|
+| DirectCall              |   1.898 ns | 0.0056 ns | 0.0084 ns |   1.899 ns |  1.00 |    0.00 |    1 |      - |         - |          NA |
+| MediatR_Send_3Behaviors | 107.288 ns | 0.6783 ns | 1.0152 ns | 107.221 ns | 56.54 |    0.58 |    2 | 0.0575 |     752 B |          NA |
+| MediatR_Send_5Behaviors | 143.534 ns | 1.1071 ns | 1.6228 ns | 143.570 ns | 75.64 |    0.90 |    3 | 0.0782 |    1024 B |          NA |
 
 ## MediatR - Send (Object)
 
 | Method               | Mean     | Error    | StdDev   | Ratio | Rank | Gen0   | Allocated | Alloc Ratio |
 |--------------------- |---------:|---------:|---------:|------:|-----:|-------:|----------:|------------:|
-| MediatR_Send_Generic | 41.78 ns | 0.202 ns | 0.189 ns |  1.00 |    1 | 0.0190 |     248 B |        1.00 |
-| MediatR_Send_Object  | 45.38 ns | 0.219 ns | 0.194 ns |  1.09 |    2 | 0.0220 |     288 B |        1.16 |
+| MediatR_Send_Generic | 42.79 ns | 0.082 ns | 0.123 ns |  1.00 |    1 | 0.0190 |     248 B |        1.00 |
+| MediatR_Send_Object  | 46.14 ns | 0.332 ns | 0.496 ns |  1.08 |    2 | 0.0220 |     288 B |        1.16 |
 
 ## MediatR - Publish
 
 | Method          | Mean       | Error     | StdDev    | Ratio | RatioSD | Rank | Gen0   | Allocated | Alloc Ratio |
 |---------------- |-----------:|----------:|----------:|------:|--------:|-----:|-------:|----------:|------------:|
-| Direct_Publish  |   1.364 ns | 0.0062 ns | 0.0058 ns |  1.00 |    0.00 |    1 |      - |         - |          NA |
-| MediatR_Publish | 110.903 ns | 0.4036 ns | 0.3578 ns | 81.30 |    0.42 |    2 | 0.0575 |     752 B |          NA |
+| Direct_Publish  |   1.469 ns | 0.0031 ns | 0.0046 ns |  1.00 |    0.00 |    1 |      - |         - |          NA |
+| MediatR_Publish | 112.916 ns | 0.1734 ns | 0.2595 ns | 76.86 |    0.29 |    2 | 0.0575 |     752 B |          NA |
 
 ## MediatR - Publish (Object)
 
 | Method                  | Mean     | Error   | StdDev  | Ratio | Rank | Gen0   | Allocated | Alloc Ratio |
 |------------------------ |---------:|--------:|--------:|------:|-----:|-------:|----------:|------------:|
-| MediatR_Publish_Object  | 107.9 ns | 0.48 ns | 0.42 ns |  0.93 |    1 | 0.0575 |     752 B |        1.00 |
-| MediatR_Publish_Generic | 115.8 ns | 0.52 ns | 0.49 ns |  1.00 |    2 | 0.0575 |     752 B |        1.00 |
+| MediatR_Publish_Object  | 111.6 ns | 0.31 ns | 0.46 ns |  0.94 |    1 | 0.0575 |     752 B |        1.00 |
+| MediatR_Publish_Generic | 118.4 ns | 0.36 ns | 0.53 ns |  1.00 |    2 | 0.0575 |     752 B |        1.00 |
 
 ## MediatR - Stream
 
-| Method         | Mean      | Error    | StdDev   | Ratio | RatioSD | Rank | Gen0   | Allocated | Alloc Ratio |
-|--------------- |----------:|---------:|---------:|------:|--------:|-----:|-------:|----------:|------------:|
-| Direct_Stream  |  30.43 ns | 0.178 ns | 0.166 ns |  1.00 |    0.00 |    1 | 0.0067 |      88 B |        1.00 |
-| MediatR_Stream | 106.23 ns | 0.232 ns | 0.217 ns |  3.49 |    0.02 |    2 | 0.0354 |     464 B |        5.27 |
+| Method         | Mean      | Error    | StdDev   | Median    | Ratio | RatioSD | Rank | Gen0   | Allocated | Alloc Ratio |
+|--------------- |----------:|---------:|---------:|----------:|------:|--------:|-----:|-------:|----------:|------------:|
+| Direct_Stream  |  30.94 ns | 0.085 ns | 0.120 ns |  30.94 ns |  1.00 |    0.00 |    1 | 0.0067 |      88 B |        1.00 |
+| MediatR_Stream | 112.76 ns | 1.507 ns | 2.209 ns | 112.53 ns |  3.64 |    0.07 |    2 | 0.0354 |     464 B |        5.27 |
 
 ## MediatR - Concurrency
 
-| Method             | Categories | Mean        | Error     | StdDev    | Ratio  | RatioSD | Rank | Gen0   | Gen1   | Allocated | Alloc Ratio |
-|------------------- |----------- |------------:|----------:|----------:|-------:|--------:|-----:|-------:|-------:|----------:|------------:|
-| Direct_FanOut      | FanOut     | 1,251.65 ns |  3.279 ns |  2.907 ns |   1.00 |    0.00 |    1 | 0.6523 | 0.0172 |    8536 B |        1.00 |
-| MediatR_FanOut     | FanOut     | 4,511.74 ns | 20.858 ns | 17.418 ns |   3.60 |    0.02 |    2 | 1.5640 | 0.0381 |   20536 B |        2.41 |
-|                    |            |             |           |           |        |         |      |        |        |           |             |
-| Direct_Throughput  | Throughput |    34.60 ns |  0.042 ns |  0.037 ns |   1.00 |    0.00 |    1 |      - |      - |         - |          NA |
-| MediatR_Throughput | Throughput | 4,011.28 ns | 18.817 ns | 16.681 ns | 115.92 |    0.48 |    2 | 1.8921 |      - |   24800 B |          NA |
+| Method             | Categories | Mean        | Error     | StdDev    | Median      | Ratio  | RatioSD | Rank | Gen0   | Gen1   | Allocated | Alloc Ratio |
+|------------------- |----------- |------------:|----------:|----------:|------------:|-------:|--------:|-----:|-------:|-------:|----------:|------------:|
+| Direct_FanOut      | FanOut     | 1,338.54 ns |  4.723 ns |  7.070 ns | 1,340.10 ns |   1.00 |    0.00 |    1 | 0.6523 | 0.0172 |    8536 B |        1.00 |
+| MediatR_FanOut     | FanOut     | 4,600.43 ns | 11.059 ns | 16.552 ns | 4,598.66 ns |   3.44 |    0.02 |    2 | 1.5640 | 0.0381 |   20536 B |        2.41 |
+|                    |            |             |           |           |             |        |         |      |        |        |           |             |
+| Direct_Throughput  | Throughput |    35.80 ns |  0.711 ns |  1.065 ns |    35.20 ns |   1.00 |    0.00 |    1 |      - |      - |         - |          NA |
+| MediatR_Throughput | Throughput | 3,910.66 ns |  7.277 ns | 10.666 ns | 3,911.42 ns | 109.34 |    3.13 |    2 | 1.8921 |      - |   24800 B |          NA |
 
 ## MediatR - Cold Start
 
-| Method            | Mean     | Error     | StdDev    | Rank | Gen0   | Gen1   | Allocated |
-|------------------ |---------:|----------:|----------:|-----:|-------:|-------:|----------:|
-| MediatR_ColdStart | 3.212 μs | 0.0203 μs | 0.0190 μs |    1 | 0.9766 | 0.0305 |  12.49 KB |
+> **Read the gap, not the total.** `Startup_ContainerOnly` builds the DI container and resolves the
+> mediator. `Startup_WithFirstDispatch` does the same and then dispatches one request. Nearly all of
+> either number is .NET runtime startup and DI container construction, which every library on this
+> page pays alike. **The difference between the two rows is the part that belongs to the library.**
+>
+> Measured one process per sample, because startup is a property of a process and cannot be observed
+> from inside a warm one. Process timings are skewed, so read the median rather than the mean — and
+> the first row executed also absorbs the machine's own file-cache warm-up, which inflates it and so
+> understates the gap.
+
+| Method                            | Mean     | Error    | StdDev   | Median   | Ratio | RatioSD | Rank | Allocated | Alloc Ratio |
+|---------------------------------- |---------:|---------:|---------:|---------:|------:|--------:|-----:|----------:|------------:|
+| MediatR_Startup_WithFirstDispatch | 29.39 ms | 0.223 ms | 0.397 ms | 29.34 ms |  1.01 |    0.11 |    1 |  15.08 KB |        1.22 |
+| MediatR_Startup_ContainerOnly     | 30.05 ms | 5.500 ms | 9.776 ms | 28.51 ms |  1.00 |    0.00 |    1 |  12.38 KB |        1.00 |
 
 ## MediatR - Realistic Pipeline
 
 | Method                    | Mean      | Error    | StdDev   | Ratio | RatioSD | Rank | Gen0   | Allocated | Alloc Ratio |
 |-------------------------- |----------:|---------:|---------:|------:|--------:|-----:|-------:|----------:|------------:|
-| DirectCall_WithPipeline   |  94.79 ns | 0.437 ns | 0.409 ns |  1.00 |    0.00 |    1 | 0.0141 |     184 B |        1.00 |
-| MediatR_RealisticPipeline | 354.12 ns | 1.538 ns | 1.439 ns |  3.74 |    0.02 |    2 | 0.0792 |    1039 B |        5.65 |
+| DirectCall_WithPipeline   |  98.57 ns | 0.345 ns | 0.495 ns |  1.00 |    0.00 |    1 | 0.0129 |     168 B |        1.00 |
+| MediatR_RealisticPipeline | 350.62 ns | 0.585 ns | 0.781 ns |  3.56 |    0.02 |    2 | 0.0777 |    1016 B |        6.05 |
+
+## MediatR - Behavior Scaling
+
+| Method          | Mean       | Error     | StdDev    | Median     | Ratio | RatioSD | Rank | Gen0   | Gen1   | Allocated | Alloc Ratio |
+|---------------- |-----------:|----------:|----------:|-----------:|------:|--------:|-----:|-------:|-------:|----------:|------------:|
+| DirectCall      |   1.897 ns | 0.0054 ns | 0.0080 ns |   1.896 ns |  1.00 |    0.00 |    1 |      - |      - |         - |          NA |
+| Send_0Behaviors |  41.210 ns | 0.2373 ns | 0.3551 ns |  41.271 ns | 21.73 |    0.21 |    2 | 0.0190 |      - |     248 B |          NA |
+| Send_1Behaviors |  71.802 ns | 0.1944 ns | 0.2910 ns |  71.804 ns | 37.86 |    0.22 |    3 | 0.0367 |      - |     480 B |          NA |
+| Send_2Behaviors |  88.604 ns | 0.2083 ns | 0.2780 ns |  88.643 ns | 46.72 |    0.24 |    4 | 0.0471 |      - |     616 B |          NA |
+| Send_3Behaviors | 104.571 ns | 0.3013 ns | 0.4416 ns | 104.609 ns | 55.14 |    0.32 |    5 | 0.0575 |      - |     752 B |          NA |
+| Send_5Behaviors | 136.119 ns | 0.5388 ns | 0.8064 ns | 136.152 ns | 71.77 |    0.51 |    6 | 0.0782 |      - |    1024 B |          NA |
+| Send_8Behaviors | 188.066 ns | 0.5503 ns | 0.8066 ns | 187.977 ns | 99.16 |    0.59 |    7 | 0.1094 | 0.0002 |    1432 B |          NA |
 
 ## DispatchR - Send (No Behaviors)
 
 | Method         | Mean      | Error     | StdDev    | Ratio | RatioSD | Rank | Allocated | Alloc Ratio |
 |--------------- |----------:|----------:|----------:|------:|--------:|-----:|----------:|------------:|
-| DirectCall     |  1.803 ns | 0.0109 ns | 0.0097 ns |  1.00 |    0.00 |    1 |         - |          NA |
-| DispatchR_Send | 27.221 ns | 0.0345 ns | 0.0288 ns | 15.10 |    0.08 |    2 |         - |          NA |
+| DirectCall     |  1.891 ns | 0.0063 ns | 0.0094 ns |  1.00 |    0.00 |    1 |         - |          NA |
+| DispatchR_Send | 27.122 ns | 0.0905 ns | 0.1355 ns | 14.35 |    0.10 |    2 |         - |          NA |
 
 ## DispatchR - Send (Behaviors)
 
-| Method                    | Mean      | Error     | StdDev    | Ratio | RatioSD | Rank | Allocated | Alloc Ratio |
-|-------------------------- |----------:|----------:|----------:|------:|--------:|-----:|----------:|------------:|
-| DirectCall                |  1.883 ns | 0.0027 ns | 0.0024 ns |  1.00 |    0.00 |    1 |         - |          NA |
-| DispatchR_Send_5Behaviors | 49.538 ns | 0.1137 ns | 0.1008 ns | 26.31 |    0.06 |    2 |         - |          NA |
-| DispatchR_Send_3Behaviors | 50.272 ns | 0.0909 ns | 0.0759 ns | 26.69 |    0.05 |    2 |         - |          NA |
+| Method                    | Mean      | Error     | StdDev    | Median    | Ratio | RatioSD | Rank | Allocated | Alloc Ratio |
+|-------------------------- |----------:|----------:|----------:|----------:|------:|--------:|-----:|----------:|------------:|
+| DirectCall                |  1.886 ns | 0.0151 ns | 0.0226 ns |  1.887 ns |  1.00 |    0.00 |    1 |         - |          NA |
+| DispatchR_Send_3Behaviors | 31.563 ns | 0.0833 ns | 0.1222 ns | 31.526 ns | 16.74 |    0.21 |    2 |         - |          NA |
+| DispatchR_Send_5Behaviors | 31.226 ns | 0.0608 ns | 0.0853 ns | 31.197 ns | 16.56 |    0.20 |    2 |         - |          NA |
 
 ## DispatchR - Publish
 
 | Method            | Mean      | Error     | StdDev    | Ratio | RatioSD | Rank | Allocated | Alloc Ratio |
 |------------------ |----------:|----------:|----------:|------:|--------:|-----:|----------:|------------:|
-| Direct_Publish    |  1.365 ns | 0.0058 ns | 0.0054 ns |  1.00 |    0.00 |    1 |         - |          NA |
-| DispatchR_Publish | 39.380 ns | 0.1080 ns | 0.1010 ns | 28.84 |    0.13 |    2 |         - |          NA |
+| Direct_Publish    |  1.467 ns | 0.0015 ns | 0.0022 ns |  1.00 |    0.00 |    1 |         - |          NA |
+| DispatchR_Publish | 32.301 ns | 0.0683 ns | 0.1022 ns | 22.02 |    0.08 |    2 |         - |          NA |
 
 ## DispatchR - Publish (Object)
 
 | Method                    | Mean      | Error    | StdDev   | Ratio | RatioSD | Rank | Gen0   | Allocated | Alloc Ratio |
 |-------------------------- |----------:|---------:|---------:|------:|--------:|-----:|-------:|----------:|------------:|
-| DispatchR_Publish_Generic |  31.54 ns | 0.131 ns | 0.109 ns |  1.00 |    0.00 |    1 |      - |         - |          NA |
-| DispatchR_Publish_Object  | 198.99 ns | 0.477 ns | 0.423 ns |  6.31 |    0.02 |    2 | 0.0196 |     256 B |          NA |
+| DispatchR_Publish_Generic |  33.43 ns | 0.066 ns | 0.095 ns |  1.00 |    0.00 |    1 |      - |         - |          NA |
+| DispatchR_Publish_Object  | 201.09 ns | 0.305 ns | 0.447 ns |  6.02 |    0.02 |    2 | 0.0196 |     256 B |          NA |
 
 ## DispatchR - Stream
 
-| Method           | Mean     | Error    | StdDev   | Ratio | Rank | Gen0   | Allocated | Alloc Ratio |
-|----------------- |---------:|---------:|---------:|------:|-----:|-------:|----------:|------------:|
-| Direct_Stream    | 30.68 ns | 0.125 ns | 0.117 ns |  1.00 |    1 | 0.0067 |      88 B |        1.00 |
-| DispatchR_Stream | 58.43 ns | 0.179 ns | 0.168 ns |  1.90 |    2 | 0.0067 |      88 B |        1.00 |
+| Method           | Mean     | Error    | StdDev   | Median   | Ratio | Rank | Gen0   | Allocated | Alloc Ratio |
+|----------------- |---------:|---------:|---------:|---------:|------:|-----:|-------:|----------:|------------:|
+| Direct_Stream    | 31.15 ns | 0.084 ns | 0.121 ns | 31.16 ns |  1.00 |    1 | 0.0067 |      88 B |        1.00 |
+| DispatchR_Stream | 54.02 ns | 0.069 ns | 0.103 ns | 54.01 ns |  1.73 |    2 | 0.0067 |      88 B |        1.00 |
 
 ## DispatchR - Concurrency
 
-| Method               | Categories | Mean        | Error    | StdDev   | Ratio | RatioSD | Rank | Gen0   | Gen1   | Allocated | Alloc Ratio |
-|--------------------- |----------- |------------:|---------:|---------:|------:|--------:|-----:|-------:|-------:|----------:|------------:|
-| Direct_FanOut        | FanOut     | 1,296.16 ns | 5.089 ns | 4.761 ns |  1.00 |    0.00 |    1 | 0.6523 | 0.0172 |    8536 B |        1.00 |
-| DispatchR_FanOut     | FanOut     | 3,711.58 ns | 6.922 ns | 5.780 ns |  2.86 |    0.01 |    2 | 0.6523 | 0.0153 |    8536 B |        1.00 |
-|                      |            |             |          |          |       |         |      |        |        |           |             |
-| Direct_Throughput    | Throughput |    35.40 ns | 0.046 ns | 0.040 ns |  1.00 |    0.00 |    1 |      - |      - |         - |          NA |
-| DispatchR_Throughput | Throughput | 2,557.63 ns | 5.798 ns | 5.423 ns | 72.25 |    0.17 |    2 |      - |      - |         - |          NA |
+| Method               | Categories | Mean        | Error     | StdDev    | Ratio | RatioSD | Rank | Gen0   | Gen1   | Allocated | Alloc Ratio |
+|--------------------- |----------- |------------:|----------:|----------:|------:|--------:|-----:|-------:|-------:|----------:|------------:|
+| Direct_FanOut        | FanOut     | 1,304.42 ns | 11.290 ns | 16.548 ns |  1.00 |    0.00 |    1 | 0.6523 | 0.0172 |    8536 B |        1.00 |
+| DispatchR_FanOut     | FanOut     | 3,693.85 ns |  6.257 ns |  8.974 ns |  2.83 |    0.04 |    2 | 0.6523 | 0.0153 |    8536 B |        1.00 |
+|                      |            |             |           |           |       |         |      |        |        |           |             |
+| Direct_Throughput    | Throughput |    34.66 ns |  0.089 ns |  0.127 ns |  1.00 |    0.00 |    1 |      - |      - |         - |          NA |
+| DispatchR_Throughput | Throughput | 2,559.92 ns |  9.243 ns | 13.835 ns | 73.86 |    0.47 |    2 |      - |      - |         - |          NA |
 
 ## DispatchR - Cold Start
 
-| Method              | Mean     | Error     | StdDev    | Rank | Gen0   | Gen1   | Allocated |
-|-------------------- |---------:|----------:|----------:|-----:|-------:|-------:|----------:|
-| DispatchR_ColdStart | 1.721 μs | 0.0121 μs | 0.0101 μs |    1 | 0.6771 | 0.0191 |   8.66 KB |
+> **Read the gap, not the total.** `Startup_ContainerOnly` builds the DI container and resolves the
+> mediator. `Startup_WithFirstDispatch` does the same and then dispatches one request. Nearly all of
+> either number is .NET runtime startup and DI container construction, which every library on this
+> page pays alike. **The difference between the two rows is the part that belongs to the library.**
+>
+> Measured one process per sample, because startup is a property of a process and cannot be observed
+> from inside a warm one. Process timings are skewed, so read the median rather than the mean — and
+> the first row executed also absorbs the machine's own file-cache warm-up, which inflates it and so
+> understates the gap.
+
+| Method                              | Mean     | Error    | StdDev   | Median   | Ratio | RatioSD | Rank | Allocated | Alloc Ratio |
+|------------------------------------ |---------:|---------:|---------:|---------:|------:|--------:|-----:|----------:|------------:|
+| DispatchR_Startup_ContainerOnly     | 14.40 ms | 5.518 ms | 9.808 ms | 12.81 ms |  1.00 |    0.00 |    1 |  14.63 KB |        1.00 |
+| DispatchR_Startup_WithFirstDispatch | 15.01 ms | 0.179 ms | 0.317 ms | 14.89 ms |  1.14 |    0.16 |    2 |  16.91 KB |        1.16 |
 
 ## DispatchR - Realistic Pipeline
 
 | Method                      | Mean      | Error    | StdDev   | Ratio | RatioSD | Rank | Gen0   | Allocated | Alloc Ratio |
 |---------------------------- |----------:|---------:|---------:|------:|--------:|-----:|-------:|----------:|------------:|
-| DirectCall_WithPipeline     |  89.81 ns | 0.456 ns | 0.404 ns |  1.00 |    0.00 |    1 | 0.0141 |     184 B |        1.00 |
-| DispatchR_RealisticPipeline | 233.36 ns | 3.839 ns | 3.591 ns |  2.60 |    0.04 |    2 | 0.0212 |     279 B |        1.52 |
+| DirectCall_WithPipeline     |  99.99 ns | 0.250 ns | 0.366 ns |  1.00 |    0.00 |    1 | 0.0129 |     168 B |        1.00 |
+| DispatchR_RealisticPipeline | 246.92 ns | 1.630 ns | 2.176 ns |  2.47 |    0.02 |    2 | 0.0200 |     263 B |        1.57 |
+
+## DispatchR - Behavior Scaling
+
+| Method          | Mean      | Error     | StdDev    | Median    | Ratio | RatioSD | Rank | Allocated | Alloc Ratio |
+|---------------- |----------:|----------:|----------:|----------:|------:|--------:|-----:|----------:|------------:|
+| DirectCall      |  2.088 ns | 0.0051 ns | 0.0074 ns |  2.088 ns |  1.00 |    0.00 |    1 |         - |          NA |
+| Send_0Behaviors | 26.670 ns | 0.0344 ns | 0.0505 ns | 26.665 ns | 12.77 |    0.05 |    2 |         - |          NA |
+| Send_1Behaviors | 31.496 ns | 0.0920 ns | 0.1377 ns | 31.498 ns | 15.08 |    0.08 |    3 |         - |          NA |
+| Send_2Behaviors | 31.338 ns | 0.0848 ns | 0.1270 ns | 31.301 ns | 15.01 |    0.08 |    3 |         - |          NA |
+| Send_3Behaviors | 31.951 ns | 0.0825 ns | 0.1183 ns | 31.945 ns | 15.30 |    0.08 |    3 |         - |          NA |
+| Send_5Behaviors | 31.824 ns | 0.0824 ns | 0.1207 ns | 31.817 ns | 15.24 |    0.08 |    3 |         - |          NA |
+| Send_8Behaviors | 34.227 ns | 0.0978 ns | 0.1464 ns | 34.185 ns | 16.39 |    0.09 |    4 |         - |          NA |
 
 ## Mediator (Source Gen) - Send (No Behaviors)
 
-| Method          | Mean     | Error     | StdDev    | Ratio | Rank | Allocated | Alloc Ratio |
-|---------------- |---------:|----------:|----------:|------:|-----:|----------:|------------:|
-| DirectCall      | 1.893 ns | 0.0036 ns | 0.0032 ns |  1.00 |    1 |         - |          NA |
-| MediatorSG_Send | 5.804 ns | 0.0076 ns | 0.0067 ns |  3.07 |    2 |         - |          NA |
+| Method          | Mean     | Error     | StdDev    | Ratio | RatioSD | Rank | Allocated | Alloc Ratio |
+|---------------- |---------:|----------:|----------:|------:|--------:|-----:|----------:|------------:|
+| DirectCall      | 1.894 ns | 0.0068 ns | 0.0102 ns |  1.00 |    0.00 |    1 |         - |          NA |
+| MediatorSG_Send | 9.798 ns | 0.0127 ns | 0.0187 ns |  5.17 |    0.03 |    2 |         - |          NA |
 
 ## Mediator (Source Gen) - Send (Behaviors)
 
-| Method                     | Mean      | Error     | StdDev    | Ratio | RatioSD | Rank | Allocated | Alloc Ratio |
-|--------------------------- |----------:|----------:|----------:|------:|--------:|-----:|----------:|------------:|
-| DirectCall                 |  1.864 ns | 0.0049 ns | 0.0044 ns |  1.00 |    0.00 |    1 |         - |          NA |
-| MediatorSG_Send_3Behaviors | 23.562 ns | 0.0743 ns | 0.0695 ns | 12.64 |    0.05 |    2 |         - |          NA |
-| MediatorSG_Send_5Behaviors | 29.064 ns | 0.0651 ns | 0.0609 ns | 15.59 |    0.05 |    3 |         - |          NA |
+| Method                     | Mean      | Error     | StdDev    | Median    | Ratio | RatioSD | Rank | Allocated | Alloc Ratio |
+|--------------------------- |----------:|----------:|----------:|----------:|------:|--------:|-----:|----------:|------------:|
+| DirectCall                 |  1.731 ns | 0.0065 ns | 0.0097 ns |  1.730 ns |  1.00 |    0.00 |    1 |         - |          NA |
+| MediatorSG_Send_3Behaviors | 19.421 ns | 0.0244 ns | 0.0357 ns | 19.419 ns | 11.22 |    0.06 |    2 |         - |          NA |
+| MediatorSG_Send_5Behaviors | 27.229 ns | 0.1944 ns | 0.2909 ns | 27.089 ns | 15.73 |    0.19 |    3 |         - |          NA |
 
 ## Mediator (Source Gen) - Send (Object)
 
-| Method                  | Mean     | Error     | StdDev    | Ratio | Rank | Gen0   | Allocated | Alloc Ratio |
-|------------------------ |---------:|----------:|----------:|------:|-----:|-------:|----------:|------------:|
-| MediatorSG_Send_Generic | 5.944 ns | 0.0288 ns | 0.0270 ns |  1.00 |    1 |      - |         - |          NA |
-| MediatorSG_Send_Object  | 6.900 ns | 0.0272 ns | 0.0254 ns |  1.16 |    2 | 0.0018 |      24 B |          NA |
+| Method                  | Mean     | Error    | StdDev   | Ratio | Rank | Gen0   | Allocated | Alloc Ratio |
+|------------------------ |---------:|---------:|---------:|------:|-----:|-------:|----------:|------------:|
+| MediatorSG_Send_Generic | 11.13 ns | 0.024 ns | 0.035 ns |  1.00 |    1 |      - |         - |          NA |
+| MediatorSG_Send_Object  | 13.51 ns | 0.096 ns | 0.140 ns |  1.21 |    2 | 0.0018 |      24 B |          NA |
 
 ## Mediator (Source Gen) - Publish
 
 | Method             | Mean     | Error     | StdDev    | Ratio | RatioSD | Rank | Allocated | Alloc Ratio |
 |------------------- |---------:|----------:|----------:|------:|--------:|-----:|----------:|------------:|
-| Direct_Publish     | 1.360 ns | 0.0056 ns | 0.0052 ns |  1.00 |    0.00 |    1 |         - |          NA |
-| MediatorSG_Publish | 6.104 ns | 0.0124 ns | 0.0116 ns |  4.49 |    0.02 |    2 |         - |          NA |
+| Direct_Publish     | 1.454 ns | 0.0016 ns | 0.0023 ns |  1.00 |    0.00 |    1 |         - |          NA |
+| MediatorSG_Publish | 6.319 ns | 0.0153 ns | 0.0215 ns |  4.35 |    0.02 |    2 |         - |          NA |
 
 ## Mediator (Source Gen) - Publish (Object)
 
 | Method                     | Mean     | Error     | StdDev    | Ratio | Rank | Allocated | Alloc Ratio |
 |--------------------------- |---------:|----------:|----------:|------:|-----:|----------:|------------:|
-| MediatorSG_Publish_Object  | 4.327 ns | 0.0128 ns | 0.0113 ns |  0.69 |    1 |         - |          NA |
-| MediatorSG_Publish_Generic | 6.235 ns | 0.0257 ns | 0.0241 ns |  1.00 |    2 |         - |          NA |
+| MediatorSG_Publish_Object  | 4.076 ns | 0.0048 ns | 0.0072 ns |  0.65 |    1 |         - |          NA |
+| MediatorSG_Publish_Generic | 6.261 ns | 0.0124 ns | 0.0185 ns |  1.00 |    2 |         - |          NA |
 
 ## Mediator (Source Gen) - Stream
 
-| Method            | Mean     | Error    | StdDev   | Ratio | Rank | Gen0   | Allocated | Alloc Ratio |
-|------------------ |---------:|---------:|---------:|------:|-----:|-------:|----------:|------------:|
-| Direct_Stream     | 30.47 ns | 0.127 ns | 0.119 ns |  1.00 |    1 | 0.0067 |      88 B |        1.00 |
-| MediatorSG_Stream | 31.71 ns | 0.118 ns | 0.110 ns |  1.04 |    2 | 0.0067 |      88 B |        1.00 |
+| Method            | Mean     | Error    | StdDev   | Median   | Ratio | Rank | Gen0   | Allocated | Alloc Ratio |
+|------------------ |---------:|---------:|---------:|---------:|------:|-----:|-------:|----------:|------------:|
+| Direct_Stream     | 31.42 ns | 0.079 ns | 0.116 ns | 31.43 ns |  1.00 |    1 | 0.0067 |      88 B |        1.00 |
+| MediatorSG_Stream | 31.78 ns | 0.157 ns | 0.230 ns | 31.81 ns |  1.01 |    1 | 0.0067 |      88 B |        1.00 |
 
 ## Mediator (Source Gen) - Concurrency
 
 | Method                | Categories | Mean        | Error    | StdDev   | Ratio | RatioSD | Rank | Gen0   | Gen1   | Allocated | Alloc Ratio |
 |---------------------- |----------- |------------:|---------:|---------:|------:|--------:|-----:|-------:|-------:|----------:|------------:|
-| Direct_FanOut         | FanOut     | 1,306.52 ns | 6.177 ns | 5.778 ns |  1.00 |    0.00 |    1 | 0.6523 | 0.0172 |    8536 B |        1.00 |
-| MediatorSG_FanOut     | FanOut     | 1,618.57 ns | 4.189 ns | 3.919 ns |  1.24 |    0.01 |    2 | 0.6523 | 0.0172 |    8536 B |        1.00 |
+| Direct_FanOut         | FanOut     | 1,318.31 ns | 3.763 ns | 5.516 ns |  1.00 |    0.00 |    1 | 0.6523 | 0.0172 |    8536 B |        1.00 |
+| MediatorSG_FanOut     | FanOut     | 2,028.31 ns | 3.160 ns | 4.730 ns |  1.54 |    0.01 |    2 | 0.6523 | 0.0153 |    8536 B |        1.00 |
 |                       |            |             |          |          |       |         |      |        |        |           |             |
-| Direct_Throughput     | Throughput |    36.03 ns | 0.719 ns | 1.259 ns |  1.00 |    0.00 |    1 |      - |      - |         - |          NA |
-| MediatorSG_Throughput | Throughput |   408.69 ns | 0.810 ns | 0.757 ns | 11.36 |    0.43 |    2 |      - |      - |         - |          NA |
+| Direct_Throughput     | Throughput |    36.22 ns | 0.774 ns | 1.135 ns |  1.00 |    0.00 |    1 |      - |      - |         - |          NA |
+| MediatorSG_Throughput | Throughput |   782.16 ns | 6.181 ns | 9.251 ns | 21.62 |    0.76 |    2 |      - |      - |         - |          NA |
 
 ## Mediator (Source Gen) - Cold Start
 
-| Method               | Mean     | Error    | StdDev   | Rank | Gen0   | Gen1   | Allocated |
-|--------------------- |---------:|---------:|---------:|-----:|-------:|-------:|----------:|
-| MediatorSG_ColdStart | 10.04 μs | 0.090 μs | 0.084 μs |    1 | 2.8534 | 0.2594 |  36.44 KB |
+> **Read the gap, not the total.** `Startup_ContainerOnly` builds the DI container and resolves the
+> mediator. `Startup_WithFirstDispatch` does the same and then dispatches one request. Nearly all of
+> either number is .NET runtime startup and DI container construction, which every library on this
+> page pays alike. **The difference between the two rows is the part that belongs to the library.**
+>
+> Measured one process per sample, because startup is a property of a process and cannot be observed
+> from inside a warm one. Process timings are skewed, so read the median rather than the mean — and
+> the first row executed also absorbs the machine's own file-cache warm-up, which inflates it and so
+> understates the gap.
+
+| Method                               | Mean     | Error    | StdDev   | Median   | Ratio | RatioSD | Rank | Allocated | Alloc Ratio |
+|------------------------------------- |---------:|---------:|---------:|---------:|------:|--------:|-----:|----------:|------------:|
+| MediatorSG_Startup_ContainerOnly     | 14.32 ms | 5.387 ms | 9.576 ms | 12.81 ms |  1.00 |    0.00 |    1 |  15.47 KB |        1.00 |
+| MediatorSG_Startup_WithFirstDispatch | 19.70 ms | 0.128 ms | 0.227 ms | 19.68 ms |  1.51 |    0.20 |    2 | 147.02 KB |        9.50 |
 
 ## Mediator (Source Gen) - Realistic Pipeline
 
-| Method                       | Mean      | Error    | StdDev   | Ratio | RatioSD | Rank | Gen0   | Allocated | Alloc Ratio |
-|----------------------------- |----------:|---------:|---------:|------:|--------:|-----:|-------:|----------:|------------:|
-| DirectCall_WithPipeline      |  88.63 ns | 0.347 ns | 0.308 ns |  1.00 |    0.00 |    1 | 0.0141 |     184 B |        1.00 |
-| MediatorSG_RealisticPipeline | 229.69 ns | 1.208 ns | 1.130 ns |  2.59 |    0.02 |    2 | 0.0274 |     359 B |        1.95 |
+| Method                       | Mean      | Error    | StdDev   | Ratio | Rank | Gen0   | Allocated | Alloc Ratio |
+|----------------------------- |----------:|---------:|---------:|------:|-----:|-------:|----------:|------------:|
+| DirectCall_WithPipeline      |  96.71 ns | 0.190 ns | 0.260 ns |  1.00 |    1 | 0.0129 |     168 B |        1.00 |
+| MediatorSG_RealisticPipeline | 237.69 ns | 0.760 ns | 1.138 ns |  2.46 |    2 | 0.0255 |     335 B |        1.99 |
+
+## Mediator (Source Gen) - Behavior Scaling
+
+| Method          | Mean      | Error     | StdDev    | Median    | Ratio | RatioSD | Rank | Allocated | Alloc Ratio |
+|---------------- |----------:|----------:|----------:|----------:|------:|--------:|-----:|----------:|------------:|
+| DirectCall      |  1.888 ns | 0.0033 ns | 0.0048 ns |  1.887 ns |  1.00 |    0.00 |    1 |         - |          NA |
+| Send_0Behaviors | 10.529 ns | 0.0161 ns | 0.0236 ns | 10.536 ns |  5.58 |    0.02 |    2 |         - |          NA |
+| Send_1Behaviors | 10.825 ns | 0.0254 ns | 0.0380 ns | 10.820 ns |  5.73 |    0.02 |    3 |         - |          NA |
+| Send_2Behaviors | 13.070 ns | 0.1056 ns | 0.1514 ns | 13.018 ns |  6.92 |    0.08 |    4 |         - |          NA |
+| Send_3Behaviors | 19.870 ns | 0.0297 ns | 0.0416 ns | 19.858 ns | 10.53 |    0.03 |    5 |         - |          NA |
+| Send_5Behaviors | 26.466 ns | 0.0477 ns | 0.0714 ns | 26.459 ns | 14.02 |    0.05 |    6 |         - |          NA |
+| Send_8Behaviors | 34.402 ns | 0.0672 ns | 0.1005 ns | 34.374 ns | 18.22 |    0.07 |    7 |         - |          NA |
 
 ## Send - All Libraries (No Behaviors)
 
 | Method | Mean | Error | StdDev | Ratio | RatioSD | Rank | Gen0 | Allocated | Alloc Ratio |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| DirectCall | 2.090 ns | 0.0081 ns | 0.0076 ns | 1.00 | - | 1 | - | - | NA |
-| DSoft_Send | 2.489 ns | 0.0074 ns | 0.0069 ns | 1.19 | - | 2 | - | - | NA |
+| DirectCall | 1.905 ns | 0.0056 ns | 0.0084 ns | 1.00 | - | 1 | - | - | NA |
+| DSoft_Send | 2.678 ns | 0.0027 ns | 0.0039 ns | 1.41 | - | 2 | - | - | NA |
 | | | | | | | | | | |
-| DirectCall | 1.800 ns | 0.0180 ns | 0.0168 ns | 1.00 | 0.00 | 1 | - | - | NA |
-| MediatR_Send | 42.867 ns | 0.1506 ns | 0.1409 ns | 23.82 | 0.23 | 2 | 0.0190 | 248 B | NA |
+| DirectCall | 1.895 ns | 0.0031 ns | 0.0046 ns | 1.00 | 0.00 | 1 | - | - | NA |
+| MediatR_Send | 40.928 ns | 0.0896 ns | 0.1341 ns | 21.60 | 0.09 | 2 | 0.0190 | 248 B | NA |
 | | | | | | | | | | |
-| DirectCall | 1.803 ns | 0.0109 ns | 0.0097 ns | 1.00 | 0.00 | 1 | - | - | NA |
-| DispatchR_Send | 27.221 ns | 0.0345 ns | 0.0288 ns | 15.10 | 0.08 | 2 | - | - | NA |
+| DirectCall | 1.891 ns | 0.0063 ns | 0.0094 ns | 1.00 | 0.00 | 1 | - | - | NA |
+| DispatchR_Send | 27.122 ns | 0.0905 ns | 0.1355 ns | 14.35 | 0.10 | 2 | - | - | NA |
 | | | | | | | | | | |
-| DirectCall | 1.893 ns | 0.0036 ns | 0.0032 ns | 1.00 | - | 1 | - | - | NA |
-| MediatorSG_Send | 5.804 ns | 0.0076 ns | 0.0067 ns | 3.07 | - | 2 | - | - | NA |
+| DirectCall | 1.894 ns | 0.0068 ns | 0.0102 ns | 1.00 | 0.00 | 1 | - | - | NA |
+| MediatorSG_Send | 9.798 ns | 0.0127 ns | 0.0187 ns | 5.17 | 0.03 | 2 | - | - | NA |
 
 ## Send - All Libraries (Behaviors)
 
-| Method | Mean | Error | StdDev | Ratio | RatioSD | Rank | Gen0 | Allocated | Alloc Ratio |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| DirectCall | 2.085 ns | 0.0054 ns | 0.0048 ns | 1.00 | - | 1 | - | - | NA |
-| DSoft_Send_3Behaviors | 5.381 ns | 0.0092 ns | 0.0086 ns | 2.58 | - | 2 | - | - | NA |
-| DSoft_Send_5Behaviors | 6.425 ns | 0.0114 ns | 0.0106 ns | 3.08 | - | 3 | - | - | NA |
-| | | | | | | | | | |
-| DirectCall | 1.812 ns | 0.0144 ns | 0.0135 ns | 1.00 | 0.00 | 1 | - | - | NA |
-| MediatR_Send_3Behaviors | 109.754 ns | 0.3491 ns | 0.2915 ns | 60.57 | 0.46 | 2 | 0.0575 | 752 B | NA |
-| MediatR_Send_5Behaviors | 140.198 ns | 0.6573 ns | 0.5489 ns | 77.37 | 0.63 | 3 | 0.0782 | 1024 B | NA |
-| | | | | | | | | | |
-| DirectCall | 1.883 ns | 0.0027 ns | 0.0024 ns | 1.00 | 0.00 | 1 | - | - | NA |
-| DispatchR_Send_5Behaviors | 49.538 ns | 0.1137 ns | 0.1008 ns | 26.31 | 0.06 | 2 | - | - | NA |
-| DispatchR_Send_3Behaviors | 50.272 ns | 0.0909 ns | 0.0759 ns | 26.69 | 0.05 | 2 | - | - | NA |
-| | | | | | | | | | |
-| DirectCall | 1.864 ns | 0.0049 ns | 0.0044 ns | 1.00 | 0.00 | 1 | - | - | NA |
-| MediatorSG_Send_3Behaviors | 23.562 ns | 0.0743 ns | 0.0695 ns | 12.64 | 0.05 | 2 | - | - | NA |
-| MediatorSG_Send_5Behaviors | 29.064 ns | 0.0651 ns | 0.0609 ns | 15.59 | 0.05 | 3 | - | - | NA |
+| Method | Mean | Error | StdDev | Median | Ratio | RatioSD | Rank | Gen0 | Allocated | Alloc Ratio |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| DirectCall | 2.113 ns | 0.0058 ns | 0.0087 ns | 2.111 ns | 1.00 | - | 1 | - | - | NA |
+| DSoft_Send_3Behaviors | 5.564 ns | 0.0159 ns | 0.0228 ns | 5.565 ns | 2.63 | - | 2 | - | - | NA |
+| DSoft_Send_5Behaviors | 6.551 ns | 0.0107 ns | 0.0156 ns | 6.554 ns | 3.10 | - | 3 | - | - | NA |
+| | | | | | | | | | | |
+| DirectCall | 1.898 ns | 0.0056 ns | 0.0084 ns | 1.899 ns | 1.00 | 0.00 | 1 | - | - | NA |
+| MediatR_Send_3Behaviors | 107.288 ns | 0.6783 ns | 1.0152 ns | 107.221 ns | 56.54 | 0.58 | 2 | 0.0575 | 752 B | NA |
+| MediatR_Send_5Behaviors | 143.534 ns | 1.1071 ns | 1.6228 ns | 143.570 ns | 75.64 | 0.90 | 3 | 0.0782 | 1024 B | NA |
+| | | | | | | | | | | |
+| DirectCall | 1.886 ns | 0.0151 ns | 0.0226 ns | 1.887 ns | 1.00 | 0.00 | 1 | - | - | NA |
+| DispatchR_Send_3Behaviors | 31.563 ns | 0.0833 ns | 0.1222 ns | 31.526 ns | 16.74 | 0.21 | 2 | - | - | NA |
+| DispatchR_Send_5Behaviors | 31.226 ns | 0.0608 ns | 0.0853 ns | 31.197 ns | 16.56 | 0.20 | 2 | - | - | NA |
+| | | | | | | | | | | |
+| DirectCall | 1.731 ns | 0.0065 ns | 0.0097 ns | 1.730 ns | 1.00 | 0.00 | 1 | - | - | NA |
+| MediatorSG_Send_3Behaviors | 19.421 ns | 0.0244 ns | 0.0357 ns | 19.419 ns | 11.22 | 0.06 | 2 | - | - | NA |
+| MediatorSG_Send_5Behaviors | 27.229 ns | 0.1944 ns | 0.2909 ns | 27.089 ns | 15.73 | 0.19 | 3 | - | - | NA |
 
 ## Send (Object) - All Libraries
 
 | Method | Mean | Error | StdDev | Ratio | RatioSD | Rank | Gen0 | Allocated | Alloc Ratio |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| DSoft_Send_Generic | 2.478 ns | 0.0122 ns | 0.0108 ns | 1.00 | 0.00 | 1 | - | - | NA |
-| DSoft_Send_Object | 5.585 ns | 0.0775 ns | 0.0725 ns | 2.25 | 0.03 | 2 | 0.0018 | 24 B | NA |
+| DSoft_Send_Generic | 2.552 ns | 0.0061 ns | 0.0091 ns | 1.00 | 0.00 | 1 | - | - | NA |
+| DSoft_Send_Object | 6.646 ns | 0.0258 ns | 0.0386 ns | 2.60 | 0.02 | 2 | 0.0018 | 24 B | NA |
 | | | | | | | | | | |
-| MediatR_Send_Generic | 41.78 ns | 0.202 ns | 0.189 ns | 1.00 | - | 1 | 0.0190 | 248 B | 1.00 |
-| MediatR_Send_Object | 45.38 ns | 0.219 ns | 0.194 ns | 1.09 | - | 2 | 0.0220 | 288 B | 1.16 |
+| MediatR_Send_Generic | 42.79 ns | 0.082 ns | 0.123 ns | 1.00 | - | 1 | 0.0190 | 248 B | 1.00 |
+| MediatR_Send_Object | 46.14 ns | 0.332 ns | 0.496 ns | 1.08 | - | 2 | 0.0220 | 288 B | 1.16 |
 | | | | | | | | | | |
-| MediatorSG_Send_Generic | 5.944 ns | 0.0288 ns | 0.0270 ns | 1.00 | - | 1 | - | - | NA |
-| MediatorSG_Send_Object | 6.900 ns | 0.0272 ns | 0.0254 ns | 1.16 | - | 2 | 0.0018 | 24 B | NA |
+| MediatorSG_Send_Generic | 11.13 ns | 0.024 ns | 0.035 ns | 1.00 | - | 1 | - | - | NA |
+| MediatorSG_Send_Object | 13.51 ns | 0.096 ns | 0.140 ns | 1.21 | - | 2 | 0.0018 | 24 B | NA |
 
 ## Publish - All Libraries
 
 | Method | Mean | Error | StdDev | Ratio | RatioSD | Rank | Gen0 | Allocated | Alloc Ratio |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Direct_Publish | 1.346 ns | 0.0032 ns | 0.0029 ns | 1.00 | - | 1 | - | - | NA |
-| DSoft_Publish | 2.349 ns | 0.0042 ns | 0.0040 ns | 1.75 | - | 2 | - | - | NA |
+| Direct_Publish | 1.460 ns | 0.0037 ns | 0.0056 ns | 1.00 | - | 1 | - | - | NA |
+| DSoft_Publish | 2.359 ns | 0.0043 ns | 0.0065 ns | 1.62 | - | 2 | - | - | NA |
 | | | | | | | | | | |
-| Direct_Publish | 1.364 ns | 0.0062 ns | 0.0058 ns | 1.00 | 0.00 | 1 | - | - | NA |
-| MediatR_Publish | 110.903 ns | 0.4036 ns | 0.3578 ns | 81.30 | 0.42 | 2 | 0.0575 | 752 B | NA |
+| Direct_Publish | 1.469 ns | 0.0031 ns | 0.0046 ns | 1.00 | 0.00 | 1 | - | - | NA |
+| MediatR_Publish | 112.916 ns | 0.1734 ns | 0.2595 ns | 76.86 | 0.29 | 2 | 0.0575 | 752 B | NA |
 | | | | | | | | | | |
-| Direct_Publish | 1.365 ns | 0.0058 ns | 0.0054 ns | 1.00 | 0.00 | 1 | - | - | NA |
-| DispatchR_Publish | 39.380 ns | 0.1080 ns | 0.1010 ns | 28.84 | 0.13 | 2 | - | - | NA |
+| Direct_Publish | 1.467 ns | 0.0015 ns | 0.0022 ns | 1.00 | 0.00 | 1 | - | - | NA |
+| DispatchR_Publish | 32.301 ns | 0.0683 ns | 0.1022 ns | 22.02 | 0.08 | 2 | - | - | NA |
 | | | | | | | | | | |
-| Direct_Publish | 1.360 ns | 0.0056 ns | 0.0052 ns | 1.00 | 0.00 | 1 | - | - | NA |
-| MediatorSG_Publish | 6.104 ns | 0.0124 ns | 0.0116 ns | 4.49 | 0.02 | 2 | - | - | NA |
+| Direct_Publish | 1.454 ns | 0.0016 ns | 0.0023 ns | 1.00 | 0.00 | 1 | - | - | NA |
+| MediatorSG_Publish | 6.319 ns | 0.0153 ns | 0.0215 ns | 4.35 | 0.02 | 2 | - | - | NA |
 
 ## Publish (Object) - All Libraries
 
 | Method | Mean | Error | StdDev | Ratio | RatioSD | Rank | Gen0 | Allocated | Alloc Ratio |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| DSoft_Publish_Generic | 2.379 ns | 0.0038 ns | 0.0034 ns | 1.00 | - | 1 | - | - | NA |
-| DSoft_Publish_Object | 3.992 ns | 0.0064 ns | 0.0057 ns | 1.68 | - | 2 | - | - | NA |
+| DSoft_Publish_Generic | 2.407 ns | 0.0037 ns | 0.0053 ns | 1.00 | - | 1 | - | - | NA |
+| DSoft_Publish_Object | 3.753 ns | 0.0035 ns | 0.0050 ns | 1.56 | - | 2 | - | - | NA |
 | | | | | | | | | | |
-| MediatR_Publish_Object | 107.9 ns | 0.48 ns | 0.42 ns | 0.93 | - | 1 | 0.0575 | 752 B | 1.00 |
-| MediatR_Publish_Generic | 115.8 ns | 0.52 ns | 0.49 ns | 1.00 | - | 2 | 0.0575 | 752 B | 1.00 |
+| MediatR_Publish_Object | 111.6 ns | 0.31 ns | 0.46 ns | 0.94 | - | 1 | 0.0575 | 752 B | 1.00 |
+| MediatR_Publish_Generic | 118.4 ns | 0.36 ns | 0.53 ns | 1.00 | - | 2 | 0.0575 | 752 B | 1.00 |
 | | | | | | | | | | |
-| DispatchR_Publish_Generic | 31.54 ns | 0.131 ns | 0.109 ns | 1.00 | 0.00 | 1 | - | - | NA |
-| DispatchR_Publish_Object | 198.99 ns | 0.477 ns | 0.423 ns | 6.31 | 0.02 | 2 | 0.0196 | 256 B | NA |
+| DispatchR_Publish_Generic | 33.43 ns | 0.066 ns | 0.095 ns | 1.00 | 0.00 | 1 | - | - | NA |
+| DispatchR_Publish_Object | 201.09 ns | 0.305 ns | 0.447 ns | 6.02 | 0.02 | 2 | 0.0196 | 256 B | NA |
 | | | | | | | | | | |
-| MediatorSG_Publish_Object | 4.327 ns | 0.0128 ns | 0.0113 ns | 0.69 | - | 1 | - | - | NA |
-| MediatorSG_Publish_Generic | 6.235 ns | 0.0257 ns | 0.0241 ns | 1.00 | - | 2 | - | - | NA |
+| MediatorSG_Publish_Object | 4.076 ns | 0.0048 ns | 0.0072 ns | 0.65 | - | 1 | - | - | NA |
+| MediatorSG_Publish_Generic | 6.261 ns | 0.0124 ns | 0.0185 ns | 1.00 | - | 2 | - | - | NA |
 
 ## Stream - All Libraries
 
-| Method | Mean | Error | StdDev | Ratio | RatioSD | Rank | Gen0 | Allocated | Alloc Ratio |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| DSoft_Stream | 31.13 ns | 0.277 ns | 0.259 ns | 0.98 | - | 1 | 0.0067 | 88 B | 1.00 |
-| Direct_Stream | 31.80 ns | 0.196 ns | 0.184 ns | 1.00 | - | 1 | 0.0067 | 88 B | 1.00 |
-| | | | | | | | | | |
-| Direct_Stream | 30.43 ns | 0.178 ns | 0.166 ns | 1.00 | 0.00 | 1 | 0.0067 | 88 B | 1.00 |
-| MediatR_Stream | 106.23 ns | 0.232 ns | 0.217 ns | 3.49 | 0.02 | 2 | 0.0354 | 464 B | 5.27 |
-| | | | | | | | | | |
-| Direct_Stream | 30.68 ns | 0.125 ns | 0.117 ns | 1.00 | - | 1 | 0.0067 | 88 B | 1.00 |
-| DispatchR_Stream | 58.43 ns | 0.179 ns | 0.168 ns | 1.90 | - | 2 | 0.0067 | 88 B | 1.00 |
-| | | | | | | | | | |
-| Direct_Stream | 30.47 ns | 0.127 ns | 0.119 ns | 1.00 | - | 1 | 0.0067 | 88 B | 1.00 |
-| MediatorSG_Stream | 31.71 ns | 0.118 ns | 0.110 ns | 1.04 | - | 2 | 0.0067 | 88 B | 1.00 |
+| Method | Mean | Error | StdDev | Median | Ratio | RatioSD | Rank | Gen0 | Allocated | Alloc Ratio |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Direct_Stream | 30.12 ns | 0.069 ns | 0.103 ns | 30.11 ns | 1.00 | - | 1 | 0.0067 | 88 B | 1.00 |
+| DSoft_Stream | 30.72 ns | 0.138 ns | 0.207 ns | 30.61 ns | 1.02 | - | 1 | 0.0067 | 88 B | 1.00 |
+| | | | | | | | | | | |
+| Direct_Stream | 30.94 ns | 0.085 ns | 0.120 ns | 30.94 ns | 1.00 | 0.00 | 1 | 0.0067 | 88 B | 1.00 |
+| MediatR_Stream | 112.76 ns | 1.507 ns | 2.209 ns | 112.53 ns | 3.64 | 0.07 | 2 | 0.0354 | 464 B | 5.27 |
+| | | | | | | | | | | |
+| Direct_Stream | 31.15 ns | 0.084 ns | 0.121 ns | 31.16 ns | 1.00 | - | 1 | 0.0067 | 88 B | 1.00 |
+| DispatchR_Stream | 54.02 ns | 0.069 ns | 0.103 ns | 54.01 ns | 1.73 | - | 2 | 0.0067 | 88 B | 1.00 |
+| | | | | | | | | | | |
+| Direct_Stream | 31.42 ns | 0.079 ns | 0.116 ns | 31.43 ns | 1.00 | - | 1 | 0.0067 | 88 B | 1.00 |
+| MediatorSG_Stream | 31.78 ns | 0.157 ns | 0.230 ns | 31.81 ns | 1.01 | - | 1 | 0.0067 | 88 B | 1.00 |
 
 ## Concurrency - All Libraries
 
-| Method | Mean | Error | StdDev | Ratio | RatioSD | Rank | Gen0 | Gen1 | Allocated | Alloc Ratio |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| DSoft_FanOut | 1,287.13 ns | 2.821 ns | 2.501 ns | 0.99 | 0.01 | 1 | 0.6523 | 0.0172 | 8536 B | 1.00 |
-| Direct_FanOut | 1,295.62 ns | 8.462 ns | 7.915 ns | 1.00 | 0.00 | 1 | 0.6523 | 0.0172 | 8536 B | 1.00 |
-| Direct_Throughput | 35.79 ns | 0.682 ns | 0.638 ns | 1.00 | 0.00 | 1 | - | - | - | NA |
-| DSoft_Throughput | 45.49 ns | 0.078 ns | 0.073 ns | 1.27 | 0.02 | 2 | - | - | - | NA |
-| | | | | | | | | | | |
-| Direct_FanOut | 1,251.65 ns | 3.279 ns | 2.907 ns | 1.00 | 0.00 | 1 | 0.6523 | 0.0172 | 8536 B | 1.00 |
-| MediatR_FanOut | 4,511.74 ns | 20.858 ns | 17.418 ns | 3.60 | 0.02 | 2 | 1.5640 | 0.0381 | 20536 B | 2.41 |
-| Direct_Throughput | 34.60 ns | 0.042 ns | 0.037 ns | 1.00 | 0.00 | 1 | - | - | - | NA |
-| MediatR_Throughput | 4,011.28 ns | 18.817 ns | 16.681 ns | 115.92 | 0.48 | 2 | 1.8921 | - | 24800 B | NA |
-| | | | | | | | | | | |
-| Direct_FanOut | 1,296.16 ns | 5.089 ns | 4.761 ns | 1.00 | 0.00 | 1 | 0.6523 | 0.0172 | 8536 B | 1.00 |
-| DispatchR_FanOut | 3,711.58 ns | 6.922 ns | 5.780 ns | 2.86 | 0.01 | 2 | 0.6523 | 0.0153 | 8536 B | 1.00 |
-| Direct_Throughput | 35.40 ns | 0.046 ns | 0.040 ns | 1.00 | 0.00 | 1 | - | - | - | NA |
-| DispatchR_Throughput | 2,557.63 ns | 5.798 ns | 5.423 ns | 72.25 | 0.17 | 2 | - | - | - | NA |
-| | | | | | | | | | | |
-| Direct_FanOut | 1,306.52 ns | 6.177 ns | 5.778 ns | 1.00 | 0.00 | 1 | 0.6523 | 0.0172 | 8536 B | 1.00 |
-| MediatorSG_FanOut | 1,618.57 ns | 4.189 ns | 3.919 ns | 1.24 | 0.01 | 2 | 0.6523 | 0.0172 | 8536 B | 1.00 |
-| Direct_Throughput | 36.03 ns | 0.719 ns | 1.259 ns | 1.00 | 0.00 | 1 | - | - | - | NA |
-| MediatorSG_Throughput | 408.69 ns | 0.810 ns | 0.757 ns | 11.36 | 0.43 | 2 | - | - | - | NA |
+| Method | Mean | Error | StdDev | Median | Ratio | RatioSD | Rank | Gen0 | Gen1 | Allocated | Alloc Ratio |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| DSoft_FanOut | 1,329.28 ns | 3.984 ns | 5.963 ns | - | 0.97 | 0.01 | 1 | 0.6523 | 0.0172 | 8536 B | 1.00 |
+| Direct_FanOut | 1,374.96 ns | 4.174 ns | 6.119 ns | - | 1.00 | 0.00 | 2 | 0.6523 | 0.0172 | 8536 B | 1.00 |
+| Direct_Throughput | 36.49 ns | 0.778 ns | 1.165 ns | - | 1.00 | 0.00 | 1 | - | - | - | NA |
+| DSoft_Throughput | 45.72 ns | 0.095 ns | 0.140 ns | - | 1.25 | 0.04 | 2 | - | - | - | NA |
+| | | | | | | | | | | | |
+| Direct_FanOut | 1,338.54 ns | 4.723 ns | 7.070 ns | 1,340.10 ns | 1.00 | 0.00 | 1 | 0.6523 | 0.0172 | 8536 B | 1.00 |
+| MediatR_FanOut | 4,600.43 ns | 11.059 ns | 16.552 ns | 4,598.66 ns | 3.44 | 0.02 | 2 | 1.5640 | 0.0381 | 20536 B | 2.41 |
+| Direct_Throughput | 35.80 ns | 0.711 ns | 1.065 ns | 35.20 ns | 1.00 | 0.00 | 1 | - | - | - | NA |
+| MediatR_Throughput | 3,910.66 ns | 7.277 ns | 10.666 ns | 3,911.42 ns | 109.34 | 3.13 | 2 | 1.8921 | - | 24800 B | NA |
+| | | | | | | | | | | | |
+| Direct_FanOut | 1,304.42 ns | 11.290 ns | 16.548 ns | - | 1.00 | 0.00 | 1 | 0.6523 | 0.0172 | 8536 B | 1.00 |
+| DispatchR_FanOut | 3,693.85 ns | 6.257 ns | 8.974 ns | - | 2.83 | 0.04 | 2 | 0.6523 | 0.0153 | 8536 B | 1.00 |
+| Direct_Throughput | 34.66 ns | 0.089 ns | 0.127 ns | - | 1.00 | 0.00 | 1 | - | - | - | NA |
+| DispatchR_Throughput | 2,559.92 ns | 9.243 ns | 13.835 ns | - | 73.86 | 0.47 | 2 | - | - | - | NA |
+| | | | | | | | | | | | |
+| Direct_FanOut | 1,318.31 ns | 3.763 ns | 5.516 ns | - | 1.00 | 0.00 | 1 | 0.6523 | 0.0172 | 8536 B | 1.00 |
+| MediatorSG_FanOut | 2,028.31 ns | 3.160 ns | 4.730 ns | - | 1.54 | 0.01 | 2 | 0.6523 | 0.0153 | 8536 B | 1.00 |
+| Direct_Throughput | 36.22 ns | 0.774 ns | 1.135 ns | - | 1.00 | 0.00 | 1 | - | - | - | NA |
+| MediatorSG_Throughput | 782.16 ns | 6.181 ns | 9.251 ns | - | 21.62 | 0.76 | 2 | - | - | - | NA |
 
 ## Cold Start - All Libraries
 
-| Method | Mean | Error | StdDev | Rank | Gen0 | Gen1 | Allocated |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| DSoft_ColdStart | 1.930 μs | 0.0114 μs | 0.0101 μs | 1 | 0.8659 | 0.0286 | 11.07 KB |
-| | | | | | | | |
-| MediatR_ColdStart | 3.212 μs | 0.0203 μs | 0.0190 μs | 1 | 0.9766 | 0.0305 | 12.49 KB |
-| | | | | | | | |
-| DispatchR_ColdStart | 1.721 μs | 0.0121 μs | 0.0101 μs | 1 | 0.6771 | 0.0191 | 8.66 KB |
-| | | | | | | | |
-| MediatorSG_ColdStart | 10.04 μs | 0.090 μs | 0.084 μs | 1 | 2.8534 | 0.2594 | 36.44 KB |
+> **Read the gap, not the total.** `Startup_ContainerOnly` builds the DI container and resolves the
+> mediator. `Startup_WithFirstDispatch` does the same and then dispatches one request. Nearly all of
+> either number is .NET runtime startup and DI container construction, which every library on this
+> page pays alike. **The difference between the two rows is the part that belongs to the library.**
+>
+> Measured one process per sample, because startup is a property of a process and cannot be observed
+> from inside a warm one. Process timings are skewed, so read the median rather than the mean — and
+> the first row executed also absorbs the machine's own file-cache warm-up, which inflates it and so
+> understates the gap.
+
+| Method | Mean | Error | StdDev | Median | Ratio | RatioSD | Rank | Allocated | Alloc Ratio |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| DSoft_Startup_ContainerOnly | 15.44 ms | 5.494 ms | 9.766 ms | 13.93 ms | 1.00 | 0.00 | 1 | 17.25 KB | 1.00 |
+| DSoft_Startup_WithFirstDispatch | 17.28 ms | 0.131 ms | 0.233 ms | 17.29 ms | 1.22 | 0.16 | 2 | 17.25 KB | 1.00 |
+| | | | | | | | | | |
+| MediatR_Startup_WithFirstDispatch | 29.39 ms | 0.223 ms | 0.397 ms | 29.34 ms | 1.01 | 0.11 | 1 | 15.08 KB | 1.22 |
+| MediatR_Startup_ContainerOnly | 30.05 ms | 5.500 ms | 9.776 ms | 28.51 ms | 1.00 | 0.00 | 1 | 12.38 KB | 1.00 |
+| | | | | | | | | | |
+| DispatchR_Startup_ContainerOnly | 14.40 ms | 5.518 ms | 9.808 ms | 12.81 ms | 1.00 | 0.00 | 1 | 14.63 KB | 1.00 |
+| DispatchR_Startup_WithFirstDispatch | 15.01 ms | 0.179 ms | 0.317 ms | 14.89 ms | 1.14 | 0.16 | 2 | 16.91 KB | 1.16 |
+| | | | | | | | | | |
+| MediatorSG_Startup_ContainerOnly | 14.32 ms | 5.387 ms | 9.576 ms | 12.81 ms | 1.00 | 0.00 | 1 | 15.47 KB | 1.00 |
+| MediatorSG_Startup_WithFirstDispatch | 19.70 ms | 0.128 ms | 0.227 ms | 19.68 ms | 1.51 | 0.20 | 2 | 147.02 KB | 9.50 |
 
 ## Realistic Pipeline - All Libraries
 
 | Method | Mean | Error | StdDev | Ratio | RatioSD | Rank | Gen0 | Allocated | Alloc Ratio |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| DirectCall_WithPipeline | 92.70 ns | 0.507 ns | 0.474 ns | 1.00 | - | 1 | 0.0141 | 184 B | 1.00 |
-| DSoft_RealisticPipeline | 102.84 ns | 0.404 ns | 0.378 ns | 1.11 | - | 2 | 0.0122 | 160 B | 0.87 |
+| DirectCall_WithPipeline | 100.1 ns | 0.16 ns | 0.23 ns | 1.00 | - | 1 | 0.0129 | 168 B | 1.00 |
+| DSoft_RealisticPipeline | 111.9 ns | 0.52 ns | 0.70 ns | 1.12 | - | 2 | 0.0110 | 144 B | 0.86 |
 | | | | | | | | | | |
-| DirectCall_WithPipeline | 94.79 ns | 0.437 ns | 0.409 ns | 1.00 | 0.00 | 1 | 0.0141 | 184 B | 1.00 |
-| MediatR_RealisticPipeline | 354.12 ns | 1.538 ns | 1.439 ns | 3.74 | 0.02 | 2 | 0.0792 | 1039 B | 5.65 |
+| DirectCall_WithPipeline | 98.57 ns | 0.345 ns | 0.495 ns | 1.00 | 0.00 | 1 | 0.0129 | 168 B | 1.00 |
+| MediatR_RealisticPipeline | 350.62 ns | 0.585 ns | 0.781 ns | 3.56 | 0.02 | 2 | 0.0777 | 1016 B | 6.05 |
 | | | | | | | | | | |
-| DirectCall_WithPipeline | 89.81 ns | 0.456 ns | 0.404 ns | 1.00 | 0.00 | 1 | 0.0141 | 184 B | 1.00 |
-| DispatchR_RealisticPipeline | 233.36 ns | 3.839 ns | 3.591 ns | 2.60 | 0.04 | 2 | 0.0212 | 279 B | 1.52 |
+| DirectCall_WithPipeline | 99.99 ns | 0.250 ns | 0.366 ns | 1.00 | 0.00 | 1 | 0.0129 | 168 B | 1.00 |
+| DispatchR_RealisticPipeline | 246.92 ns | 1.630 ns | 2.176 ns | 2.47 | 0.02 | 2 | 0.0200 | 263 B | 1.57 |
 | | | | | | | | | | |
-| DirectCall_WithPipeline | 88.63 ns | 0.347 ns | 0.308 ns | 1.00 | 0.00 | 1 | 0.0141 | 184 B | 1.00 |
-| MediatorSG_RealisticPipeline | 229.69 ns | 1.208 ns | 1.130 ns | 2.59 | 0.02 | 2 | 0.0274 | 359 B | 1.95 |
+| DirectCall_WithPipeline | 96.71 ns | 0.190 ns | 0.260 ns | 1.00 | - | 1 | 0.0129 | 168 B | 1.00 |
+| MediatorSG_RealisticPipeline | 237.69 ns | 0.760 ns | 1.138 ns | 2.46 | - | 2 | 0.0255 | 335 B | 1.99 |
 
 ## Running Benchmarks
 
