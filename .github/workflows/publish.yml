@@ -276,15 +276,23 @@ jobs:
   #  summary is on screen -- every package, every version, and which ones are
   #  about to become permanent -- when the request arrives.
   #
-  #  Attach required reviewers to the `nuget.org` environment in
-  #  Settings -> Environments to make that gate real. Without them this job
-  #  simply runs, which is still no worse than before.
+  #  The environment names are NOT the input values, and the mapping is the
+  #  point. `nuget-publish` already exists in Settings -> Environments with
+  #  yandersr as a required reviewer. Naming the environment after the input
+  #  would have asked for `nuget.org`, which does not exist -- GitHub creates a
+  #  missing environment on the fly with NO protection rules, so the gate that
+  #  was already configured would have been silently bypassed by a job that
+  #  looked like it had one.
+  #
+  #  Adding a target here means adding a case below. That is deliberate: the
+  #  mapping should be something someone wrote down, not something derived from
+  #  a dropdown label.
   # ════════════════════════════════════════════════════════════════════════
   push:
     name: Push to ${{ inputs.target }}
     needs: pack
     runs-on: ubuntu-latest
-    environment: ${{ inputs.target }}
+    environment: ${{ inputs.target == 'nuget.org' && 'nuget-publish' || 'github-packages' }}
 
     permissions:
       contents: read
