@@ -176,5 +176,29 @@ namespace DSoftStudio.Mediator.Generators
                         + "the published application. Unlike DSOFT009 this reports 'file' types too: a file handler "
                         + "is simply not registered, but a file BEHAVIOR keeps working and quietly costs AOT "
                         + "compatibility, which is not something the author chose by writing 'file'.");
+
+        public static readonly DiagnosticDescriptor CachedResponseNeedsSerializer = new(
+            id: "DSOFT012",
+            title: "Cached response type has no serializer for an AOT or trimmed build",
+            messageFormat: "'{0}' is cached and returns '{1}', which has no registered serializer. This build "
+                          + "publishes without a JIT, where HybridCache's reflection-based JSON fallback is "
+                          + "disabled, so the first dispatch of this request will throw. To fix: list the type in "
+                          + "a JsonSerializerContext and register it as the cache's serializer options, keyed on "
+                          + "typeof(IHybridCacheSerializer<>); or register an IHybridCacheSerializer<{1}>.",
+            category: "DSoftStudio.Mediator.Usage",
+            defaultSeverity: DiagnosticSeverity.Warning,
+            isEnabledByDefault: true,
+            description: "HybridCache serializes every payload it caches, and AddHybridCache pre-registers a "
+                        + "serializer for exactly two types: string and byte[]. Every other response type reaches "
+                        + "the reflection-based System.Text.Json fallback, which Native AOT and trimming disable. "
+                        + "Nothing catches this earlier: the build succeeds, the publish succeeds, the application "
+                        + "starts, and the failure arrives on the first dispatch of a cacheable request. ILC does "
+                        + "warn, but about Microsoft's serializer rather than about the request that will fail. "
+                        + "This rule only fires when the compilation is actually publishing AOT or trimmed, so an "
+                        + "ordinary build stays silent, and only for response types that genuinely lack a "
+                        + "serializer registration this compilation can see. Marking the response "
+                        + "[ImmutableObject(true)] is NOT a fix: verified in a native binary, it throws exactly as "
+                        + "an unmarked type does, while also switching callers from a copy each to one shared "
+                        + "instance for the whole entry lifetime.");
     }
 }

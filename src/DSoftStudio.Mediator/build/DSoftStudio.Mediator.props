@@ -1,4 +1,4 @@
-<Project>
+﻿<Project>
   <PropertyGroup>
     <!-- Enable interceptors for the DSoftStudio.Mediator source generator.
          The generator emits interceptor methods in this namespace to replace
@@ -25,5 +25,11 @@
   <ItemGroup>
     <CompilerVisibleProperty Include="DSoftMediatorSuppressInterceptors" />
     <CompilerVisibleProperty Include="DSoftMediatorDisableAggressive" />
+    <!-- Whether the consumer is publishing without a JIT. The caching companion's payloads are
+         serialized by HybridCache, which falls back to reflection-based System.Text.Json when no
+         serializer is registered for the type — and these two modes disable exactly that. Knowing
+         which build this is keeps DSOFT012 silent for everyone else. -->
+    <CompilerVisibleProperty Include="PublishAot" />
+    <CompilerVisibleProperty Include="PublishTrimmed" />
   </ItemGroup>
 </Project>

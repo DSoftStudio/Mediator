@@ -9,3 +9,4 @@ DSOFT008 | DSoftStudio.Mediator.Usage | Warning | AddMediator() registers core s
 DSOFT009 | DSoftStudio.Mediator | Warning | Handler skipped because generated code cannot name it
 DSOFT010 | DSoftStudio.Mediator.Usage | Warning | Pipeline component registered after the mediator pipeline scan
 DSOFT011 | DSoftStudio.Mediator | Warning | Pipeline behavior left on the runtime path because generated code cannot name it
+DSOFT012 | DSoftStudio.Mediator.Usage | Warning | Cached response type has no serializer for an AOT or trimmed build
