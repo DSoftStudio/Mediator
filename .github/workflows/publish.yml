@@ -37,20 +37,19 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
-  publish:
-    name: Publish to ${{ inputs.target }}
+  # ════════════════════════════════════════════════════════════════════════
+  #  Job 1 — decide, build, and SAY what would be published.
+  #
+  #  Nothing here reaches a feed. It ends by writing a manifest naming every
+  #  package, its exact version, and whether that version already exists on the
+  #  target feed — which is the thing the button cannot tell you, because the
+  #  companions carry their own versions and move independently of the mediator.
+  # ════════════════════════════════════════════════════════════════════════
+  pack:
+    name: Build and verify
     runs-on: ubuntu-latest
-
-    # Each target gets a GitHub Environment of the same name, so Settings ->
-    # Environments can attach required reviewers and scope the API keys to it.
-    # Worth doing for nuget.org in particular: a published version can be
-    # unlisted but never replaced or removed, so that push is the one step here
-    # with no undo. Repo-level secrets keep working either way — this only adds
-    # a place to put protection rules.
-    environment: ${{ inputs.target }}
 
     steps:
       # ── nuget.org is main-only, and this is a FAILING step on purpose ──
@@ -212,18 +211,94 @@ jobs:
           fi
           echo "Matched $expected"
 
-      - name: List what will be published
+      # ── The manifest, and the reason this job exists separately ──
+      #
+      # `version` covers DSoftStudio.Mediator and nothing else. Every companion
+      # carries its own <Version> and they move independently -- the mediator can
+      # be at 1.4.0-rc.1 while HybridCache sits at 1.0.10-rc.1 -- so ticking
+      # "also publish the companions" published three versions nobody had named
+      # anywhere in the form.
+      #
+      # This prints them, and for nuget.org asks the feed whether each already
+      # exists. A version that is already there will be skipped by
+      # --skip-duplicate and costs nothing; a version that is NOT there is about
+      # to become permanent, because nuget.org lets you unlist but never replace
+      # or remove. The two cases deserve to look different to whoever is reading.
+      - name: Write the publish manifest
         env:
           TARGET: ${{ inputs.target }}
         run: |
+          set -e
           {
-            echo "### Publishing to \`$TARGET\`"
+            echo "### Would publish to \`$TARGET\`"
             echo
-            echo '| Package |'
-            echo '|---|'
-            for f in nupkgs/*.nupkg; do echo "| \`$(basename "$f")\` |"; done
+            echo "| Package | Version | Already on the feed? |"
+            echo "|---|---|---|"
           } >> "$GITHUB_STEP_SUMMARY"
-          ls -la nupkgs/
+
+          for f in nupkgs/*.nupkg; do
+            base=$(basename "$f" .nupkg)
+            id=$(echo "$base" | sed -E 's/\.[0-9]+\.[0-9]+\.[0-9]+.*$//')
+            ver=${base#"$id."}
+
+            state='— (not checked for this feed)'
+            if [ "$TARGET" = "nuget.org" ]; then
+              lower=$(echo "$id" | tr '[:upper:]' '[:lower:]')
+              # -F and -x, not a regex: a version is full of dots, and a dot in a
+              # pattern matches any character. "1.4.0-rc.1" as a regex also matches
+              # "1x4x0-rcx1", which would report a version as already published when
+              # it is not -- the exact direction that makes this table dangerous.
+              # Commas are stripped with the quotes so each line is a bare version.
+              if curl -sf --max-time 20 "https://api.nuget.org/v3-flatcontainer/$lower/index.json"                    | tr -d ' ",' | grep -qxF "$ver"; then
+                state='yes — `--skip-duplicate` makes this a no-op'
+              else
+                state='**NO — this push is permanent**'
+              fi
+            fi
+
+            echo "| \`$id\` | \`$ver\` | $state |" >> "$GITHUB_STEP_SUMMARY"
+            echo "  $id  $ver  $state"
+          done
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: nupkgs
+          path: nupkgs/*
+          retention-days: 7
+
+  # ════════════════════════════════════════════════════════════════════════
+  #  Job 2 — the only place anything leaves this repository.
+  #
+  #  Separate from `pack` so the GitHub Environment gate lands BETWEEN the
+  #  manifest and the push. On one job the approval fired before checkout, and
+  #  a reviewer was asked to approve with nothing to look at; now job 1's
+  #  summary is on screen -- every package, every version, and which ones are
+  #  about to become permanent -- when the request arrives.
+  #
+  #  Attach required reviewers to the `nuget.org` environment in
+  #  Settings -> Environments to make that gate real. Without them this job
+  #  simply runs, which is still no worse than before.
+  # ════════════════════════════════════════════════════════════════════════
+  push:
+    name: Push to ${{ inputs.target }}
+    needs: pack
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.target }}
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Download the packages job 1 built
+        uses: actions/download-artifact@v4
+        with:
+          name: nupkgs
+          path: nupkgs
+
+      - name: List what arrived
+        run: ls -la nupkgs/
 
       - name: Push to GitHub Packages
         if: inputs.target == 'github-packages'
