@@ -1,8 +1,9 @@
-// Copyright (c) DSoftStudio. All rights reserved.
+﻿// Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using DSoftStudio.Mediator.Abstractions;
 using Microsoft.Extensions.Caching.Hybrid;
+using System.Text.Json;
 using Cache = Microsoft.Extensions.Caching.Hybrid.HybridCache;
 
 namespace DSoftStudio.Mediator.HybridCache;
@@ -39,17 +40,27 @@ public sealed class CachingBehavior<TRequest, TResponse>
         if (request is not ICachedRequest cached)
             return await next.Handle(request, cancellationToken);
 
-        return await _cache.GetOrCreateAsync(
-            cached.CacheKey,
-            // The state overload keeps the factory delegate static: no closure is allocated per
-            // dispatch, and the delegate is cached once by the compiler.
-            new FactoryState(request, next, ExecutionContext.Capture()),
-            static (state, token) => state.Invoke(token),
-            new HybridCacheEntryOptions
-            {
-                Expiration = cached.Duration
-            },
-            cancellationToken: cancellationToken);
+        try
+        {
+            return await _cache.GetOrCreateAsync(
+                cached.CacheKey,
+                // The state overload keeps the factory delegate static: no closure is allocated per
+                // dispatch, and the delegate is cached once by the compiler.
+                new FactoryState(request, next, ExecutionContext.Capture()),
+                static (state, token) => state.Invoke(token),
+                new HybridCacheEntryOptions
+                {
+                    Expiration = cached.Duration
+                },
+                cancellationToken: cancellationToken);
+        }
+        // Only when reflection-based JSON is off, which is the whole precondition for the failure
+        // this explains. An exception filter is evaluated ONLY on the way out, so a dispatch that
+        // does not throw pays nothing for this.
+        catch (InvalidOperationException ex) when (!JsonSerializer.IsReflectionEnabledByDefault)
+        {
+            throw new InvalidOperationException(CachingBehaviorGuidance.For<TResponse>(ex), ex);
+        }
     }
 
     /// <summary>

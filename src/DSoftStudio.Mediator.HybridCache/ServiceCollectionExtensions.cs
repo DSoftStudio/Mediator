@@ -21,6 +21,33 @@ public static class HybridCacheServiceCollectionExtensions
     /// <para>
     /// Idempotent: calling it twice registers one behavior, not two nested ones.
     /// </para>
+    /// <para>
+    /// <b>Under Native AOT or trimming, every cached response type needs a serializer.</b>
+    /// <c>HybridCache</c> serializes everything it caches, and <c>AddHybridCache</c> pre-registers a
+    /// serializer for exactly two types — <see langword="string"/> and <c>byte[]</c>. Anything else
+    /// falls back to reflection-based <c>System.Text.Json</c>, which those modes disable. This
+    /// package's own code is AOT-safe and the publish succeeds either way, so the failure lands on
+    /// the first dispatch of a cacheable request in the published application rather than at build
+    /// time. Declare a context listing the cached response types and register it keyed on the open
+    /// generic:
+    /// <code>
+    /// [JsonSerializable(typeof(ProductDto))]
+    /// internal sealed partial class AppJsonContext : JsonSerializerContext;
+    ///
+    /// services.AddKeyedSingleton&lt;JsonSerializerOptions&gt;(
+    ///     typeof(IHybridCacheSerializer&lt;&gt;),
+    ///     new JsonSerializerOptions { TypeInfoResolver = AppJsonContext.Default });
+    /// </code>
+    /// Both details matter: without the explicit <c>&lt;JsonSerializerOptions&gt;</c> argument the
+    /// call is ambiguous and will not compile, and a non-keyed registration is silently ignored.
+    /// </para>
+    /// <para>
+    /// <c>[ImmutableObject(true)]</c> is NOT a workaround, though it looks like one. Verified in a
+    /// native binary: a sealed record carrying it throws exactly like an unmarked one, because the
+    /// serializer-free path requires writes disabled on both cache tiers — which caches nothing.
+    /// What the marker does change is that callers receive the SAME instance rather than a copy per
+    /// read, so on a DTO anything later mutates it silently shares that mutation for the whole TTL.
+    /// </para>
     /// </summary>
     /// <example>
     /// <code>
