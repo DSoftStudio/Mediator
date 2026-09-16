@@ -7,9 +7,10 @@ on:
   pull_request:
     branches: [ main ]
 
+# Read-only at workflow level. The one job below asks for the write it needs,
+# so a job added later starts from nothing rather than inheriting it.
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
 
@@ -23,6 +24,11 @@ jobs:
   build-and-test:
     name: Build & Test
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      # Only for the sticky coverage comment on pull requests.
+      pull-requests: write
 
     steps:
       - name: Checkout

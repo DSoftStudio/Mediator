@@ -5,12 +5,18 @@ on:
     branches: [main]
     paths: [CHANGELOG.md]
 
+# Read-only at workflow level; the job that commits the synced file asks for
+# the write itself.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   sync:
     runs-on: ubuntu-latest
+
+    permissions:
+      # Pushes the regenerated docs/mediator/changelog.md back to main.
+      contents: write
     steps:
       - uses: actions/checkout@v4
 

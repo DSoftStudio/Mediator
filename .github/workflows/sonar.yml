@@ -35,9 +35,21 @@ jobs:
       - name: Install SonarScanner
         run: dotnet tool install --global dotnet-sonarscanner
 
+      # The version is read out of a file, and on a pull_request that file comes
+      # from the PR branch -- so it is contributor-controlled input, not ours.
+      # It is checked against a version shape before going anywhere near a
+      # command line or GITHUB_OUTPUT. Anything else is refused rather than
+      # quoted around, because there is no legitimate <Version> that needs it.
       - name: Extract project version
         id: version
-        run: echo "VERSION=$(grep -oPm1 '(?<=<Version>)[^<]+' src/DSoftStudio.Mediator/DSoftStudio.Mediator.csproj)" >> "$GITHUB_OUTPUT"
+        run: |
+          set -e
+          raw=$(grep -oPm1 '(?<=<Version>)[^<]+' src/DSoftStudio.Mediator/DSoftStudio.Mediator.csproj)
+          if ! printf '%s' "$raw" | grep -qE '^[0-9]+(\.[0-9]+){0,3}(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::<Version> is '$raw', which is not a version. Refusing to use it."
+            exit 1
+          fi
+          echo "VERSION=$raw" >> "$GITHUB_OUTPUT"
 
       # ── Why there are TWO exclusion lists ──
       #
@@ -75,11 +87,14 @@ jobs:
       - name: Begin SonarCloud analysis
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY }}
+          SONAR_ORG: ${{ vars.SONAR_ORG }}
+          PROJECT_VERSION: ${{ steps.version.outputs.VERSION }}
         run: >
           dotnet sonarscanner begin
-          /k:"${{ vars.SONAR_PROJECT_KEY }}"
-          /o:"${{ vars.SONAR_ORG }}"
-          /v:"${{ steps.version.outputs.VERSION }}"
+          /k:"$SONAR_PROJECT_KEY"
+          /o:"$SONAR_ORG"
+          /v:"$PROJECT_VERSION"
           /d:sonar.host.url="https://sonarcloud.io"
           /d:sonar.token="$SONAR_TOKEN"
           /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml"
