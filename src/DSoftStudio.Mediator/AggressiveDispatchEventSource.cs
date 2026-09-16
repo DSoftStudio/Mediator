@@ -69,13 +69,13 @@ internal sealed class AggressiveDispatchEventSource : EventSource
         {
             _armedCounter ??= new PollingCounter(
                 "aggressive-armed", this,
-                static () => Volatile.Read(ref AggressiveDispatchLatch.ArmedCount))
+                static () => AggressiveDispatchLatch.ArmedCount)
             {
                 DisplayName = "AGGRESSIVE fast paths armed",
             };
             _poisonedCounter ??= new PollingCounter(
                 "aggressive-poisoned", this,
-                static () => Volatile.Read(ref AggressiveDispatchLatch.PoisonedCount))
+                static () => AggressiveDispatchLatch.PoisonedCount)
             {
                 DisplayName = "AGGRESSIVE tier poisons",
             };

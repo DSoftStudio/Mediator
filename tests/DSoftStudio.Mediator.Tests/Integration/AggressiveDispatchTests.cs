@@ -214,21 +214,21 @@ public class AggressiveDispatchTests
     public async Task Arming_And_Poisoning_Update_Observability_Counters()
     {
         ResetTierState();
-        int armedBefore = Volatile.Read(ref AggressiveDispatchLatch.ArmedCount);
-        int poisonedBefore = Volatile.Read(ref AggressiveDispatchLatch.PoisonedCount);
+        int armedBefore = AggressiveDispatchLatch.ArmedCount;
+        int poisonedBefore = AggressiveDispatchLatch.PoisonedCount;
 
         await using var spA = BuildProvider();
         var senderA = spA.GetRequiredService<ISender>();
         (await senderA.Send(new AggPing(1))).ShouldBe("agg:1"); // arms
 
-        Volatile.Read(ref AggressiveDispatchLatch.ArmedCount).ShouldBe(armedBefore + 1,
+        AggressiveDispatchLatch.ArmedCount.ShouldBe(armedBefore + 1,
             "arming must increment the aggressive-armed gauge");
 
         await using var spB = BuildProvider(); // second container -> poison
 
-        Volatile.Read(ref AggressiveDispatchLatch.PoisonedCount).ShouldBe(poisonedBefore + 1,
+        AggressiveDispatchLatch.PoisonedCount.ShouldBe(poisonedBefore + 1,
             "poisoning must increment the aggressive-poisoned counter");
-        Volatile.Read(ref AggressiveDispatchLatch.ArmedCount).ShouldBe(armedBefore,
+        AggressiveDispatchLatch.ArmedCount.ShouldBe(armedBefore,
             "the aggressive-armed gauge is CURRENT state — poison disarms every holder, " +
             "so the gauge must drop back, not stay frozen at its pre-poison value");
     }

@@ -61,8 +61,24 @@ public static class AggressiveDispatchLatch
     // under <see cref="Gate"/>. ArmedCount is a CURRENT-STATE gauge (mirrors
     // <see cref="_armedHolderCount"/>: decremented on poison, zeroed on reset);
     // PoisonedCount is cumulative.
-    internal static int ArmedCount;
-    internal static int PoisonedCount;
+    private static int _armedCount;
+    private static int _poisonedCount;
+
+    /// <summary>
+    /// Fast paths currently armed. A gauge, not a total: it falls when a holder is poisoned
+    /// and returns to zero on reset.
+    /// </summary>
+    /// <remarks>
+    /// Read-only from outside this class. Every write goes through the Interlocked calls below,
+    /// which is the discipline that makes the counter meaningful; an internal FIELD let any type
+    /// in the assembly take a ref to it and step outside that. The read is Volatile so a caller
+    /// polling from another thread -- which is the only way these are ever read -- sees the
+    /// latest write rather than a value the JIT hoisted out of its loop.
+    /// </remarks>
+    internal static int ArmedCount => Volatile.Read(ref _armedCount);
+
+    /// <summary>Holders poisoned since process start. Cumulative; never decreases.</summary>
+    internal static int PoisonedCount => Volatile.Read(ref _poisonedCount);
 
     /// <summary>True once a second container has been observed — one-way, process-wide.</summary>
     public static bool IsPoisoned => Volatile.Read(ref _poisoned) != 0;
@@ -125,7 +141,7 @@ public static class AggressiveDispatchLatch
             arm();
             _disarmCallbacks += disarm;
             _armedHolderCount++;
-            Interlocked.Increment(ref ArmedCount);
+            Interlocked.Increment(ref _armedCount);
             return true;
         }
     }
@@ -146,7 +162,7 @@ public static class AggressiveDispatchLatch
             arm();
             _notifDisarmCallbacks += disarm;
             _armedNotifHolderCount++;
-            Interlocked.Increment(ref ArmedCount);
+            Interlocked.Increment(ref _armedCount);
             return true;
         }
     }
@@ -164,7 +180,7 @@ public static class AggressiveDispatchLatch
             var disarmed = _armedNotifHolderCount;
             _notifDisarmCallbacks = null;
             _armedNotifHolderCount = 0;
-            Interlocked.Add(ref ArmedCount, -disarmed);
+            Interlocked.Add(ref _armedCount, -disarmed);
             callbacks?.Invoke();
             return disarmed;
         }
@@ -186,8 +202,8 @@ public static class AggressiveDispatchLatch
         var notifCallbacks = _notifDisarmCallbacks;
         _notifDisarmCallbacks = null;
         _armedNotifHolderCount = 0;
-        Interlocked.Add(ref ArmedCount, -disarmed);
-        Interlocked.Increment(ref PoisonedCount);
+        Interlocked.Add(ref _armedCount, -disarmed);
+        Interlocked.Increment(ref _poisonedCount);
         callbacks?.Invoke();
         notifCallbacks?.Invoke();
         return disarmed;
@@ -205,7 +221,7 @@ public static class AggressiveDispatchLatch
             _poisoned = 0;
             _armedHolderCount = 0;
             _armedNotifHolderCount = 0;
-            Interlocked.Exchange(ref ArmedCount, 0); // gauge mirrors the armed-holder counts
+            Interlocked.Exchange(ref _armedCount, 0); // gauge mirrors the armed-holder counts
             var callbacks = _disarmCallbacks;
             _disarmCallbacks = null;
             var notifCallbacks = _notifDisarmCallbacks;

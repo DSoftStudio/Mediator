@@ -142,13 +142,13 @@ public class AggressiveNotificationDispatchTests
         AggressiveNotificationDispatch<AggNote>.ShouldAttemptArm.ShouldBeTrue(
             "a stateless (auto-Singleton) fan-out with no custom publisher must be eligible");
 
-        int armedBefore = Volatile.Read(ref AggressiveDispatchLatch.ArmedCount);
+        int armedBefore = AggressiveDispatchLatch.ArmedCount;
 
         // The object path routes through the generated PublishObjectSwitch — the tier's entry
         // point when interceptors are suppressed (this test project).
         await mediator.Publish((object)new AggNote(1), TestContext.Current.CancellationToken);
 
-        Volatile.Read(ref AggressiveDispatchLatch.ArmedCount).ShouldBe(armedBefore + 1,
+        AggressiveDispatchLatch.ArmedCount.ShouldBe(armedBefore + 1,
             "the first publish must arm the notification holder");
         AggressiveNotificationDispatch<AggNote>.ShouldAttemptArm.ShouldBeFalse(
             "arming is one-shot");
@@ -184,11 +184,11 @@ public class AggressiveNotificationDispatchTests
         var mediatorA = spA.GetRequiredService<IMediator>();
         await mediatorA.Publish((object)new AggNote(1), TestContext.Current.CancellationToken); // arms
 
-        int armedAfterArm = Volatile.Read(ref AggressiveDispatchLatch.ArmedCount);
+        int armedAfterArm = AggressiveDispatchLatch.ArmedCount;
 
         await using var spB = BuildProvider(); // second container -> poison during registration
         AggressiveDispatchLatch.IsPoisoned.ShouldBeTrue();
-        Volatile.Read(ref AggressiveDispatchLatch.ArmedCount).ShouldBe(armedAfterArm - 1,
+        AggressiveDispatchLatch.ArmedCount.ShouldBe(armedAfterArm - 1,
             "the poison must disarm the notification holder (gauge is current state)");
 
         // Both containers keep publishing correctly on the SAFE tier.
@@ -207,12 +207,12 @@ public class AggressiveNotificationDispatchTests
         var mediator = sp.GetRequiredService<IMediator>();
 
         await mediator.Publish((object)new AggNote(1), TestContext.Current.CancellationToken); // arms
-        int armedAfterArm = Volatile.Read(ref AggressiveDispatchLatch.ArmedCount);
+        int armedAfterArm = AggressiveDispatchLatch.ArmedCount;
 
         // The supported late-registration path signals the flag — which must disarm FIRST.
         NotificationPublisherFlag.MarkRegistered();
 
-        Volatile.Read(ref AggressiveDispatchLatch.ArmedCount).ShouldBe(armedAfterArm - 1,
+        AggressiveDispatchLatch.ArmedCount.ShouldBe(armedAfterArm - 1,
             "a custom publisher changes Publish semantics — armed notification holders must stand down");
         NotificationPublisherFlag.HasCustomPublisher.ShouldBeTrue();
 
@@ -263,7 +263,7 @@ public class AggressiveNotificationDispatchTests
         // is now Scoped — the arm-time re-verify must refuse.
         AggressiveNotificationDispatch<AggReverifyNote>.ShouldAttemptArm.ShouldBeTrue();
 
-        int armedBefore = Volatile.Read(ref AggressiveDispatchLatch.ArmedCount);
+        int armedBefore = AggressiveDispatchLatch.ArmedCount;
 
         using (var scope1 = sp.CreateScope())
             await scope1.ServiceProvider.GetRequiredService<IMediator>()
@@ -272,7 +272,7 @@ public class AggressiveNotificationDispatchTests
             await scope2.ServiceProvider.GetRequiredService<IMediator>()
                 .Publish((object)new AggReverifyNote(), TestContext.Current.CancellationToken);
 
-        Volatile.Read(ref AggressiveDispatchLatch.ArmedCount).ShouldBe(armedBefore,
+        AggressiveDispatchLatch.ArmedCount.ShouldBe(armedBefore,
             "arming must fail the descriptor re-verification (Scoped won last)");
         AggNoteLog.Snapshot().ShouldBe(["reverify:1", "reverify:1"],
             "scopes must keep getting fresh instances — nothing may pin the first scope's handler");

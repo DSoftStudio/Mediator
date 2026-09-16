@@ -67,20 +67,20 @@ namespace DSoftStudio.Mediator
             };
         }
 
-        private sealed class CompositePublishScope(IMediatorPublishScope[] scopes, int count) : IMediatorPublishScope
+        private sealed class CompositePublishScope(IMediatorPublishScope[] scopes, int scopeCount) : IMediatorPublishScope
         {
             public IMediatorSubscriberScope? BeginSubscriber(object handler)
             {
                 IMediatorSubscriberScope[]? opened = null;
                 int opencount = 0;
 
-                for (int i = 0; i < count; i++)
+                for (int i = 0; i < scopeCount; i++)
                 {
                     var subscriber = scopes[i].BeginSubscriber(handler);
                     if (subscriber is null)
                         continue;
 
-                    opened ??= new IMediatorSubscriberScope[count];
+                    opened ??= new IMediatorSubscriberScope[scopeCount];
                     opened[opencount++] = subscriber;
                 }
 
@@ -92,15 +92,22 @@ namespace DSoftStudio.Mediator
                 };
             }
 
-            public void OnSubscribersResolved(int subscriberCount)
+            // `count` matches the name on IMediatorPublishScope, so a named argument works
+            // here as it does on every other implementation of it.
+            //
+            // It could NOT be called that until the primary constructor parameter above was
+            // renamed: a method parameter of the same name shadows it, and the loop below
+            // would have walked the SUBSCRIBER count instead of the number of scopes --
+            // compiling cleanly, iterating the wrong collection length.
+            public void OnSubscribersResolved(int count)
             {
-                for (int i = 0; i < count; i++)
-                    scopes[i].OnSubscribersResolved(subscriberCount);
+                for (int i = 0; i < scopeCount; i++)
+                    scopes[i].OnSubscribersResolved(count);
             }
 
             public void OnError(Exception exception)
             {
-                for (int i = 0; i < count; i++)
+                for (int i = 0; i < scopeCount; i++)
                     scopes[i].OnError(exception);
             }
 
@@ -108,22 +115,22 @@ namespace DSoftStudio.Mediator
             {
                 // Reverse order, so an observer that made something ambient unwinds after the ones
                 // opened inside it — the same discipline a nest of using blocks would give.
-                for (int i = count - 1; i >= 0; i--)
+                for (int i = scopeCount - 1; i >= 0; i--)
                     scopes[i].Dispose();
             }
         }
 
-        private sealed class CompositeSubscriberScope(IMediatorSubscriberScope[] scopes, int count) : IMediatorSubscriberScope
+        private sealed class CompositeSubscriberScope(IMediatorSubscriberScope[] scopes, int scopeCount) : IMediatorSubscriberScope
         {
             public void OnError(Exception exception)
             {
-                for (int i = 0; i < count; i++)
+                for (int i = 0; i < scopeCount; i++)
                     scopes[i].OnError(exception);
             }
 
             public void Dispose()
             {
-                for (int i = count - 1; i >= 0; i--)
+                for (int i = scopeCount - 1; i >= 0; i--)
                     scopes[i].Dispose();
             }
         }

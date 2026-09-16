@@ -709,9 +709,19 @@ public sealed class DependencyInjectionGenerator : IIncrementalGenerator
 
             switch (handler.ReturnKind)
             {
+                // One line serves both, and they are not the same construction.
+                //
+                // ReturnSync means Execute() returns TResponse, so this picks the
+                // ValueTask<T>(T result) constructor. ReturnTaskOfT means it returns
+                // Task<TResponse> -- classified as such in HandlerDiscovery only when the
+                // metadata name is Task`1 -- and the very same text then binds to
+                // ValueTask<T>(Task<T> task) instead. Overload resolution in the GENERATED
+                // code does the work, which is why two cases that looked duplicated for
+                // years were correct.
+                //
+                // Merged rather than left as twins, because a reader has no way to tell a
+                // deliberate pair from a copy-paste, and neither does a static analyser.
                 case SelfHandlerDetail.ReturnSync:
-                    sb.AppendLine($"        return new global::System.Threading.Tasks.ValueTask<{handler.ResponseType}>({callExpr});");
-                    break;
                 case SelfHandlerDetail.ReturnTaskOfT:
                     sb.AppendLine($"        return new global::System.Threading.Tasks.ValueTask<{handler.ResponseType}>({callExpr});");
                     break;
