@@ -63,4 +63,50 @@ public class EquatableArrayTests
         e.MoveNext().ShouldBeTrue();
         e.Current.ShouldBe(5);
     }
+
+    /// <summary>
+    /// The constructor normalizes null, but a struct has a form no constructor guards: <c>default</c>,
+    /// which every uninitialised field of a containing struct also takes. The incremental pipeline
+    /// calls Equals and GetHashCode on everything it caches, so an unguarded default does not fail
+    /// where it was written — it fails as <c>CS8785: Generator failed to generate source ...
+    /// NullReferenceException</c>, naming no file, no line and no member. These pin the behaviour
+    /// that keeps that from happening.
+    /// </summary>
+    [Fact]
+    public void Default_Instance_Behaves_As_Empty()
+    {
+        var uninitialised = default(EquatableArray<string>);
+
+        uninitialised.Length.ShouldBe(0);
+        uninitialised.GetHashCode().ShouldBe(EquatableArray<string>.Empty.GetHashCode());
+        uninitialised.Equals(EquatableArray<string>.Empty).ShouldBeTrue();
+        EquatableArray<string>.Empty.Equals(uninitialised).ShouldBeTrue();
+        uninitialised.ToList().ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Default_Instance_Is_Not_Equal_To_A_Populated_One()
+    {
+        var uninitialised = default(EquatableArray<string>);
+        var populated = new EquatableArray<string>(["a"]);
+
+        uninitialised.Equals(populated).ShouldBeFalse();
+        populated.Equals(uninitialised).ShouldBeFalse();
+    }
+
+    /// <summary>
+    /// <c>IEquatable&lt;T&gt;</c> is satisfied by reference types, so an ELEMENT can be null even
+    /// when the array is not. Comparing those with <c>item.Equals(...)</c> throws.
+    /// </summary>
+    [Fact]
+    public void Null_Elements_Compare_And_Hash_Without_Throwing()
+    {
+        var withNull = new EquatableArray<string>([null!, "b"]);
+        var sameAgain = new EquatableArray<string>([null!, "b"]);
+        var different = new EquatableArray<string>(["a", "b"]);
+
+        withNull.Equals(sameAgain).ShouldBeTrue();
+        withNull.GetHashCode().ShouldBe(sameAgain.GetHashCode());
+        withNull.Equals(different).ShouldBeFalse();
+    }
 }
