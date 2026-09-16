@@ -39,6 +39,26 @@ jobs:
         id: version
         run: echo "VERSION=$(grep -oPm1 '(?<=<Version>)[^<]+' src/DSoftStudio.Mediator/DSoftStudio.Mediator.csproj)" >> "$GITHUB_OUTPUT"
 
+      # ── Why there are TWO exclusion lists ──
+      #
+      # SonarScanner for .NET splits every file into MAIN or TEST, and each side
+      # has its own exclusion property. sonar.exclusions governs main files only;
+      # anything inside a project carrying <IsTestProject>true</IsTestProject> is
+      # a test file, and only sonar.test.exclusions can filter it.
+      #
+      # So "samples/**,tests/**" in sonar.exclusions never excluded them: those
+      # are test projects, and the property does not reach them. The symptom was
+      # SonarCloud reporting issues in samples/cross-project-mocking, a tree this
+      # repo deliberately does not analyse — and the e4 rule below, which ignores
+      # every rule under tests/**, is the workaround someone reached for when
+      # tests/** in sonar.exclusions turned out to do nothing.
+      #
+      # Both lists are kept identical: which side a directory lands on depends on
+      # an MSBuild property inside it, and that is not something to have to hold
+      # in your head when adding a directory here.
+      #
+      # Once an analysis confirms samples/ and tests/ are gone from the issue
+      # list, the e4 entry becomes dead config and should be deleted.
       - name: Begin SonarCloud analysis
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -51,6 +71,7 @@ jobs:
           /d:sonar.token="$SONAR_TOKEN"
           /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml"
           /d:sonar.exclusions="**/obj/**,**/bin/**,samples/**,benchmarks/**,docs/**,tests/**"
+          /d:sonar.test.exclusions="**/obj/**,**/bin/**,samples/**,benchmarks/**,docs/**,tests/**"
           /d:sonar.coverage.exclusions="src/**/DSoftStudio.Mediator.Generators/**"
           /d:sonar.cpd.exclusions="src/**/DSoftStudio.Mediator.Generators/**"
           /d:sonar.issue.ignore.multicriteria="e1,e2,e3,e4"
