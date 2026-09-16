@@ -53,9 +53,17 @@ namespace DSoftStudio.Mediator
                 // handler can neither stop the others from starting nor leave an already-started
                 // handler unobserved (an unawaited faulted task surfaces as UnobservedTaskException).
                 //
-                // The token is deliberately NOT passed to Task.Run: every registered handler is
-                // invoked and observes cancellation itself, rather than being dropped before it runs.
-                tasks[i] = Task.Run(() => handler.Handle(notification, cancellationToken));
+                // CancellationToken.None is deliberate, and is exactly what Task.Run(Func<Task>)
+                // uses on its own -- this changes no behaviour. Handing Task.Run the REAL token would
+                // let the scheduler cancel a queued work item before the handler ever ran, dropping
+                // that handler silently; the contract here is that every registered handler is
+                // invoked and observes cancellation itself, inside Handle.
+                //
+                // Written into the call rather than left to the paragraph above it, because that is
+                // the only form a reader skimming one line -- or an analyzer -- can see.
+                tasks[i] = Task.Run(
+                    () => handler.Handle(notification, cancellationToken),
+                    CancellationToken.None);
             }
 
             return Task.WhenAll(tasks);

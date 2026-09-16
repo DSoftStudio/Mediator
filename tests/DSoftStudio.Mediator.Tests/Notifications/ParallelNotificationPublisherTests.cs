@@ -133,6 +133,39 @@ public class ParallelNotificationPublisherTests
         b.CallCount.ShouldBe(1);
     }
 
+    /// <summary>
+    /// An already-cancelled token must not stop a single handler from being invoked.
+    /// </summary>
+    /// <remarks>
+    /// This is the contract that keeps <c>CancellationToken.None</c> in the publisher's
+    /// <c>Task.Run</c> call. Handing Task.Run the real token instead lets the scheduler cancel each
+    /// queued work item BEFORE the handler body runs, so handlers are dropped silently and awaiting
+    /// the result throws <see cref="TaskCanceledException"/> rather than completing.
+    /// <para>
+    /// The handler still receives the real token -- it decides for itself whether to stop. Both
+    /// halves are asserted, because passing None to Task.Run AND None to the handler would satisfy
+    /// the first assertion while quietly removing every handler's ability to cancel.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task Publish_TokenAlreadyCancelled_StillInvokesEveryHandler()
+    {
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        var a = new CancelObservingHandler();
+        var b = new CancelObservingHandler();
+
+        await new ParallelNotificationPublisher()
+            .Publish<CancelObservedPing>([a, b], new CancelObservedPing(), cts.Token);
+
+        a.Invoked.ShouldBeTrue();
+        b.Invoked.ShouldBeTrue();
+
+        a.SawCancelledToken.ShouldBeTrue();
+        b.SawCancelledToken.ShouldBeTrue();
+    }
+
     [Fact]
     public async Task Publish_HandlersRunInParallel()
     {
@@ -237,6 +270,27 @@ file sealed class SyncOverlapHandler(CountdownEvent gate) : INotificationHandler
         // one arriving is if the publisher runs them on different threads.
         gate.Signal();
         SawTheOther = gate.Wait(TimeSpan.FromSeconds(10));
+        return Task.CompletedTask;
+    }
+}
+
+// `file`-scoped so handler discovery skips them: fed to the publisher directly, and they must not
+// join the auto-registered set.
+file sealed record CancelObservedPing : INotification;
+
+file sealed class CancelObservingHandler : INotificationHandler<CancelObservedPing>
+{
+    public bool Invoked;
+    public bool SawCancelledToken;
+
+    public Task Handle(CancelObservedPing notification, CancellationToken ct)
+    {
+        Invoked = true;
+
+        // Records rather than throws. A handler that threw here would fail this test through
+        // TaskCanceledException either way, and could not tell "the handler was never queued"
+        // apart from "the handler ran and gave up", which is the whole distinction under test.
+        SawCancelledToken = ct.IsCancellationRequested;
         return Task.CompletedTask;
     }
 }

@@ -358,6 +358,26 @@ public class NotificationObservationTests
         public void Dispose() => Disposed = true;
     }
 
+    /// <summary>
+    /// A null provider throws, naming the caller's parameter -- it does not resolve to "no observer".
+    /// </summary>
+    /// <remarks>
+    /// The resolver used to carry a <c>if (serviceProvider is null) return null;</c> immediately
+    /// after ArgumentNullException.ThrowIfNull, which could never run and stated the opposite
+    /// contract to the line above it. Removing dead code is only safe once the live contract is
+    /// written down, so here it is: null is a caller mistake, not an empty result.
+    /// </remarks>
+    [Fact]
+    public void ResolveNotificationObserver_NullProvider_ThrowsNamingTheParameter()
+    {
+        var ex = Should.Throw<ArgumentNullException>(
+            () => MediatorObservation.ResolveNotificationObserver(null!));
+
+        // The point of the explicit guard: without it this surfaces as "provider" from inside
+        // GetRequiredService, blaming a parameter the caller never saw.
+        ex.ParamName.ShouldBe("serviceProvider");
+    }
+
     internal sealed class RecordingSubscriber(object handler) : IMediatorSubscriberScope
     {
         public readonly object Handler = handler;

@@ -57,9 +57,6 @@ namespace DSoftStudio.Mediator
             // from inside GetRequiredService. One test, and only on the miss path.
             ArgumentNullException.ThrowIfNull(serviceProvider);
 
-            if (serviceProvider is null)
-                return null;
-
             // GetServices, not GetService: two adapters observing at once is the normal case -- a
             // tracing bridge and a profiler -- and resolving one silently dropped whichever registered
             // second. One is used directly; several are fanned out through a composite built once.
