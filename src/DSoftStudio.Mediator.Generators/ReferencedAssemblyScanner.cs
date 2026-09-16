@@ -618,7 +618,9 @@ namespace DSoftStudio.Mediator.Generators
         /// that implements <c>IPipelineBehavior&lt;,&gt;</c>, <c>IRequestPostProcessor&lt;,&gt;</c>,
         /// <c>IRequestExceptionHandler&lt;,&gt;</c>, or <c>IStreamPipelineBehavior&lt;,&gt;</c>.
         /// </summary>
-        public static List<BehaviorTypeInfo> GetExternalOpenGenericBehaviors(Compilation compilation)
+        public static List<BehaviorTypeInfo> GetExternalOpenGenericBehaviors(
+            Compilation compilation,
+            ConstraintResolution? constraints = null)
         {
             var results = new List<BehaviorTypeInfo>();
 
@@ -630,7 +632,7 @@ namespace DSoftStudio.Mediator.Generators
                 if (!ReferencesAbstractions(assembly))
                     continue;
 
-                CollectOpenGenericBehaviors(assembly.GlobalNamespace, results);
+                CollectOpenGenericBehaviors(assembly.GlobalNamespace, results, constraints);
             }
 
             return results;
@@ -642,13 +644,14 @@ namespace DSoftStudio.Mediator.Generators
         /// </summary>
         private static void CollectOpenGenericBehaviors(
             INamespaceSymbol ns,
-            List<BehaviorTypeInfo> results)
+            List<BehaviorTypeInfo> results,
+            ConstraintResolution? constraints)
         {
             foreach (var type in ns.GetTypeMembers())
-                CollectBehaviorsFromTypeTree(type, results, allowInternal: false);
+                CollectBehaviorsFromTypeTree(type, results, allowInternal: false, constraints);
 
             foreach (var child in ns.GetNamespaceMembers())
-                CollectOpenGenericBehaviors(child, results);
+                CollectOpenGenericBehaviors(child, results, constraints);
         }
 
         /// <summary>
@@ -672,18 +675,32 @@ namespace DSoftStudio.Mediator.Generators
         internal static void CollectBehaviorsFromTypeTree(
             INamedTypeSymbol type,
             List<BehaviorTypeInfo> results,
-            bool allowInternal)
+            bool allowInternal,
+            ConstraintResolution? constraints = null)
         {
             if (type.TypeKind == TypeKind.Class
                 && !type.IsAbstract
                 && type.IsGenericType
                 && IsNameableBehaviorType(type, allowInternal))
             {
-                TryAddBehaviorInfoFrom(type, results);
+                TryAddBehaviorInfoFrom(type, results, constraints);
             }
 
             foreach (var nested in type.GetTypeMembers())
-                CollectBehaviorsFromTypeTree(nested, results, allowInternal);
+                CollectBehaviorsFromTypeTree(nested, results, allowInternal, constraints);
+        }
+
+        /// <summary>
+        /// What a narrowed behavior needs to be usable instead of skipped: the compilation that can
+        /// answer the constraint question, and the pairs to ask it about. Built once per scan.
+        /// </summary>
+        internal sealed class ConstraintResolution(
+            Compilation compilation,
+            List<(INamedTypeSymbol Request, ITypeSymbol Response)> pairs)
+        {
+            public Compilation Compilation { get; } = compilation;
+
+            public List<(INamedTypeSymbol Request, ITypeSymbol Response)> Pairs { get; } = pairs;
         }
 
         /// <summary>
@@ -730,7 +747,8 @@ namespace DSoftStudio.Mediator.Generators
         /// </summary>
         internal static void TryAddBehaviorInfoFrom(
             INamedTypeSymbol type,
-            List<BehaviorTypeInfo> results)
+            List<BehaviorTypeInfo> results,
+            ConstraintResolution? constraints = null)
         {
             foreach (var iface in type.AllInterfaces)
             {
@@ -758,19 +776,43 @@ namespace DSoftStudio.Mediator.Generators
                 if (type.TypeParameters.Length != 2)
                     continue;
 
-                // A behavior whose type parameters carry constraints BEYOND the ones the pipeline
-                // interface itself declares cannot be closed over every discovered handler pair:
-                // MediatorPipelineGenerator.CloseAllOpenGenericBehaviors emits
-                // typeof(Behavior<Request, Response>) for ALL pairs, so a pair that fails the extra
-                // constraint produces CS0311/CS0315 in the CONSUMER's build — a hard break in code
-                // the consumer never wrote. Skip discovery instead: the open-generic descriptor the
-                // user registered stays in the collection and MSDI resolves it, which is the
-                // behavior that existed before closed-generic emission was introduced.
-                if (HasConstraintsBeyondInterface(type))
-                    continue;
-
                 var baseName = type.ToDisplayString(BaseTypeNameFormat);
                 var openName = baseName + "<,>";
+
+                // A behavior that narrows itself with a constraint of its own — the idiomatic
+                // `where TRequest : IAuditable` — cannot be named closed over every pair:
+                // typeof(Behavior<Request, Response>) for a pair that fails the constraint is
+                // CS0311/CS0315 in the CONSUMER's build, in a file they cannot edit.
+                //
+                // So resolve WHICH pairs it applies to, here, where the symbols are. That is also
+                // what MSDI does with the open descriptor — measured: GetServices returns the
+                // behavior for a satisfying pair and nothing for a failing one, no exception — so
+                // the closed form now agrees with the open one instead of approximating it.
+                //
+                // Without a resolution context there is nothing to decide with, and the old
+                // conservative skip stands: the open descriptor survives and MSDI resolves it.
+                if (HasConstraintsBeyondInterface(type))
+                {
+                    if (constraints is null)
+                        continue;
+
+                    var applicable = new List<string>();
+                    foreach (var (request, response) in constraints.Pairs)
+                    {
+                        if (!SatisfiesConstraints(constraints.Compilation, type, request, response))
+                            continue;
+
+                        applicable.Add(BehaviorTypeInfo.PairKey(
+                            request.ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat),
+                            response.ToDisplayString(HandlerDiscovery.NullableFullyQualifiedFormat)));
+                    }
+
+                    results.Add(new BehaviorTypeInfo(
+                        kind.Value, openName, baseName,
+                        isNarrowed: true,
+                        new EquatableArray<string>(applicable.ToArray())));
+                    continue;
+                }
 
                 results.Add(new BehaviorTypeInfo(kind.Value, openName, baseName));
             }
@@ -826,6 +868,184 @@ namespace DSoftStudio.Mediator.Generators
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Every <c>(request, response)</c> pair the compilation can see, as SYMBOLS — local types
+        /// and referenced ones alike. Used only to decide which pairs a narrowed behavior may be
+        /// named over; the symbols never leave this scan, only the resulting strings do.
+        /// </summary>
+        internal static List<(INamedTypeSymbol Request, ITypeSymbol Response)> CollectRequestPairs(
+            Compilation compilation)
+        {
+            var results = new List<(INamedTypeSymbol, ITypeSymbol)>();
+
+            var local = new List<INamedTypeSymbol>();
+            CollectConcreteTypes(compilation.Assembly.GlobalNamespace, local);
+            AddRequestPairs(local, results);
+
+            foreach (var reference in compilation.References)
+            {
+                if (compilation.GetAssemblyOrModuleSymbol(reference) is not IAssemblySymbol assembly)
+                    continue;
+                if (!ReferencesAbstractions(assembly))
+                    continue;
+
+                var external = new List<INamedTypeSymbol>();
+                CollectConcreteTypes(assembly.GlobalNamespace, external);
+                AddRequestPairs(external, results);
+            }
+
+            return results;
+        }
+
+        private static void AddRequestPairs(
+            List<INamedTypeSymbol> types,
+            List<(INamedTypeSymbol, ITypeSymbol)> results)
+        {
+            foreach (var type in types)
+            {
+                if (type.IsGenericType)
+                    continue;
+
+                foreach (var iface in type.AllInterfaces)
+                {
+                    var original = iface.OriginalDefinition;
+                    if (original.ContainingNamespace?.ToDisplayString() != AbstractionsNamespace)
+                        continue;
+                    if (original.MetadataName != RequestMetadataName
+                        && original.MetadataName != StreamRequestMetadataName)
+                    {
+                        continue;
+                    }
+
+                    results.Add((type, iface.TypeArguments[0]));
+                    break;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Whether <paramref name="openBehavior"/> may legally be closed over the pair — the same
+        /// question the compiler answers with CS0311 and friends, and the same one MSDI answers by
+        /// returning the behavior or skipping it.
+        /// <para>
+        /// Conservative on anything it cannot decide: an undecidable constraint answers
+        /// <see langword="false"/>, which costs that pair a specialized chain and leaves it on the
+        /// per-link path. Answering <see langword="true"/> wrongly emits a name that does not
+        /// compile, in a file the consumer cannot edit.
+        /// </para>
+        /// </summary>
+        internal static bool SatisfiesConstraints(
+            Compilation compilation,
+            INamedTypeSymbol openBehavior,
+            ITypeSymbol request,
+            ITypeSymbol response)
+        {
+            // ClassifyConversion is C#-specific; without it there is nothing to decide with.
+            if (compilation is not Microsoft.CodeAnalysis.CSharp.CSharpCompilation csharp)
+                return false;
+
+            var arguments = new[] { request, response };
+            if (openBehavior.TypeParameters.Length != arguments.Length)
+                return false;
+
+            for (var i = 0; i < openBehavior.TypeParameters.Length; i++)
+            {
+                var parameter = openBehavior.TypeParameters[i];
+                var argument = arguments[i];
+
+                if (parameter.HasReferenceTypeConstraint && !argument.IsReferenceType)
+                    return false;
+
+                if (parameter.HasValueTypeConstraint
+                    && (!argument.IsValueType || IsNullableValueType(argument)))
+                {
+                    return false;
+                }
+
+                if (parameter.HasUnmanagedTypeConstraint
+                    && argument is not INamedTypeSymbol { IsUnmanagedType: true })
+                {
+                    return false;
+                }
+
+                if (parameter.HasConstructorConstraint && !HasAccessibleParameterlessConstructor(argument))
+                    return false;
+
+                foreach (var constraint in parameter.ConstraintTypes)
+                {
+                    var required = Substitute(constraint, openBehavior, arguments);
+                    if (required is null)
+                        return false;
+
+                    var conversion = csharp.ClassifyConversion(argument, required);
+                    if (!conversion.IsIdentity && !conversion.IsImplicit)
+                        return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool IsNullableValueType(ITypeSymbol type)
+            => type is INamedTypeSymbol named
+               && named.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T;
+
+        private static bool HasAccessibleParameterlessConstructor(ITypeSymbol type)
+        {
+            if (type.IsValueType)
+                return true;
+
+            if (type is not INamedTypeSymbol named || named.IsAbstract)
+                return false;
+
+            foreach (var ctor in named.InstanceConstructors)
+            {
+                if (ctor.Parameters.Length == 0 && ctor.DeclaredAccessibility == Accessibility.Public)
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Rewrites a constraint written in terms of the behavior's own type parameters into the pair
+        /// being tested: <c>where TRequest : IRequest&lt;TResponse&gt;</c> against <c>(Plain, int)</c>
+        /// has to become <c>IRequest&lt;int&gt;</c> before it means anything. Returns
+        /// <see langword="null"/> for a shape it cannot rewrite, which the caller reads as undecidable.
+        /// </summary>
+        private static ITypeSymbol? Substitute(
+            ITypeSymbol constraint,
+            INamedTypeSymbol openBehavior,
+            ITypeSymbol[] arguments)
+        {
+            if (constraint is ITypeParameterSymbol parameter)
+            {
+                for (var i = 0; i < openBehavior.TypeParameters.Length; i++)
+                {
+                    if (SymbolEqualityComparer.Default.Equals(openBehavior.TypeParameters[i], parameter))
+                        return arguments[i];
+                }
+
+                // A type parameter from somewhere else entirely — an enclosing generic type.
+                return null;
+            }
+
+            if (constraint is not INamedTypeSymbol named || !named.IsGenericType)
+                return constraint;
+
+            var substituted = new ITypeSymbol[named.TypeArguments.Length];
+            for (var i = 0; i < named.TypeArguments.Length; i++)
+            {
+                var argument = Substitute(named.TypeArguments[i], openBehavior, arguments);
+                if (argument is null)
+                    return null;
+
+                substituted[i] = argument;
+            }
+
+            return named.OriginalDefinition.Construct(substituted);
         }
 
         internal readonly struct ExternalHandlerInfo(INamedTypeSymbol serviceType, INamedTypeSymbol implementationType)

@@ -328,7 +328,8 @@ internal static class BehaviorRegistrationScanner
     public static List<List<string>> PredictChains(
         IEnumerable<BehaviorRegistration> registrations,
         string requestType,
-        string responseType)
+        string responseType,
+        IReadOnlyDictionary<string, BehaviorTypeInfo>? narrowedBehaviors = null)
     {
         var groups = new Dictionary<string, List<BehaviorRegistration>>();
 
@@ -376,6 +377,18 @@ internal static class BehaviorRegistrationScanner
             var chain = new List<string>(group.Count);
             foreach (var r in group)
             {
+                // An open-generic registration does NOT reach every pair. A behavior that narrows
+                // itself with its own constraint reaches only the pairs that satisfy it — MSDI skips
+                // the rest silently, and naming one of them here is CS0311 in a generated file the
+                // consumer cannot edit. Registration closing already knew this; prediction did not.
+                if (r.IsOpenGeneric
+                    && narrowedBehaviors is not null
+                    && narrowedBehaviors.TryGetValue(r.ImplTypeName, out var narrowed)
+                    && !narrowed.AppliesTo(requestType, responseType))
+                {
+                    continue;
+                }
+
                 chain.Add(r.IsOpenGeneric
                     ? r.ImplTypeName + "<" + requestType + ", " + responseType + ">"
                     : r.ImplTypeName);

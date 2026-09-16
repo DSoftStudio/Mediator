@@ -71,10 +71,19 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
         var allBehaviors = context.CompilationProvider
             .Select(static (compilation, _) =>
             {
-                var results = ReferencedAssemblyScanner.GetExternalOpenGenericBehaviors(compilation);
+                // Built once and shared by both scans: the pairs a narrowed behavior might apply to,
+                // and the compilation that can answer whether it does. The symbols stay inside this
+                // Select — only the resolved strings cross into the incremental pipeline, which is
+                // the whole reason the answer is computed here rather than at the emission site.
+                var constraints = new ReferencedAssemblyScanner.ConstraintResolution(
+                    compilation,
+                    ReferencedAssemblyScanner.CollectRequestPairs(compilation));
+
+                var results = ReferencedAssemblyScanner.GetExternalOpenGenericBehaviors(
+                    compilation, constraints);
 
                 // Also scan the current compilation for local behavior types
-                CollectLocalBehaviors(compilation.Assembly.GlobalNamespace, results);
+                CollectLocalBehaviors(compilation.Assembly.GlobalNamespace, results, constraints);
 
                 var array = results
                     .Distinct()
@@ -209,13 +218,17 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
     /// </summary>
     private static void CollectLocalBehaviors(
         INamespaceSymbol ns,
-        List<BehaviorTypeInfo> results)
+        List<BehaviorTypeInfo> results,
+        ReferencedAssemblyScanner.ConstraintResolution? constraints = null)
     {
         foreach (var type in ns.GetTypeMembers())
-            ReferencedAssemblyScanner.CollectBehaviorsFromTypeTree(type, results, allowInternal: true);
+        {
+            ReferencedAssemblyScanner.CollectBehaviorsFromTypeTree(
+                type, results, allowInternal: true, constraints);
+        }
 
         foreach (var child in ns.GetNamespaceMembers())
-            CollectLocalBehaviors(child, results);
+            CollectLocalBehaviors(child, results, constraints);
     }
 
     private static string GenerateRegistryCode(
@@ -234,10 +247,22 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
         var predictedChains = new Dictionary<(string Request, string Response), List<List<string>>>();
         if (!behaviorRegistrations.IsDefaultOrEmpty)
         {
+            // Only the behaviors that narrow themselves need looking up; the ordinary case leaves
+            // this null and prediction keeps its old shape exactly.
+            Dictionary<string, BehaviorTypeInfo>? narrowed = null;
+            foreach (var b in behaviors)
+            {
+                if (!b.IsNarrowed)
+                    continue;
+
+                narrowed ??= new Dictionary<string, BehaviorTypeInfo>(StringComparer.Ordinal);
+                narrowed[b.BaseTypeName] = b;
+            }
+
             foreach (var handler in registrations)
             {
                 var predicted = BehaviorRegistrationScanner.PredictChains(
-                    behaviorRegistrations, handler.RequestType, handler.ResponseType);
+                    behaviorRegistrations, handler.RequestType, handler.ResponseType, narrowed);
 
                 predicted.RemoveAll(static c => c.Count == 0);
 
@@ -650,6 +675,13 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
             var slot = 0;
             foreach (var handler in registrations)
             {
+                // A behavior that narrows itself applies only where its constraints hold. Naming it
+                // over a pair that fails them does not compile, and MSDI would not have resolved it
+                // there either — measured: GetServices returns nothing for such a pair, silently. So
+                // skipping is both what has to happen and what already happened.
+                if (!b.AppliesTo(handler.RequestType, handler.ResponseType))
+                    continue;
+
                 var serviceClosed = GetClosedServiceType(b.Kind, handler.RequestType, handler.ResponseType);
 
                 sb.AppendLine($"                    services.Insert(i + {slot}, new global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor(");
@@ -660,9 +692,10 @@ public sealed class MediatorPipelineGenerator : IIncrementalGenerator
             }
 
             // Advance past the spliced block. With the loop's own i++ this lands on the element
-            // after it. When nothing was inserted (no handler pairs) the net effect is to re-examine
-            // position i, which now holds whatever shifted down into it.
-            var delta = registrations.Count - 1;
+            // after it. When nothing was inserted (no handler pairs, or a narrowed behavior that
+            // matched none) the net effect is to re-examine position i, which now holds whatever
+            // shifted down into it. Counts what was INSERTED, not what was considered.
+            var delta = slot - 1;
             if (delta != 0)
                 sb.AppendLine($"                    i += {delta};");
 
