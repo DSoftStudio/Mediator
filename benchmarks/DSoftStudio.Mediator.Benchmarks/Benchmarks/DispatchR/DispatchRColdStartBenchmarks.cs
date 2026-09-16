@@ -49,14 +49,14 @@ public class DispatchRColdStartBenchmarks
     // libraries would be a comparison of .NET startup. The gap between the two rows is the part
     // that is actually about the library.
     [Benchmark(Baseline = true)]
-    public int DispatchR_ColdStart_ContainerOnly()
+    public int DispatchR_Startup_ContainerOnly()
     {
         using var sp = _cold.BuildServiceProvider();
         return sp.GetRequiredService<DispatchR.IMediator>() is null ? 0 : 1;
     }
 
     [Benchmark]
-    public async Task<int> DispatchR_ColdStart()
+    public async Task<int> DispatchR_Startup_WithFirstDispatch()
     {
         using var sp = _cold.BuildServiceProvider();
         var mediator = sp.GetRequiredService<DispatchR.IMediator>();

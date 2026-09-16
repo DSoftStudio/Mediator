@@ -271,6 +271,24 @@ if ($envInfo) {
 
 $found = 0
 
+# ── Note attached to every startup table ─────────────────────────────────
+# Most of a startup figure is .NET and the DI container, which every library on this page pays
+# equally. Published as a single number it reads as the mediator's cost, and it is not: measured,
+# building the provider and resolving IMediator was 13.7 ms of a 17.2 ms total. The paired rows exist
+# so a reader can see which part belongs to the library — and this says so where they will actually
+# read it, rather than in a comment in the benchmark source.
+$coldStartNote = @'
+> **Read the gap, not the total.** `Startup_ContainerOnly` builds the DI container and resolves the
+> mediator. `Startup_WithFirstDispatch` does the same and then dispatches one request. Nearly all of
+> either number is .NET runtime startup and DI container construction, which every library on this
+> page pays alike. **The difference between the two rows is the part that belongs to the library.**
+>
+> Measured one process per sample, because startup is a property of a process and cannot be observed
+> from inside a warm one. Process timings are skewed, so read the median rather than the mean — and
+> the first row executed also absorbs the machine's own file-cache warm-up, which inflates it and so
+> understates the gap.
+'@
+
 # ── Emit per-library isolated sections ───────────────────────────────────
 foreach ($key in $titleMap.Keys) {
     $file = Join-Path $ResultsDir "$key-report-github.md"
@@ -279,6 +297,10 @@ foreach ($key in $titleMap.Keys) {
         $found++
         [void]$sb.AppendLine("## $($titleMap[$key])")
         [void]$sb.AppendLine()
+        if ($key -like "*ColdStart*") {
+            [void]$sb.AppendLine($coldStartNote)
+            [void]$sb.AppendLine()
+        }
         [void]$sb.AppendLine($table)
         [void]$sb.AppendLine()
     }
@@ -325,6 +347,12 @@ foreach ($title in $combinedSections.Keys) {
     $found++
     [void]$sb.AppendLine("## $title")
     [void]$sb.AppendLine()
+    # The combined table is the one people actually compare libraries in, so it needs the caveat
+    # more than the per-library ones do.
+    if ($title -like "*Cold Start*") {
+        [void]$sb.AppendLine($coldStartNote)
+        [void]$sb.AppendLine()
+    }
     [void]$sb.AppendLine($headerRow)
     [void]$sb.AppendLine($sepRow)
 

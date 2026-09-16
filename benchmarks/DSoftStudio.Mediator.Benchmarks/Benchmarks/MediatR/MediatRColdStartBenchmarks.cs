@@ -51,14 +51,14 @@ public class MediatRColdStartBenchmarks
     // libraries would be a comparison of .NET startup. The gap between the two rows is the part
     // that is actually about the library.
     [Benchmark(Baseline = true)]
-    public int MediatR_ColdStart_ContainerOnly()
+    public int MediatR_Startup_ContainerOnly()
     {
         using var sp = _cold.BuildServiceProvider();
         return sp.GetRequiredService<MediatR.IMediator>() is null ? 0 : 1;
     }
 
     [Benchmark]
-    public async Task<int> MediatR_ColdStart()
+    public async Task<int> MediatR_Startup_WithFirstDispatch()
     {
         using var sp = _cold.BuildServiceProvider();
         var mediator = sp.GetRequiredService<MediatR.IMediator>();
