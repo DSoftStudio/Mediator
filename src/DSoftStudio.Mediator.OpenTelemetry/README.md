@@ -68,9 +68,33 @@ services
 request/response pairs and builds the pipeline chains, so the call has to sit **after
 `RegisterMediatorHandlers()` and before `PrecompilePipelines()`** — as in the Quick Start above.
 
-Get the order wrong and the behaviors are never closed into a chain. Request spans still appear, since
-the dispatch observer is not a behavior and does not depend on this ordering; stream spans and metrics
-quietly do not. That partial-success is the trap: telemetry looks like it is working.
+Get the order wrong and **nothing on the request side is instrumented at all** — not the metrics
+behavior, and not the request span either.
+
+Being an observer rather than a behavior does not make the dispatch observer independent of this
+ordering. `PipelineChainHandler` is its only consumer, and `Mediator.Send` only reaches that handler
+when a chain exists:
+
+```csharp
+if (RequestDispatch<TRequest, TResponse>.HasPipelineChain)
+{
+    var chain = PipelineChainCache<TRequest, TResponse>.Resolve(_serviceProvider);
+    if (chain is not null)
+        return chain.Handle(request, cancellationToken);   // the only path that has the observer
+}
+
+return HandlerCache<TRequest, TResponse>.Resolve(_serviceProvider)
+    .Handle(request, cancellationToken);                   // no chain, no observer, no span
+```
+
+With no behavior closed into a chain, a request goes straight to its handler and the observer is never
+constructed. Request spans, stream spans and metrics all disappear together. Notification spans are
+the exception and survive, because publishing does not go through a pipeline chain.
+
+> **It can hide in the IDE and surface in production.** Anything else that registers a pipeline
+> component — the Pipeline Explorer's profiling mode, for one — forces a chain to exist, and the
+> request spans come back. A developer profiling locally sees a complete trace, exports a production
+> trace built without it, and finds the requests missing.
 
 The analyzer reports **DSOFT010** when it can see the mistake, which means both calls in the same
 method on the same service collection: the Program.cs shape. A registration made from another method
