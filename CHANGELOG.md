@@ -5,6 +5,70 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0-rc.2] — 2026-09-16
+
+> Companions: `OpenTelemetry` 1.1.1-rc.2 · `HybridCache` 1.0.10-rc.2 · `FluentValidation` 1.0.10-rc.2.
+
+No behavior changes beyond rc.1. Ten defects found by the Pipeline Explorer team, who measured each
+one against packages built from rc.1 and sent a reproduction with every report.
+
+All five packages move together even though three of them changed only their README. The companions
+reference the core by project, so a published companion pins the core version it was packed against:
+leaving `HybridCache` at rc.1 would keep pulling the rc.1 core — with the generator defect below —
+into any application that installs the companion without naming the core itself.
+
+### Fixed
+
+- **A stream behavior that narrows its own constraint broke the consumer's build.** `StreamGenerator`
+  closed it over every pair, producing `CS0311` in `StreamRegistry.g.cs`, a file nobody can edit. The
+  narrowing data had been computed for stream behaviors all along — the scanner does not branch on the
+  interface kind — and this generator never read it. The equivalent guard on the request side shipped
+  in rc.1; this is the half that was missing.
+- **A `file`-local stream behavior reached the generated registry**, through a hand-rolled
+  accessibility test: a `file` type reports `Internal`, so "Public or Internal" waved it through and
+  the generated file named something the compiler cannot resolve — `CS0400`. It now uses the shared
+  check, which also covers private nested types and types nested in a generic one.
+- **DSOFT011 described a consequence the developer could not reach.** For that same stream case it
+  reported the behavior and said it "works on the ordinary runtime but throws under Native AOT", while
+  the same generator run emitted code that does not compile. Fixing the generator makes the message
+  true again.
+- **A stream whose consumer stopped reading was reported as failed.** `break` after the first page
+  disposed the iterator and the span went red — a paged query reading its first N rows looked like an
+  outage.
+- **No failing stream carried `error.type` or an exception event**, and cancelling, breaking and
+  crashing produced spans identical character for character. Streams now report
+  `mediator.stream.termination` as `completed`, `cancelled`, `early` or `faulted`, and only a fault
+  sets Error status.
+- **An empty stream reported `first_item_ms` and `throughput_per_sec` as zero**, indistinguishable
+  from measurements and averaged as measurements. Both tags are now omitted when nothing was produced.
+- **`mediator.request.errors` was never incremented for a stream.** Error rate stayed flat while the
+  traces beside it showed failures. C# forbids a catch clause in an iterator containing `yield return`,
+  so both stream behaviors now drive the enumerator by hand — awaiting `MoveNextAsync` inside its own
+  try and yielding outside every try, which is the shape that makes a catch legal.
+- **Spans opened inside a stream handler escaped the stream span from the second item onward.**
+  `Activity.Current` is an `AsyncLocal`, and after the first `yield return` the iterator resumes under
+  the consumer's context. A stream created under one span and enumerated after it ended came out as a
+  root span in a fresh trace — the ordinary shape of any API handing an `IAsyncEnumerable` to a
+  framework that enumerates it later. The span is now made ambient around every `MoveNextAsync`.
+- **The notification error metric lost `mediator.request.type`.** It read the value back off the
+  envelope span, which returns null whenever that span carries no tags — not only when there is no
+  span, since tags are set under `IsAllDataRequested` and any head sampler returning `PropagationData`
+  leaves the envelope alive and untagged.
+- **The README's manual registration armed one dispatch table of three.** `AddMediator()
+  .RegisterMediatorHandlers().PrecompilePipelines()` left `Publish` reaching no handlers and
+  `CreateStream` producing nothing, with no build error and no exception. The generated
+  `AddMediator(configure)` overload calls all three.
+
+### Documentation
+
+- The four packaged READMEs, which are the nuget.org pages. The OpenTelemetry one described
+  instrumentation as attaching "via standard pipeline behaviors", which rc.1 replaced: `Send` and
+  `Publish` are observed through the core's observation ports and only stream tracing and metrics are
+  behaviors. It also gained the registration-order section the other companions have. The HybridCache
+  one gained the Native AOT section it never had — it is the one companion that fails there without a
+  step from the application, and DSOFT012 shipped in rc.1 unmentioned.
+
+
 ## [1.4.0-rc.1] — 2026-09-02
 
 > Companions: `OpenTelemetry` 1.1.1-rc.1 · `HybridCache` 1.0.10-rc.1 · `FluentValidation` 1.0.10-rc.1.
