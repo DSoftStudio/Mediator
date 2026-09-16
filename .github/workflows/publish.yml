@@ -1,0 +1,229 @@
+name: Publish
+
+# ════════════════════════════════════════════════════════════════════════
+#  Publication happens when a human presses "Run workflow" in the Actions
+#  tab. Nothing else triggers it — not a push, not a tag, not a merge.
+#
+#  It used to ride along with CI: every push to main published to GitHub
+#  Packages, so a commit that touched only README.md shipped a package.
+#  Releasing is a decision, and a decision needs someone to make it.
+#
+#  The job rebuilds and re-runs the tests from the commit you select
+#  rather than downloading an artifact CI left behind. It costs about two
+#  minutes and removes the question "was that artifact built from this
+#  code?" — which is the question you would be asking at the worst moment.
+# ════════════════════════════════════════════════════════════════════════
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Where to publish'
+        type: choice
+        required: true
+        default: github-packages
+        options:
+          - github-packages
+          - nuget.org
+      version:
+        description: 'Version of DSoftStudio.Mediator you intend to publish (e.g. 1.4.0-rc.1)'
+        type: string
+        required: true
+      include_companions:
+        description: 'Also publish FluentValidation / HybridCache / OpenTelemetry'
+        type: boolean
+        required: true
+        default: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    name: Publish to ${{ inputs.target }}
+    runs-on: ubuntu-latest
+
+    # Each target gets a GitHub Environment of the same name, so Settings ->
+    # Environments can attach required reviewers and scope the API keys to it.
+    # Worth doing for nuget.org in particular: a published version can be
+    # unlisted but never replaced or removed, so that push is the one step here
+    # with no undo. Repo-level secrets keep working either way — this only adds
+    # a place to put protection rules.
+    environment: ${{ inputs.target }}
+
+    steps:
+      # ── nuget.org is main-only, and this is a FAILING step on purpose ──
+      #
+      # workflow_dispatch lets whoever presses the button choose the ref from a
+      # dropdown, so without this check the release branch, a feature branch or
+      # a pull-request head could all push to nuget.org. A version there can be
+      # unlisted but never replaced or removed, so "published from the wrong
+      # branch" has no undo.
+      #
+      # Deliberately a step that fails rather than a job-level `if:` that skips.
+      # A skipped job renders as a pale check in the Actions list and reads as
+      # "ran, nothing to do" — which is precisely the wrong impression when what
+      # actually happened is that a release was refused.
+      #
+      # GitHub Packages stays available from any branch: that is the rehearsal
+      # target, and being able to push a build of a feature branch to it is the
+      # reason there are two options here at all.
+      - name: Refuse to publish to NuGet.org from anywhere but main
+        if: inputs.target == 'nuget.org' && github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::NuGet.org can only be published from main. This run is on '${{ github.ref }}'."
+          echo "Merge to main first, then run this workflow again with main selected."
+          exit 1
+
+      # fetch-depth: 0 because the tag checks below need the tags and enough
+      # history to prove the tagged commit is reachable from main. The default
+      # shallow clone has neither.
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ── nuget.org publishes a TAG, not a branch tip ──
+      #
+      # The button is pressed with main selected, but what gets built is the
+      # commit the release tag points at. Those are not the same thing: main
+      # moves, and a release must not. Tagging v1.4.0 and then merging one more
+      # PR would otherwise change what "publishing 1.4.0" means.
+      #
+      # The tag still has to be reachable from main, so this cannot be used to
+      # ship a tag placed on a side branch — which is the loophole that makes
+      # "publish from main" meaningless if left open.
+      #
+      # Tags here are annotated (v1.3.0 is a tag object, not a commit), so the
+      # ^{commit} dereference is load-bearing, not decoration.
+      - name: Require a release tag, reachable from main
+        if: inputs.target == 'nuget.org'
+        run: |
+          set -e
+          tag="v${{ inputs.version }}"
+
+          if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "::error::No tag '$tag' exists. Tag the release commit first: git tag -a $tag -m $tag && git push origin $tag"
+            echo "Tags that do exist:"
+            git tag --list --sort=-v:refname | head -10
+            exit 1
+          fi
+
+          tagged=$(git rev-parse "$tag^{commit}")
+
+          # HEAD, not origin/main: the guard above already pinned this run to
+          # refs/heads/main, so HEAD is main's tip and is a local ref that is
+          # certain to exist. Whether actions/checkout leaves a usable
+          # refs/remotes/origin/main behind is an implementation detail this
+          # check should not depend on.
+          if ! git merge-base --is-ancestor "$tagged" HEAD; then
+            echo "::error::Tag '$tag' points at $tagged, which is not reachable from main."
+            echo "A release has to be a commit that is on main. Merge it first, then move the tag."
+            exit 1
+          fi
+
+          echo "RELEASE_SHA=$tagged" >> "$GITHUB_ENV"
+          echo "Publishing $tag -> $tagged"
+
+      # Everything from here on builds the tagged commit rather than the tip of
+      # main. For GitHub Packages there is no tag and RELEASE_SHA is unset, so
+      # this is a no-op and the rehearsal still builds whatever branch you chose.
+      - name: Check out the tagged commit
+        if: inputs.target == 'nuget.org'
+        run: git checkout --detach "$RELEASE_SHA"
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # .NET 8 is needed by the sample projects
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore DSoftStudio.Mediator.slnx
+
+      - name: Build
+        run: dotnet build DSoftStudio.Mediator.slnx -c Release --no-restore
+
+      # A red test stops the publish. Same suite CI runs, no shortcut: the
+      # whole point of this workflow is that what ships was verified from the
+      # source it shipped from.
+      - name: Test
+        run: dotnet test DSoftStudio.Mediator.slnx -c Release --no-build
+
+      - name: Pack
+        run: |
+          mkdir -p nupkgs
+          dotnet pack src/DSoftStudio.Mediator.Abstractions -c Release --no-build -o nupkgs
+          dotnet pack src/DSoftStudio.Mediator -c Release --no-build -o nupkgs
+          if [ "${{ inputs.include_companions }}" = "true" ]; then
+            dotnet pack src/DSoftStudio.Mediator.FluentValidation -c Release --no-build -o nupkgs
+            dotnet pack src/DSoftStudio.Mediator.HybridCache     -c Release --no-build -o nupkgs
+            dotnet pack src/DSoftStudio.Mediator.OpenTelemetry   -c Release --no-build -o nupkgs
+          fi
+
+      # The typed version has to match what the build actually produced.
+      #
+      # This is the guard that matters. Every package carries its own <Version>
+      # in its csproj, and they do not move together — the mediator can be at
+      # 1.4.0-rc.1 while HybridCache sits at 1.0.10-rc.1. Without this check the
+      # button publishes whatever happens to be on the branch, which is exactly
+      # the accident this workflow exists to prevent. Typing the version means
+      # you looked.
+      - name: Verify the built version is the one you asked for
+        run: |
+          set -e
+          expected="nupkgs/DSoftStudio.Mediator.${{ inputs.version }}.nupkg"
+          if [ ! -f "$expected" ]; then
+            echo "::error::Asked to publish ${{ inputs.version }}, but the build produced no such package."
+            echo "What the build produced:"
+            ls -1 nupkgs/
+            echo
+            echo "The <Version> in src/DSoftStudio.Mediator/DSoftStudio.Mediator.csproj is what decides this."
+            exit 1
+          fi
+          echo "Matched $expected"
+
+      - name: List what will be published
+        run: |
+          {
+            echo "### Publishing to \`${{ inputs.target }}\`"
+            echo
+            echo '| Package |'
+            echo '|---|'
+            for f in nupkgs/*.nupkg; do echo "| \`$(basename "$f")\` |"; done
+          } >> "$GITHUB_STEP_SUMMARY"
+          ls -la nupkgs/
+
+      - name: Push to GitHub Packages
+        if: inputs.target == 'github-packages'
+        env:
+          GH_PKG_TOKEN: ${{ secrets.GH_PKG_TOKEN }}
+        run: >
+          dotnet nuget push "nupkgs/*.nupkg"
+          --source "https://nuget.pkg.github.com/DSoftStudio/index.json"
+          --api-key "$GH_PKG_TOKEN"
+          --skip-duplicate
+
+      # --skip-duplicate is what makes "publish everything" safe: a companion
+      # whose version has not moved is a no-op rather than an error, so the
+      # button does not have to be told which packages changed.
+      # The branch condition is repeated here on purpose. The guard step above
+      # protects this one only for as long as nobody adds continue-on-error,
+      # reorders the steps, or copies this job into a new workflow. Making the
+      # push itself unconditionally branch-aware means the irreversible action
+      # carries its own precondition instead of inheriting one.
+      - name: Push to NuGet.org
+        if: inputs.target == 'nuget.org' && github.ref == 'refs/heads/main'
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: >
+          dotnet nuget push "nupkgs/*.nupkg"
+          --source "https://api.nuget.org/v3/index.json"
+          --api-key "$NUGET_API_KEY"
+          --skip-duplicate
