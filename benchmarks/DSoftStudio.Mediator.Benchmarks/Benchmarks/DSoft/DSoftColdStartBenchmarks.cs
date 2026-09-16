@@ -27,6 +27,10 @@ namespace Benchmarks;
 // arming land inside the measurement instead of before it. Warmup is 0 for the same reason — it is
 // the one suite here where warming up destroys what is being measured.
 [SimpleJob(RunStrategy.ColdStart, launchCount: 40, warmupCount: 0, iterationCount: 1, invocationCount: 1)]
+// The table has to answer "what does this library add" itself. Three rows separate the DI
+// floor from registration from the first dispatch, but a reader who does not subtract walks
+// away with a total that is mostly .NET and the container.
+[Config(typeof(AddedOverFloorConfig))]
 [MedianColumn]
 [RankColumn]
 [Orderer(BenchmarkDotNet.Order.SummaryOrderPolicy.FastestToSlowest)]
@@ -34,34 +38,56 @@ public class DSoftColdStartBenchmarks
 {
     private static readonly Ping PingMessage = new();
 
-    private ServiceCollection _cold = null!;
+    // ── Registration is measured, not set up ──────────────────────────
+    // It used to live in [GlobalSetup], which excluded it from every row AND pre-JITted the
+    // machinery the measured row then reused — so the reported figure was neither the library's cost
+    // nor an honest floor. Registration is library work: an application cannot serve a request until
+    // it has run, so time-to-first-request has to contain it.
+    //
+    // Three rows make the whole path visible, each a superset of the one above:
+    //   DiFloor          the floor: a container holding one trivial service, resolved
+    //   Registered       + AddMediator / RegisterMediatorHandlers / PrecompilePipelines, and resolve
+    //   FirstRequest     + the first dispatch
+    // Registered - DiFloor is what standing the library up costs; FirstRequest - Registered is the
+    // first dispatch; FirstRequest - DiFloor is the whole of what the library adds to
+    // time-to-first-request, which is the number an application actually feels.
+    //
+    // The floor RESOLVES, it does not merely build. Measured on a container holding one trivial
+    // service: building took 6.80 ms and the first resolve 5.44 ms. A baseline that only built
+    // left those 5.44 ms to be charged to the library, which is how this one's startup first read
+    // as 28.5 ms when it is closer to 9.
 
-    [GlobalSetup]
-    public void Setup()
+    [Benchmark(Baseline = true)]
+    public int DSoft_Startup_DiFloor()
     {
-        // Pre-configure ServiceCollection (mirrors real app startup).
-        // Only BuildServiceProvider + resolve + send is measured.
-        _cold = new ServiceCollection();
-        DSoftStudio.Mediator.ServiceCollectionExtensions.AddMediator(_cold)
-            .RegisterMediatorHandlers()
-            .PrecompilePipelines();
+        var services = new ServiceCollection();
+        services.AddSingleton<IStartupFloor, StartupFloor>();
+
+        using var sp = services.BuildServiceProvider();
+        return sp.GetRequiredService<IStartupFloor>().Value;
     }
 
-    // Everything the measured row does EXCEPT the dispatch. Cold start is dominated by process and
-    // JIT costs that have nothing to do with the mediator, so without this the comparison between
-    // libraries would be a comparison of .NET startup. The gap between the two rows is the part
-    // that is actually about DSoft.
-    [Benchmark(Baseline = true)]
-    public int DSoft_Startup_ContainerOnly()
+    [Benchmark]
+    public int DSoft_Startup_Registered()
     {
-        using var sp = _cold.BuildServiceProvider();
+        var services = new ServiceCollection();
+        DSoftStudio.Mediator.ServiceCollectionExtensions.AddMediator(services)
+            .RegisterMediatorHandlers()
+            .PrecompilePipelines();
+
+        using var sp = services.BuildServiceProvider();
         return sp.GetRequiredService<IMediator>() is null ? 0 : 1;
     }
 
     [Benchmark]
-    public async Task<int> DSoft_Startup_WithFirstDispatch()
+    public async Task<int> DSoft_Startup_FirstRequest()
     {
-        using var sp = _cold.BuildServiceProvider();
+        var services = new ServiceCollection();
+        DSoftStudio.Mediator.ServiceCollectionExtensions.AddMediator(services)
+            .RegisterMediatorHandlers()
+            .PrecompilePipelines();
+
+        using var sp = services.BuildServiceProvider();
         var mediator = sp.GetRequiredService<IMediator>();
         return await mediator.Send<Ping, int>(PingMessage);
     }

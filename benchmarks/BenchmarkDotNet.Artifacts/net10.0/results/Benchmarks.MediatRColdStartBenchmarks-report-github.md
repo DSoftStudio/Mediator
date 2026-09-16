@@ -10,7 +10,8 @@ InvocationCount=1  IterationCount=1  LaunchCount=40
 RunStrategy=ColdStart  UnrollFactor=1  WarmupCount=0  
 
 ```
-| Method                            | Mean     | Error    | StdDev   | Median   | Ratio | RatioSD | Rank | Allocated | Alloc Ratio |
-|---------------------------------- |---------:|---------:|---------:|---------:|------:|--------:|-----:|----------:|------------:|
-| MediatR_Startup_ContainerOnly     | 34.45 ms | 5.315 ms | 9.447 ms | 32.94 ms |  1.03 |    0.30 |    1 |  12.41 KB |        1.00 |
-| MediatR_Startup_WithFirstDispatch | 34.58 ms | 0.204 ms | 0.363 ms | 34.62 ms |  1.03 |    0.11 |    2 |  15.22 KB |        1.23 |
+| Method                       | Mean     | Error     | StdDev    | Median   | Ratio | RatioSD | Added    | Rank | Allocated  | Alloc Ratio |
+|----------------------------- |---------:|----------:|----------:|---------:|------:|--------:|--------- |-----:|-----------:|------------:|
+| MediatR_Startup_DiFloor      | 13.70 ms |  0.069 ms |  0.123 ms | 13.71 ms |  1.00 |    0.01 | baseline |    1 |    7.45 KB |        1.00 |
+| MediatR_Startup_FirstRequest | 52.30 ms |  0.264 ms |  0.469 ms | 52.36 ms |  3.82 |    0.05 | 38.65 ms |    2 | 2203.68 KB |      295.67 |
+| MediatR_Startup_Registered   | 52.40 ms | 10.010 ms | 17.793 ms | 49.54 ms |  3.83 |    1.28 | 35.83 ms |    3 | 2201.04 KB |      295.32 |

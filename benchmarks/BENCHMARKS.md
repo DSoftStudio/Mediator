@@ -70,20 +70,29 @@ IterationCount=30  WarmupCount=12
 
 ## DSoft - Cold Start
 
-> **Read the gap, not the total.** `Startup_ContainerOnly` builds the DI container and resolves the
-> mediator. `Startup_WithFirstDispatch` does the same and then dispatches one request. Nearly all of
-> either number is .NET runtime startup and DI container construction, which every library on this
-> page pays alike. **The difference between the two rows is the part that belongs to the library.**
+> **Three rows, each a superset of the one above.** `Startup_DiFloor` registers one trivial service
+> in a container, builds it and resolves it — no mediator involved, the floor every library pays and
+> none of them causes. `Startup_Registered` instead registers the library and resolves the mediator.
+> `Startup_FirstRequest` adds the first dispatch.
+>
+> So `Registered - DiFloor` is what standing the library up costs, `FirstRequest - Registered` is the
+> first dispatch, and **`FirstRequest - DiFloor` is everything the library adds to
+> time-to-first-request** — the number an application actually feels.
+>
+> The floor resolves rather than merely building, and that matters more than it looks: on a container
+> holding one trivial service, building took 6.80 ms and the first resolve another 5.44 ms. A
+> baseline that only built would leave those 5.44 ms to be charged to whichever library the row
+> belongs to. Registration is inside the measurement for the same reason — it used to sit in setup,
+> which left it out of every row and pre-compiled the machinery the measured row then reused.
 >
 > Measured one process per sample, because startup is a property of a process and cannot be observed
-> from inside a warm one. Process timings are skewed, so read the median rather than the mean — and
-> the first row executed also absorbs the machine's own file-cache warm-up, which inflates it and so
-> understates the gap.
+> from inside a warm one. Process timings are skewed, so read the median rather than the mean.
 
-| Method                          | Mean     | Error    | StdDev   | Median   | Ratio | RatioSD | Rank | Allocated | Alloc Ratio |
-|-------------------------------- |---------:|---------:|---------:|---------:|------:|--------:|-----:|----------:|------------:|
-| DSoft_Startup_ContainerOnly     | 17.00 ms | 5.541 ms | 9.849 ms | 15.40 ms |  1.08 |    0.64 |    1 |   17.3 KB |        1.00 |
-| DSoft_Startup_WithFirstDispatch | 19.92 ms | 0.135 ms | 0.240 ms | 19.92 ms |  1.26 |    0.16 |    2 |  17.37 KB |        1.00 |
+| Method                     | Mean     | Error    | StdDev   | Median   | Ratio | RatioSD | Added    | Rank | Allocated | Alloc Ratio |
+|--------------------------- |---------:|---------:|---------:|---------:|------:|--------:|--------- |-----:|----------:|------------:|
+| DSoft_Startup_DiFloor      | 13.80 ms | 0.102 ms | 0.181 ms | 13.80 ms |  1.00 |    0.02 | baseline |    1 |   7.45 KB |        1.00 |
+| DSoft_Startup_Registered   | 35.51 ms | 0.183 ms | 0.325 ms | 35.44 ms |  2.57 |    0.04 | 21.64 ms |    2 |  30.21 KB |        4.05 |
+| DSoft_Startup_FirstRequest | 40.01 ms | 0.238 ms | 0.424 ms | 39.93 ms |  2.90 |    0.05 | 26.13 ms |    3 |  33.91 KB |        4.55 |
 
 ## DSoft - Realistic Pipeline
 
@@ -159,20 +168,29 @@ IterationCount=30  WarmupCount=12
 
 ## MediatR - Cold Start
 
-> **Read the gap, not the total.** `Startup_ContainerOnly` builds the DI container and resolves the
-> mediator. `Startup_WithFirstDispatch` does the same and then dispatches one request. Nearly all of
-> either number is .NET runtime startup and DI container construction, which every library on this
-> page pays alike. **The difference between the two rows is the part that belongs to the library.**
+> **Three rows, each a superset of the one above.** `Startup_DiFloor` registers one trivial service
+> in a container, builds it and resolves it — no mediator involved, the floor every library pays and
+> none of them causes. `Startup_Registered` instead registers the library and resolves the mediator.
+> `Startup_FirstRequest` adds the first dispatch.
+>
+> So `Registered - DiFloor` is what standing the library up costs, `FirstRequest - Registered` is the
+> first dispatch, and **`FirstRequest - DiFloor` is everything the library adds to
+> time-to-first-request** — the number an application actually feels.
+>
+> The floor resolves rather than merely building, and that matters more than it looks: on a container
+> holding one trivial service, building took 6.80 ms and the first resolve another 5.44 ms. A
+> baseline that only built would leave those 5.44 ms to be charged to whichever library the row
+> belongs to. Registration is inside the measurement for the same reason — it used to sit in setup,
+> which left it out of every row and pre-compiled the machinery the measured row then reused.
 >
 > Measured one process per sample, because startup is a property of a process and cannot be observed
-> from inside a warm one. Process timings are skewed, so read the median rather than the mean — and
-> the first row executed also absorbs the machine's own file-cache warm-up, which inflates it and so
-> understates the gap.
+> from inside a warm one. Process timings are skewed, so read the median rather than the mean.
 
-| Method                            | Mean     | Error    | StdDev   | Median   | Ratio | RatioSD | Rank | Allocated | Alloc Ratio |
-|---------------------------------- |---------:|---------:|---------:|---------:|------:|--------:|-----:|----------:|------------:|
-| MediatR_Startup_ContainerOnly     | 34.45 ms | 5.315 ms | 9.447 ms | 32.94 ms |  1.03 |    0.30 |    1 |  12.41 KB |        1.00 |
-| MediatR_Startup_WithFirstDispatch | 34.58 ms | 0.204 ms | 0.363 ms | 34.62 ms |  1.03 |    0.11 |    2 |  15.22 KB |        1.23 |
+| Method                       | Mean     | Error     | StdDev    | Median   | Ratio | RatioSD | Added    | Rank | Allocated  | Alloc Ratio |
+|----------------------------- |---------:|----------:|----------:|---------:|------:|--------:|--------- |-----:|-----------:|------------:|
+| MediatR_Startup_DiFloor      | 13.70 ms |  0.069 ms |  0.123 ms | 13.71 ms |  1.00 |    0.01 | baseline |    1 |    7.45 KB |        1.00 |
+| MediatR_Startup_FirstRequest | 52.30 ms |  0.264 ms |  0.469 ms | 52.36 ms |  3.82 |    0.05 | 38.65 ms |    2 | 2203.68 KB |      295.67 |
+| MediatR_Startup_Registered   | 52.40 ms | 10.010 ms | 17.793 ms | 49.54 ms |  3.83 |    1.28 | 35.83 ms |    3 | 2201.04 KB |      295.32 |
 
 ## MediatR - Realistic Pipeline
 
@@ -241,20 +259,29 @@ IterationCount=30  WarmupCount=12
 
 ## DispatchR - Cold Start
 
-> **Read the gap, not the total.** `Startup_ContainerOnly` builds the DI container and resolves the
-> mediator. `Startup_WithFirstDispatch` does the same and then dispatches one request. Nearly all of
-> either number is .NET runtime startup and DI container construction, which every library on this
-> page pays alike. **The difference between the two rows is the part that belongs to the library.**
+> **Three rows, each a superset of the one above.** `Startup_DiFloor` registers one trivial service
+> in a container, builds it and resolves it — no mediator involved, the floor every library pays and
+> none of them causes. `Startup_Registered` instead registers the library and resolves the mediator.
+> `Startup_FirstRequest` adds the first dispatch.
+>
+> So `Registered - DiFloor` is what standing the library up costs, `FirstRequest - Registered` is the
+> first dispatch, and **`FirstRequest - DiFloor` is everything the library adds to
+> time-to-first-request** — the number an application actually feels.
+>
+> The floor resolves rather than merely building, and that matters more than it looks: on a container
+> holding one trivial service, building took 6.80 ms and the first resolve another 5.44 ms. A
+> baseline that only built would leave those 5.44 ms to be charged to whichever library the row
+> belongs to. Registration is inside the measurement for the same reason — it used to sit in setup,
+> which left it out of every row and pre-compiled the machinery the measured row then reused.
 >
 > Measured one process per sample, because startup is a property of a process and cannot be observed
-> from inside a warm one. Process timings are skewed, so read the median rather than the mean — and
-> the first row executed also absorbs the machine's own file-cache warm-up, which inflates it and so
-> understates the gap.
+> from inside a warm one. Process timings are skewed, so read the median rather than the mean.
 
-| Method                              | Mean     | Error    | StdDev   | Median   | Ratio | RatioSD | Rank | Allocated | Alloc Ratio |
-|------------------------------------ |---------:|---------:|---------:|---------:|------:|--------:|-----:|----------:|------------:|
-| DispatchR_Startup_ContainerOnly     | 15.46 ms | 5.314 ms | 9.445 ms | 13.93 ms |  1.08 |    0.67 |    1 |  14.66 KB |        1.00 |
-| DispatchR_Startup_WithFirstDispatch | 18.07 ms | 0.098 ms | 0.174 ms | 18.02 ms |  1.27 |    0.16 |    2 |  17.04 KB |        1.16 |
+| Method                         | Mean     | Error     | StdDev    | Median   | Ratio | RatioSD | Added    | Rank | Allocated | Alloc Ratio |
+|------------------------------- |---------:|----------:|----------:|---------:|------:|--------:|--------- |-----:|----------:|------------:|
+| DispatchR_Startup_DiFloor      | 17.23 ms | 11.112 ms | 19.751 ms | 14.07 ms |  1.19 |    1.38 | baseline |    1 |   7.45 KB |        1.00 |
+| DispatchR_Startup_Registered   | 26.96 ms |  9.499 ms | 16.884 ms | 24.25 ms |  1.87 |    1.20 | 10.18 ms |    2 | 746.65 KB |      100.18 |
+| DispatchR_Startup_FirstRequest | 27.84 ms |  0.253 ms |  0.450 ms | 27.83 ms |  1.93 |    0.28 | 13.76 ms |    3 | 748.87 KB |      100.48 |
 
 ## DispatchR - Realistic Pipeline
 
@@ -330,20 +357,29 @@ IterationCount=30  WarmupCount=12
 
 ## Mediator (Source Gen) - Cold Start
 
-> **Read the gap, not the total.** `Startup_ContainerOnly` builds the DI container and resolves the
-> mediator. `Startup_WithFirstDispatch` does the same and then dispatches one request. Nearly all of
-> either number is .NET runtime startup and DI container construction, which every library on this
-> page pays alike. **The difference between the two rows is the part that belongs to the library.**
+> **Three rows, each a superset of the one above.** `Startup_DiFloor` registers one trivial service
+> in a container, builds it and resolves it — no mediator involved, the floor every library pays and
+> none of them causes. `Startup_Registered` instead registers the library and resolves the mediator.
+> `Startup_FirstRequest` adds the first dispatch.
+>
+> So `Registered - DiFloor` is what standing the library up costs, `FirstRequest - Registered` is the
+> first dispatch, and **`FirstRequest - DiFloor` is everything the library adds to
+> time-to-first-request** — the number an application actually feels.
+>
+> The floor resolves rather than merely building, and that matters more than it looks: on a container
+> holding one trivial service, building took 6.80 ms and the first resolve another 5.44 ms. A
+> baseline that only built would leave those 5.44 ms to be charged to whichever library the row
+> belongs to. Registration is inside the measurement for the same reason — it used to sit in setup,
+> which left it out of every row and pre-compiled the machinery the measured row then reused.
 >
 > Measured one process per sample, because startup is a property of a process and cannot be observed
-> from inside a warm one. Process timings are skewed, so read the median rather than the mean — and
-> the first row executed also absorbs the machine's own file-cache warm-up, which inflates it and so
-> understates the gap.
+> from inside a warm one. Process timings are skewed, so read the median rather than the mean.
 
-| Method                               | Mean     | Error    | StdDev   | Median   | Ratio | RatioSD | Rank | Allocated | Alloc Ratio |
-|------------------------------------- |---------:|---------:|---------:|---------:|------:|--------:|-----:|----------:|------------:|
-| MediatorSG_Startup_ContainerOnly     | 16.02 ms | 5.325 ms | 9.465 ms | 14.52 ms |  1.08 |    0.65 |    1 |  15.51 KB |        1.00 |
-| MediatorSG_Startup_WithFirstDispatch | 23.30 ms | 0.196 ms | 0.349 ms | 23.34 ms |  1.57 |    0.20 |    2 | 150.35 KB |        9.70 |
+| Method                          | Mean     | Error    | StdDev   | Median   | Ratio | RatioSD | Added    | Rank | Allocated | Alloc Ratio |
+|-------------------------------- |---------:|---------:|---------:|---------:|------:|--------:|--------- |-----:|----------:|------------:|
+| MediatorSG_Startup_DiFloor      | 13.74 ms | 0.116 ms | 0.206 ms | 13.73 ms |  1.00 |    0.02 | baseline |    1 |   7.45 KB |        1.00 |
+| MediatorSG_Startup_Registered   | 16.63 ms | 0.100 ms | 0.177 ms | 16.61 ms |  1.21 |    0.02 | 2.88 ms  |    2 |   34.3 KB |        4.60 |
+| MediatorSG_Startup_FirstRequest | 25.53 ms | 0.186 ms | 0.330 ms | 25.50 ms |  1.86 |    0.04 | 11.77 ms |    3 | 157.09 KB |       21.08 |
 
 ## Mediator (Source Gen) - Realistic Pipeline
 
@@ -487,29 +523,41 @@ IterationCount=30  WarmupCount=12
 
 ## Cold Start - All Libraries
 
-> **Read the gap, not the total.** `Startup_ContainerOnly` builds the DI container and resolves the
-> mediator. `Startup_WithFirstDispatch` does the same and then dispatches one request. Nearly all of
-> either number is .NET runtime startup and DI container construction, which every library on this
-> page pays alike. **The difference between the two rows is the part that belongs to the library.**
+> **Three rows, each a superset of the one above.** `Startup_DiFloor` registers one trivial service
+> in a container, builds it and resolves it — no mediator involved, the floor every library pays and
+> none of them causes. `Startup_Registered` instead registers the library and resolves the mediator.
+> `Startup_FirstRequest` adds the first dispatch.
+>
+> So `Registered - DiFloor` is what standing the library up costs, `FirstRequest - Registered` is the
+> first dispatch, and **`FirstRequest - DiFloor` is everything the library adds to
+> time-to-first-request** — the number an application actually feels.
+>
+> The floor resolves rather than merely building, and that matters more than it looks: on a container
+> holding one trivial service, building took 6.80 ms and the first resolve another 5.44 ms. A
+> baseline that only built would leave those 5.44 ms to be charged to whichever library the row
+> belongs to. Registration is inside the measurement for the same reason — it used to sit in setup,
+> which left it out of every row and pre-compiled the machinery the measured row then reused.
 >
 > Measured one process per sample, because startup is a property of a process and cannot be observed
-> from inside a warm one. Process timings are skewed, so read the median rather than the mean — and
-> the first row executed also absorbs the machine's own file-cache warm-up, which inflates it and so
-> understates the gap.
+> from inside a warm one. Process timings are skewed, so read the median rather than the mean.
 
 | Method | Mean | Error | StdDev | Median | Ratio | RatioSD | Rank | Allocated | Alloc Ratio |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| DSoft_Startup_ContainerOnly | 17.00 ms | 5.541 ms | 9.849 ms | 15.40 ms | 1.08 | 0.64 | 1 | 17.3 KB | 1.00 |
-| DSoft_Startup_WithFirstDispatch | 19.92 ms | 0.135 ms | 0.240 ms | 19.92 ms | 1.26 | 0.16 | 2 | 17.37 KB | 1.00 |
+| DSoft_Startup_DiFloor | 13.80 ms | 0.102 ms | 0.181 ms | 13.80 ms | 1.00 | 0.02 | 1 | 7.45 KB | 1.00 |
+| DSoft_Startup_Registered | 35.51 ms | 0.183 ms | 0.325 ms | 35.44 ms | 2.57 | 0.04 | 2 | 30.21 KB | 4.05 |
+| DSoft_Startup_FirstRequest | 40.01 ms | 0.238 ms | 0.424 ms | 39.93 ms | 2.90 | 0.05 | 3 | 33.91 KB | 4.55 |
 | | | | | | | | | | |
-| MediatR_Startup_ContainerOnly | 34.45 ms | 5.315 ms | 9.447 ms | 32.94 ms | 1.03 | 0.30 | 1 | 12.41 KB | 1.00 |
-| MediatR_Startup_WithFirstDispatch | 34.58 ms | 0.204 ms | 0.363 ms | 34.62 ms | 1.03 | 0.11 | 2 | 15.22 KB | 1.23 |
+| MediatR_Startup_DiFloor | 13.70 ms | 0.069 ms | 0.123 ms | 13.71 ms | 1.00 | 0.01 | 1 | 7.45 KB | 1.00 |
+| MediatR_Startup_FirstRequest | 52.30 ms | 0.264 ms | 0.469 ms | 52.36 ms | 3.82 | 0.05 | 2 | 2203.68 KB | 295.67 |
+| MediatR_Startup_Registered | 52.40 ms | 10.010 ms | 17.793 ms | 49.54 ms | 3.83 | 1.28 | 3 | 2201.04 KB | 295.32 |
 | | | | | | | | | | |
-| DispatchR_Startup_ContainerOnly | 15.46 ms | 5.314 ms | 9.445 ms | 13.93 ms | 1.08 | 0.67 | 1 | 14.66 KB | 1.00 |
-| DispatchR_Startup_WithFirstDispatch | 18.07 ms | 0.098 ms | 0.174 ms | 18.02 ms | 1.27 | 0.16 | 2 | 17.04 KB | 1.16 |
+| DispatchR_Startup_DiFloor | 17.23 ms | 11.112 ms | 19.751 ms | 14.07 ms | 1.19 | 1.38 | 1 | 7.45 KB | 1.00 |
+| DispatchR_Startup_Registered | 26.96 ms | 9.499 ms | 16.884 ms | 24.25 ms | 1.87 | 1.20 | 2 | 746.65 KB | 100.18 |
+| DispatchR_Startup_FirstRequest | 27.84 ms | 0.253 ms | 0.450 ms | 27.83 ms | 1.93 | 0.28 | 3 | 748.87 KB | 100.48 |
 | | | | | | | | | | |
-| MediatorSG_Startup_ContainerOnly | 16.02 ms | 5.325 ms | 9.465 ms | 14.52 ms | 1.08 | 0.65 | 1 | 15.51 KB | 1.00 |
-| MediatorSG_Startup_WithFirstDispatch | 23.30 ms | 0.196 ms | 0.349 ms | 23.34 ms | 1.57 | 0.20 | 2 | 150.35 KB | 9.70 |
+| MediatorSG_Startup_DiFloor | 13.74 ms | 0.116 ms | 0.206 ms | 13.73 ms | 1.00 | 0.02 | 1 | 7.45 KB | 1.00 |
+| MediatorSG_Startup_Registered | 16.63 ms | 0.100 ms | 0.177 ms | 16.61 ms | 1.21 | 0.02 | 2 | 34.3 KB | 4.60 |
+| MediatorSG_Startup_FirstRequest | 25.53 ms | 0.186 ms | 0.330 ms | 25.50 ms | 1.86 | 0.04 | 3 | 157.09 KB | 21.08 |
 
 ## Realistic Pipeline - All Libraries
 

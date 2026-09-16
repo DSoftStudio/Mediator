@@ -278,15 +278,23 @@ $found = 0
 # so a reader can see which part belongs to the library — and this says so where they will actually
 # read it, rather than in a comment in the benchmark source.
 $coldStartNote = @'
-> **Read the gap, not the total.** `Startup_ContainerOnly` builds the DI container and resolves the
-> mediator. `Startup_WithFirstDispatch` does the same and then dispatches one request. Nearly all of
-> either number is .NET runtime startup and DI container construction, which every library on this
-> page pays alike. **The difference between the two rows is the part that belongs to the library.**
+> **Three rows, each a superset of the one above.** `Startup_DiFloor` registers one trivial service
+> in a container, builds it and resolves it — no mediator involved, the floor every library pays and
+> none of them causes. `Startup_Registered` instead registers the library and resolves the mediator.
+> `Startup_FirstRequest` adds the first dispatch.
+>
+> So `Registered - DiFloor` is what standing the library up costs, `FirstRequest - Registered` is the
+> first dispatch, and **`FirstRequest - DiFloor` is everything the library adds to
+> time-to-first-request** — the number an application actually feels.
+>
+> The floor resolves rather than merely building, and that matters more than it looks: on a container
+> holding one trivial service, building took 6.80 ms and the first resolve another 5.44 ms. A
+> baseline that only built would leave those 5.44 ms to be charged to whichever library the row
+> belongs to. Registration is inside the measurement for the same reason — it used to sit in setup,
+> which left it out of every row and pre-compiled the machinery the measured row then reused.
 >
 > Measured one process per sample, because startup is a property of a process and cannot be observed
-> from inside a warm one. Process timings are skewed, so read the median rather than the mean — and
-> the first row executed also absorbs the machine's own file-cache warm-up, which inflates it and so
-> understates the gap.
+> from inside a warm one. Process timings are skewed, so read the median rather than the mean.
 '@
 
 # ── Emit per-library isolated sections ───────────────────────────────────

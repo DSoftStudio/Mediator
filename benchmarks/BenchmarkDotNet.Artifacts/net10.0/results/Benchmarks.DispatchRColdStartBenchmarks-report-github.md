@@ -10,7 +10,8 @@ InvocationCount=1  IterationCount=1  LaunchCount=40
 RunStrategy=ColdStart  UnrollFactor=1  WarmupCount=0  
 
 ```
-| Method                              | Mean     | Error    | StdDev   | Median   | Ratio | RatioSD | Rank | Allocated | Alloc Ratio |
-|------------------------------------ |---------:|---------:|---------:|---------:|------:|--------:|-----:|----------:|------------:|
-| DispatchR_Startup_ContainerOnly     | 15.46 ms | 5.314 ms | 9.445 ms | 13.93 ms |  1.08 |    0.67 |    1 |  14.66 KB |        1.00 |
-| DispatchR_Startup_WithFirstDispatch | 18.07 ms | 0.098 ms | 0.174 ms | 18.02 ms |  1.27 |    0.16 |    2 |  17.04 KB |        1.16 |
+| Method                         | Mean     | Error     | StdDev    | Median   | Ratio | RatioSD | Added    | Rank | Allocated | Alloc Ratio |
+|------------------------------- |---------:|----------:|----------:|---------:|------:|--------:|--------- |-----:|----------:|------------:|
+| DispatchR_Startup_DiFloor      | 17.23 ms | 11.112 ms | 19.751 ms | 14.07 ms |  1.19 |    1.38 | baseline |    1 |   7.45 KB |        1.00 |
+| DispatchR_Startup_Registered   | 26.96 ms |  9.499 ms | 16.884 ms | 24.25 ms |  1.87 |    1.20 | 10.18 ms |    2 | 746.65 KB |      100.18 |
+| DispatchR_Startup_FirstRequest | 27.84 ms |  0.253 ms |  0.450 ms | 27.83 ms |  1.93 |    0.28 | 13.76 ms |    3 | 748.87 KB |      100.48 |
