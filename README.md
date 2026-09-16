@@ -219,10 +219,18 @@ If you omit the builder callback, `AddMediator()` only registers core services (
 ```csharp
 services.AddMediator()               // Core services only
     .RegisterMediatorHandlers()       // Discover and register all handlers
-    .PrecompilePipelines();           // Build dispatch table and freeze
+    .PrecompilePipelines()            // Request dispatch table
+    .PrecompileNotifications()        // Notification dispatch table
+    .PrecompileStreams();             // Stream dispatch table
 ```
 
 > This is the v1.1.x pattern and remains fully supported for advanced scenarios where you need to insert registrations between steps.
+
+> **All three, not just `PrecompilePipelines()`.** They arm three separate dispatch tables. Stopping
+> after the first leaves `Publish` reaching no handlers and `CreateStream` producing nothing — with no
+> build error and no exception, because an empty table is indistinguishable from an application that
+> has no notifications. `AddMediator(builder => { })` calls all three for you, which is the main
+> reason to prefer it.
 
 ### Multi-project setup (hexagonal / clean architecture)
 

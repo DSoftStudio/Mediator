@@ -146,12 +146,15 @@ internal sealed class MediatorNotificationTracingObserver(
 
             if (measuring)
             {
-                var errorTags = new TagList
-                {
-                    { "mediator.request.type", envelope?.GetTagItem("mediator.request.type") },
-                    { "mediator.request.kind", "notification" },
-                    { "error.type", exception.GetType().FullName! }
-                };
+                // `tags` already carries mediator.request.type and .kind, built from
+                // MediatorNotificationMetadata when this scope was created. The previous version read the
+                // type back off the envelope span with GetTagItem, which returns null whenever the span
+                // carries no tags -- and that is not only "no span": tags are set under IsAllDataRequested,
+                // so any head sampler returning PropagationData leaves the envelope alive and untagged.
+                // The error metric then exported without the one dimension that says WHICH notification
+                // failed. TagList is a struct, so this copies rather than mutating the success tags.
+                var errorTags = tags;
+                errorTags.Add("error.type", exception.GetType().FullName!);
 
                 metrics!.RequestErrors.Add(1, errorTags);
             }
