@@ -1,4 +1,4 @@
----
+﻿---
 layout: default
 title: "Changelog - DSoftStudio.Mediator"
 description: "All notable changes to DSoftStudio.Mediator."
@@ -14,6 +14,69 @@ description: "All notable changes to DSoftStudio.Mediator."
 [&larr; Back to Documentation](index.md)
 
 # Changelog
+
+## [Unreleased] — since 1.4.0-rc.1
+
+### Added
+
+- **DSOFT011 — a pipeline behavior left on the runtime path.** A behavior generated code cannot name
+  — a `file` type, a private nested one, one nested inside a generic — keeps its open registration,
+  and the container closes it reflectively on resolution. That works on the ordinary runtime and
+  throws under Native AOT for any request whose response is a value type. Measured on two projects
+  identical but for one modifier: as `file` the native binary dies on the first `int`-returning
+  request; as `internal` it runs. Both builds and both AOT publishes reported zero warnings.
+- **DSOFT012 — a cached response type with no serializer.** `HybridCache` serializes everything it
+  caches and ships serializers for exactly `string` and `byte[]`; everything else reaches the
+  reflection-based JSON fallback that AOT disables. Reported only when the build actually publishes
+  AOT or trimmed, and only for types no registration in the compilation covers.
+- **AOT compatibility is now enforced by a test**, not asserted. It scans the shipped assemblies for
+  `MakeGenericType`, `Expression.Compile`, `Reflection.Emit`, assembly scanning and friends, and a
+  second check covers the code generated into the consumer's assembly.
+
+### Changed
+
+- **`Send(object)` no longer routes through the dispatch dictionary.** It compiles to a generated type
+  switch, each case calling into the same chain the typed `Send` uses; the `FrozenDictionary` remains
+  as the fallback for types the compilation never saw. The case bodies are emitted as separate
+  methods, which is load-bearing: inlined, the switch grew ~1.2 KB of machine code per request type
+  and past nine types left the JIT's inlining budget — 5.5 ns to 9.5 ns on one added type, 15 ns by
+  forty. Outlined it stays flat, and `Send(object)` measured 12.2 → 6.4 ns on .NET 11.
+- **The dispatch lifetime map is a plain dictionary.** It is built once per container and read only on
+  a cache miss, so a frozen dictionary was paying an expensive build for reads that never happen on
+  the hot path — and paying it on the first dispatch, along with the first compilation of the whole
+  frozen construction path. The mediator's share of a cold first dispatch fell 7.4 → 3.4 ms.
+- **`Abstractions` carries the trim marker directly.** It targets `netstandard2.0`, where
+  `IsTrimmable` and `IsAotCompatible` do nothing, so the package every consumer references shipped
+  unannotated while advertising `native-aot` in its tags.
+
+### Fixed
+
+- **A behavior that narrows itself no longer breaks the consumer's build.** Registering a constrained
+  open generic — `where TRequest : IAuditable`, the ordinary way to scope a behavior — emitted
+  `typeof(Behavior<Request, Response>)` for pairs that fail the constraint: `CS0311`, in a generated
+  file nobody can edit. Both the registration and chain-prediction paths now ask which pairs the
+  behavior actually applies to, which is also what the container does.
+- **Three faults in that constraint check**, each of which reached a consumer: a user-defined implicit
+  conversion was accepted where generic constraints reject it (`CS0315`); a constraint naming a
+  non-generic type nested in a generic one crashed the generator outright, costing the consumer every
+  generated file; and a `notnull` constraint was counted but never checked, naming annotated arguments
+  under it. An undecidable constraint now withdraws the whole behavior from discovery rather than
+  guessing per pair, because closing is all-or-nothing.
+- **Stream behaviors got the same treatment.** The stream generator was calling the scanner without
+  constraint resolution, so every narrowed stream behavior was dropped from discovery.
+- **A `default` `EquatableArray` took the whole generator down.** The constructor normalized null but
+  `default` bypasses every constructor, and the incremental pipeline calls `Equals`/`GetHashCode` on
+  everything it caches — surfacing as `CS8785: Generator failed to generate source`, naming no file,
+  no line and no member.
+- **Diagnostics point at the declaration.** `DSOFT006`, `DSOFT009` and `DSOFT011` passed a zero line
+  span to `Location.Create`, so every report landed at (1,1) — on a using directive rather than the
+  type — and could not be navigated to.
+- **The caching behavior explains an AOT serialization failure** instead of letting Microsoft's
+  serializer throw a message that names neither the request nor the remedy. Only rewritten where
+  reflection-based JSON is actually off, through an exception filter, so a dispatch that does not
+  throw pays nothing.
+
+---
 
 ## [1.4.0-rc.1] — 2026-09-02
 

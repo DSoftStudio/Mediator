@@ -1,4 +1,4 @@
----
+﻿---
 layout: default
 title: "DSoftStudio.Mediator Documentation"
 description: "Ultra-low-latency mediator for .NET with compile-time dispatch, zero-allocation pipelines, and Native AOT support."
@@ -92,7 +92,7 @@ Deep dive into the internal design. Understand how source generators build the d
 
 - [Dispatch Pipeline](architecture/dispatch-pipeline.md) — Step-by-step walkthrough of how a request travels through the generated pipeline.
 - [Source Generators](architecture/source-generators.md) — How the Roslyn source generator discovers handlers and emits dispatch code.
-- [Native AOT & Trimming](architecture/native-aot.md) — Full Native AOT and IL trimming support with zero runtime reflection.
+- [Native AOT & Trimming](architecture/native-aot.md) — verified native publish, and the two things that need a step from you — with zero runtime reflection.
 - [Performance Design](architecture/performance.md) — Zero-allocation strategy, struct pipelines, and compile-time monomorphization.
 - [Design Notes](architecture/design-notes.md) — Trade-offs, rejected alternatives, and rationale behind key decisions.
 - [Production Validation](architecture/production-validation.md) — How the library is validated against real-world workloads.

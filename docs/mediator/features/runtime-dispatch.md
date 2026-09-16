@@ -30,14 +30,16 @@ var command = JsonSerializer.Deserialize(raw, type)!;
 var result = await mediator.Send(command); // runtime-typed dispatch → ValueTask<object?>
 ```
 
-The `Send(object)` overload uses a compile-time generated `FrozenDictionary<Type, DispatchDelegate>` dispatch table — same architecture as `Publish(object)`. No reflection, no `MakeGenericType`, fully AOT-safe.
+The `Send(object)` overload compiles to a generated type switch over every request type the compilation can see. No reflection, no `MakeGenericType` — the dispatch is ordinary C# the compiler checks.
 
 ## How It Works
 
-- The source generator registers a dispatch delegate for every request type discovered at compile time
-- At runtime, `Send(object)` looks up the delegate by `request.GetType()` (O(1) frozen dictionary lookup)
-- The delegate casts the object to the concrete request type, resolves the handler/pipeline, and returns the response boxed as `object?`
-- `TResponse` boxing only occurs on this path — the standard `Send<TRequest, TResponse>()` path remains zero-allocation
+- The source generator emits a `switch (request)` with one type-pattern case per request type it discovered
+- Each case calls straight into that pair's dispatch — the same chain the typed `Send<TRequest, TResponse>()` uses, so both routes share one cached handler and one pipeline chain
+- The response is boxed as `object?` on the way out. Boxing happens only on this path; typed `Send` stays allocation-free
+- A request type the compilation could not see — arriving from an assembly compiled without the generator — falls through to a `FrozenDictionary<Type, DispatchDelegate>` populated at registration. Still no reflection, one dictionary lookup slower
+
+Each case body lives in its own method rather than inside the switch. That is deliberate: inlined, the switch grew about 1.2 KB of machine code per request type, and past nine types it stopped fitting the JIT's inlining budget — `Send(object)` went from 5.5 ns to 9.5 ns on a single added type, and kept climbing to 20 ns by eighty. Outlined, it stays flat.
 
 ## Overload Resolution
 
@@ -54,9 +56,11 @@ var result = await mediator.Send(request);   // → ValueTask<object?>
 
 ## Performance
 
-| Path | Lookup | Boxing | Use case |
-|---|---|---|---|
-| `Send(new Ping())` | Static generic (~7 ns) | None | Normal application code |
-| `Send((object)ping)` | FrozenDictionary (~2-5 ns) | `TResponse` → `object?` | Queue/bus consumers |
+Measured on .NET 11; .NET 10 is roughly twice as slow on both rows.
 
-The FrozenDictionary lookup + boxing cost is negligible compared to the deserialization cost (~μs) in queue/bus scenarios.
+| Path | Cost | Boxing | Use case |
+|---|---|---|---|
+| `Send(new Ping())` | 2.7 ns | None | Normal application code |
+| `Send((object)ping)` | 6.6 ns | `TResponse` → `object?` | Queue/bus consumers |
+
+About 4 ns and one boxed response, against deserialization costs measured in microseconds on the paths that actually need this overload. Not a reason to avoid it where it fits.

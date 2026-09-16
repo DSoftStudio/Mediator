@@ -1,4 +1,4 @@
----
+﻿---
 layout: default
 title: "Installation - DSoftStudio.Mediator"
 description: "Install DSoftStudio.Mediator and companion NuGet packages for .NET 8+ projects."
@@ -114,7 +114,7 @@ This makes the mediator suitable for:
 - **Containerized microservices** — smaller images, no JIT warm-up
 - **High-density cloud workloads** — reduced memory per instance
 
-The `Publish(object)` and `Send(object)` overloads (runtime-typed dispatch) are also AOT-safe — they use compile-time generated `FrozenDictionary<Type, DispatchDelegate>` dispatch tables populated by the source generator, with no `MakeGenericType` at runtime.
+The `Publish(object)` and `Send(object)` overloads are AOT-safe too: `Send(object)` compiles to a generated type switch, with a pre-built dictionary only as the fallback for types the compilation never saw — compile-time generated `FrozenDictionary<Type, DispatchDelegate>` dispatch tables populated by the source generator, with no `MakeGenericType` at runtime.
 
 ## See Also
 

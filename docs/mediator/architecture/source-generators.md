@@ -1,4 +1,4 @@
----
+﻿---
 layout: default
 title: "Source Generators - DSoftStudio.Mediator"
 description: "Roslyn incremental source generators for handler discovery."
@@ -32,9 +32,17 @@ The source generators also emit diagnostics to catch handler misconfigurations a
 | Rule | Severity | Description |
 |---|---|---|
 | **DSOFT001** | Warning | No `IRequestHandler<TRequest, TResponse>` found for a request type |
-| **DSOFT002** | Warning | Multiple request handlers for the same `<TRequest, TResponse>` — only the last registered handler executes |
-| **DSOFT003** | Warning | Multiple stream handlers for the same `<TRequest, TResponse>` — only the last registered handler executes |
-| **DSOFT005** | Warning | A handler in a referenced assembly was discovered but skipped because it is `internal` and the consuming assembly does not have `InternalsVisibleTo` access. The message includes the handler type name and the source assembly |
+| **DSOFT002** | Warning | Multiple request handlers for the same `<TRequest, TResponse>` — only the last registered one executes |
+| **DSOFT003** | Warning | Multiple stream handlers for the same pair — only the last registered one executes |
+| **DSOFT004** | Warning | A mocking library is referenced while interceptors are enabled — mocks of `ISender` would be bypassed |
+| **DSOFT005** | Warning | A handler in a referenced assembly is `internal` and not visible here, so it was skipped |
+| **DSOFT006** | Info | Consider `ICommand<T>` / `IQuery<T>` instead of a bare `IRequest<T>` |
+| **DSOFT007** | Warning | Redundant registration: `AddMediator(configure)` mixed with the manual chain |
+| **DSOFT008** | Warning | `AddMediator()` registered core services but no handlers — dispatch will throw at runtime |
+| **DSOFT009** | Warning | A handler was skipped because generated code cannot name it (`file`, private nested, or nested in a generic) |
+| **DSOFT010** | Warning | A pipeline component was registered *after* the pipeline scan, so no chain was built for it |
+| **DSOFT011** | Warning | A pipeline behavior cannot be named from generated code, so the container closes it at runtime — which throws under Native AOT for a value-type response |
+| **DSOFT012** | Warning | A cached response type has no serializer, in a build publishing AOT or trimmed |
 
 > **Note:** Multiple `INotificationHandler<T>` implementations for the same notification type are expected and do not trigger a diagnostic — notification fan-out is by design.
 

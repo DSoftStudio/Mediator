@@ -1,4 +1,4 @@
----
+﻿---
 layout: default
 title: "ADR-0001: Architecture Overview - DSoftStudio.Mediator"
 description: "Architecture decision: compile-time source generators, zero-allocation pipeline dispatch, and package structure for the fastest .NET mediator."
@@ -196,6 +196,14 @@ The library is fully compatible with .NET Native AOT publishing and IL trimming.
 
 ### Implementation
 - Both packages ship with `IsAotCompatible` and `IsTrimmable` enabled.
+
+> **Amended 2026-09-16.** That second line was not accurate, then or since.
+> `DSoftStudio.Mediator.Abstractions` targets `netstandard2.0`, where both properties are ignored by
+> the SDK, so the package every consumer references shipped with no trim marker while its own tags
+> advertised `native-aot`. It now carries `[AssemblyMetadata("IsTrimmable", "True")]` directly — the
+> same marker the properties would have emitted. The decision above stands and is now verified rather
+> than declared: see [Native AOT](../architecture/native-aot.md), including the two cases that still
+> need a step from the application.
 - `EnableTrimAnalyzer` is active at build time.
 - Hot path uses no reflection, no `MakeGenericType`, no `Expression.Compile`, no dynamic method generation.
 - `Publish(object)` overload uses `NotificationObjectDispatch` — a compile-time generated `FrozenDictionary<Type, DispatchDelegate>` dispatch table populated by the source generator. No `MakeGenericType` at runtime.
@@ -447,6 +455,12 @@ reference only the abstractions package.
 | DSoft_Send_5Behaviors | 15.635 ns | 72 B  | 2.32× |
 
 ### Cross-Library Comparison (All Libraries, Isolated Runs)
+
+> **Historical.** The figures below are the ones this decision was taken on and are kept as written.
+> They no longer describe the library: dispatch has since got faster, and the cold-start row measured
+> something it should not have — a warm dispatch behind a fresh provider, which is why it reads in
+> microseconds where a real startup reads in milliseconds. For current numbers see
+> [benchmarks](../benchmarks.md).
 
 | Operation        | DSoft    | Mediator SG | DispatchR  | MediatR    |
 |------------------|----------|-------------|------------|------------|

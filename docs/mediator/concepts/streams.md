@@ -1,4 +1,4 @@
----
+﻿---
 layout: default
 title: "Streams - DSoftStudio.Mediator"
 description: "Stream responses with IAsyncEnumerable."
@@ -118,10 +118,13 @@ Stream dispatch uses the same source-generated pattern as `Send()` — the `Stre
 
 | Metric | DSoft | MediatR |
 |---|---|---|
-| `CreateStream()` latency | 45.5 ns | 122.9 ns |
-| Allocation | 232 B | 624 B |
+| `CreateStream()` latency | 30.7 ns | 112.8 ns |
+| Allocation | 88 B | 464 B |
 
-The 232 B allocation is the `IAsyncEnumerator<T>` state machine — this is inherent to `IAsyncEnumerable<T>` and cannot be eliminated. DSoftStudio.Mediator adds zero overhead beyond the state machine itself.
+Measured on .NET 11. On .NET 10: 44.8 ns / 232 B against 126.3 ns / 624 B — runtime async removed part
+of the enumerator's cost for everyone.
+
+The 88 B allocation is the `IAsyncEnumerator<T>` state machine — this is inherent to `IAsyncEnumerable<T>` and cannot be eliminated. DSoftStudio.Mediator adds zero overhead beyond the state machine itself.
 
 ## See Also
 

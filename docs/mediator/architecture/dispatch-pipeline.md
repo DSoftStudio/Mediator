@@ -1,4 +1,4 @@
----
+﻿---
 layout: default
 title: "Dispatch Pipeline - DSoftStudio.Mediator"
 description: "Architecture of the zero-allocation dispatch pipeline."
@@ -39,10 +39,13 @@ SenderObjectExtensions.Send(ISender, object)
 RequestObjectDispatch.Dispatch(Type, object, IServiceProvider, CancellationToken)
    │
    ▼
-FrozenDictionary<Type, DispatchDelegate> lookup
+generated switch (request) — one type-pattern case per known request type
    │
    ▼
-Delegate casts object → TRequest, enters the same pipeline as Send<TRequest, TResponse>()
+that case enters the same pipeline as Send<TRequest, TResponse>()
+   │
+   ▼
+(type unknown at compile time → FrozenDictionary<Type, DispatchDelegate> fallback)
 ```
 
 Service resolution goes directly through `IServiceProvider` — the standard DI container call that every mediator must make. This avoids additional container abstractions or service locators.
@@ -68,7 +71,7 @@ This design ensures correct lifetime semantics: Singleton handlers are shared ac
 
 - **Handler discovery** is done at compile time — no assembly scanning, no `GetTypes()`, no attribute reflection.
 - **Request dispatch** obtains the `PipelineChainHandler` through `PipelineChainCache`, which reuses it per provider when the chain's lifetime permits and falls back to resolving it from DI when it does not. The handler, behaviors, pre/post processors, and exception handlers are injected by the container.
-- **Runtime-typed request dispatch** (`Send(object)`) looks up a `FrozenDictionary<Type, DispatchDelegate>` by the request's runtime `Type`, casts `object` → `TRequest`, and enters the same pipeline as `Send<TRequest, TResponse>()`. No reflection, AOT-safe.
+- **Runtime-typed request dispatch** (`Send(object)`) matches the request against a generated type switch and enters the same chain as the typed call; only a type the compilation never saw reaches the `FrozenDictionary` fallback keyed on the runtime `Type`, casts `object` → `TRequest`, and enters the same pipeline as `Send<TRequest, TResponse>()`. No reflection, AOT-safe.
 - **Notification dispatch** reads a precompiled `Func<IServiceProvider, INotificationHandler<T>>[]` array — no `GetServices<T>()` enumeration per publish. Registering a custom `INotificationPublisher` opts out of this path and resolves the handlers through `IEnumerable<INotificationHandler<T>>` on every publish.
 - **Stream dispatch** resolves handlers through a precompiled factory delegate stored in `StreamDispatch<TRequest, TResponse>.Handler`.
 

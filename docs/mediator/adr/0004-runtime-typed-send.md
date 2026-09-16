@@ -1,4 +1,4 @@
----
+﻿---
 layout: default
 title: "ADR-0004: Runtime-Typed Send(object) Dispatch - DSoftStudio.Mediator"
 description: "AOT-safe runtime-typed Send(object) dispatch via FrozenDictionary for message bus and command queue scenarios — no reflection, no MakeGenericType."
@@ -125,3 +125,21 @@ always wins over `Publish(object)` without ambiguity.
 |------------|---------|---------|
 | —          | Draft   | Initial ADR with design proposal |
 | 2026-03-15 | v1.1.0  | Released with FrozenDictionary-based dispatch |
+| 2026-09-16 | v1.4.0  | Superseded in part — see the amendment below |
+
+## Amendment, 2026-09-16 — the dictionary became the fallback
+
+The decision recorded above still holds in what it was protecting: no reflection, no
+`MakeGenericType`, AOT-safe. What changed is the primary route.
+
+`Send(object)` now compiles to a generated `switch (request)` over the request types the compilation
+can see, each case calling into that pair's dispatch directly. The `FrozenDictionary` described above
+is still there and still registered the same way, but it is reached only through the switch's
+`default:` — a request type from an assembly compiled without the generator. It is now the fallback,
+not the mechanism.
+
+One detail is load-bearing and was not obvious. The case bodies live in their own methods rather than
+inside the switch. Inlined, the switch grew about 1.2 KB of machine code per request type, and past
+nine types it left the JIT's inlining budget: `Send(object)` went from 5.5 ns to 9.5 ns on a single
+added type, and by forty types the method had grown to roughly the size of an L1 instruction cache,
+costing 15 ns. Outlined, it stays flat from nine types to eighty.

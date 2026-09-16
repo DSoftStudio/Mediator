@@ -1,4 +1,4 @@
----
+﻿---
 layout: default
 title: "Performance Architecture - DSoftStudio.Mediator"
 description: "Deep dive into zero-allocation performance architecture."
@@ -52,9 +52,21 @@ public Task<TResponse> Handle(
 
 The difference: interface dispatch is a virtual method call (near-zero cost), while delegate creation allocates on the heap every time the pipeline executes.
 
-## FrozenDictionary for Runtime Dispatch
+## Generated Type Switch for Runtime Dispatch
 
-`Send(object)` uses `FrozenDictionary<Type, Func<...>>` — a read-optimized, immutable dictionary built once at startup. Lookups are faster than `Dictionary<>` and allocation-free, while remaining fully AOT-compatible (no reflection at runtime).
+`Send(object)` compiles to a `switch (request)` over every request type the compilation can see, each
+case calling straight into that pair's dispatch — the same cached handler and chain the typed
+`Send<TRequest, TResponse>()` uses. No lookup, no delegate indirection, no reflection. 6.6 ns against
+2.7 ns for the typed call, the difference being the type test and boxing the response.
+
+A request type the compilation could not see falls through to `RequestObjectDispatch`, a
+`FrozenDictionary<Type, DispatchDelegate>` built once at registration. Still AOT-safe, one dictionary
+lookup slower.
+
+The case bodies are emitted as separate methods rather than inside the switch, which is what keeps
+this flat. Inlined, the switch grew about 1.2 KB of machine code per request type: past nine types it
+left the JIT's inlining budget and `Send(object)` jumped from 5.5 ns to 9.5 ns on one added type, and
+by forty types the method approached the size of an L1 instruction cache and cost 15 ns.
 
 ## Auto-Singleton Handler Cache
 
@@ -136,7 +148,7 @@ Net effect: **~4 ns saved per `Publish` call** in the default (no custom publish
 |---|---|
 | Compile-time dispatch | Eliminates reflection + dictionary lookup |
 | Interface dispatch pipeline | Zero delegate allocation per call |
-| FrozenDictionary | Fast AOT-safe runtime dispatch |
+| Generated type switch | `Send(object)` without reflection or a lookup |
 | Auto-Singleton handlers | Eliminates per-call object creation |
 | ValueTask returns | Avoids Task allocation for sync paths |
 | Exact-type notification dispatch | O(1) dispatch, no duplicate handlers |

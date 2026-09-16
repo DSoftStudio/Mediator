@@ -1,4 +1,4 @@
----
+﻿---
 layout: default
 title: "HybridCache - DSoftStudio.Mediator"
 description: "Transparent query caching with Microsoft HybridCache."
@@ -143,6 +143,41 @@ no value to store, and the next dispatch is rejected again rather than served a 
 | Registered open-generic | Every request in the application gets a pipeline chain |
 | Registered per pair | Only that pair gets a chain; every other request keeps its direct dispatch |
 | Registered before validation | A cache hit is served without validating the request |
+
+## Native AOT and trimming needs a serializer
+
+`HybridCache` serializes everything it caches, and `AddHybridCache` pre-registers a serializer for
+exactly two types: `string` and `byte[]`. Every other response type reaches reflection-based
+`System.Text.Json` — which Native AOT and trimming disable.
+
+The failure is well hidden. The build succeeds, the AOT publish succeeds, the application starts, and
+then the first dispatch of a cacheable request throws from inside Microsoft's serializer, naming
+neither the request nor the remedy. A `string` response caches fine, so a project can look healthy
+until its first DTO.
+
+The generator raises **DSOFT012** at build time instead, naming the type. To fix it, declare a context
+listing the cached response types and register it as the cache's serializer options:
+
+```csharp
+[JsonSerializable(typeof(ProductDto))]
+[JsonSerializable(typeof(OrderDto))]        // one line per cached response type
+internal sealed partial class AppJsonContext : JsonSerializerContext;
+
+services.AddKeyedSingleton<JsonSerializerOptions>(
+    typeof(IHybridCacheSerializer<>),
+    new JsonSerializerOptions { TypeInfoResolver = AppJsonContext.Default });
+```
+
+Both details matter: without the explicit `<JsonSerializerOptions>` type argument the call is
+ambiguous and will not compile, and a registration that is not **keyed on the open generic** is
+silently ignored. You can also register an `IHybridCacheSerializer<T>` per type if you want a format
+other than JSON.
+
+> `[ImmutableObject(true)]` is not a workaround, though it looks like one. Verified in a native
+> binary: a sealed record carrying it throws exactly as an unmarked type does, because the
+> serializer-free path requires writes disabled on both cache tiers — which caches nothing at all.
+> What the marker does change is that callers get the same instance rather than a copy per read, so
+> on a DTO anything later mutates, that mutation is shared for the whole entry lifetime.
 
 ## See Also
 

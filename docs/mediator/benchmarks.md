@@ -1,4 +1,4 @@
----
+﻿---
 layout: default
 title: "Benchmarks - DSoftStudio.Mediator"
 description: "Performance benchmarks comparing DSoftStudio.Mediator vs MediatR."
@@ -21,18 +21,25 @@ All benchmarks run on .NET 10 using [BenchmarkDotNet](https://benchmarkdotnet.or
 
 | Operation             | **DSoft**   | Mediator (SG) | DispatchR   | MediatR     |
 |-----------------------|------------:|--------------:|------------:|------------:|
-| `Send()`              |  **7.2 ns** |      12.2 ns  |    33.4 ns  |    41.3 ns  |
-| `Send()` (5 behaviors)| **15.6 ns** |      36.8 ns  |    54.1 ns  |   153.1 ns  |
-| `Publish()`           |  **4.5 ns** |      10.6 ns  |    35.7 ns  |   123.4 ns  |
-| `CreateStream()`      |     45.5 ns |  **44.7 ns**  |    68.1 ns  |   122.9 ns  |
-| Cold Start            | **1.62 µs** |     9.91 µs   |   1.88 µs   |    3.24 µs  |
+| `Send()`              |  **2.7 ns** |       9.8 ns  |    27.1 ns  |    40.9 ns  |
+| `Send()` (5 behaviors)|  **6.6 ns** |      27.2 ns  |    31.2 ns  |   143.5 ns  |
+| `Publish()`           |  **2.4 ns** |       6.3 ns  |    32.3 ns  |   112.9 ns  |
+| `CreateStream()`      | **30.7 ns** |      31.8 ns  |    54.0 ns  |   112.8 ns  |
 
-### Key Takeaways
+Measured on .NET 11. On .NET 10 the same order holds with everything roughly twice as slow.
 
-- **Send** is ~1.7× faster than the next fastest (Mediator SG) and ~5.7× faster than MediatR
-- **Send with 5 behaviors** shows the pipeline chain stays efficient under load — only ~1.7 ns per behavior hop (8.4 ns total overhead for 5 behaviors)
-- **Publish** is ~0.7 ns overhead — effectively a direct call to the handler array
-- **Cold Start** at 1.62 µs means precompiled pipelines warm up in under 2 microseconds
+**Startup** is a separate table, because it answers a different question and the honest answer is less
+flattering. What a library adds to time-to-first-request, over a container holding one trivial service:
+
+| | **DSoft** | Mediator (SG) | DispatchR | MediatR |
+|---|---:|---:|---:|---:|
+| Added to startup | 22.7 ms | **10.2 ms** | 12.1 ms | 31.5 ms |
+| Startup allocation | **32 KB** | 154 KB | 651 KB | 1,680 KB |
+
+This library is third of four on startup time. Most of its share is `PrecompilePipelines()` building the
+dispatch chains up front — the work that buys the 2.7 ns dispatch and the 32 KB.
+
+- **Startup** is measured one process per sample: it is a property of a process and cannot be seen from inside a warm one
 
 ## Allocations
 
