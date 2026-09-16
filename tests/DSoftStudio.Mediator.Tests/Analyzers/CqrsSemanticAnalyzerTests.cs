@@ -75,6 +75,25 @@ public class CqrsSemanticAnalyzerTests
         result.Diagnostics.ShouldContain(d => d.Id == "DSOFT006");
     }
 
+    /// <summary>
+    /// The report has to land on the declaration. Location.Create hands the caller the LINE span,
+    /// and passing a zero one put every DSOFT006 at (1,1) — on the using directive, not the type.
+    /// </summary>
+    [Fact]
+    public void Reports_At_The_Declaration_Not_At_The_Top_Of_The_File()
+    {
+        const string source = """
+            using DSoftStudio.Mediator.Abstractions;
+            public class MyRequest : IRequest<string> { }
+            """;
+
+        var reported = RunAnalyzer(source).Diagnostics.Where(d => d.Id == "DSOFT006").ToArray();
+
+        reported.ShouldNotBeEmpty();
+        reported[0].Location.GetLineSpan().StartLinePosition.Line.ShouldBe(1,
+            customMessage: "the type is on the second line; line 0 is the using directive");
+    }
+
     [Fact]
     public void Emits_DSOFT006_For_Record_Implementing_IRequest()
     {

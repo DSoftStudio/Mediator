@@ -1,4 +1,4 @@
-// Copyright (c) DSoftStudio. All rights reserved.
+﻿// Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using DSoftStudio.Mediator.Generators;
@@ -114,6 +114,28 @@ public class HandlerAccessibilityDiagnosticTests
         reported.Select(d => d.GetMessage()).ShouldContain(m => m.Contains("stream handler"));
         reported.Select(d => d.GetMessage()).ShouldContain(m => m.Contains("notification handler"));
         reported.ShouldAllBe(d => d.Severity == DiagnosticSeverity.Warning);
+    }
+
+    /// <summary>
+    /// A warning nobody can navigate to is barely a warning. Location.Create hands the caller the
+    /// LINE span, and passing a zero one put every report at (1,1) — the squiggle on the first
+    /// character of the file, pointing at a using directive rather than at the handler.
+    /// </summary>
+    [Fact]
+    public void Reports_At_The_Declaration_Not_At_The_Top_Of_The_File()
+    {
+        var result = Run(new HandlerAccessibilityAnalyzer(), PrivateNestedHandlers);
+
+        var reported = result.Diagnostics.Where(d => d.Id == "DSOFT009").ToArray();
+        reported.ShouldNotBeEmpty();
+
+        foreach (var diagnostic in reported)
+        {
+            var line = diagnostic.Location.GetLineSpan().StartLinePosition;
+
+            line.ShouldNotBe(new Microsoft.CodeAnalysis.Text.LinePosition(0, 0),
+                customMessage: $"'{diagnostic.GetMessage()}' points at the first character of the file");
+        }
     }
 
     [Fact]

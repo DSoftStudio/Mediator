@@ -1,4 +1,4 @@
-// Copyright (c) DSoftStudio. All rights reserved.
+﻿// Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using Microsoft.CodeAnalysis;
@@ -62,14 +62,17 @@ public sealed class HandlerAccessibilityAnalyzer : IIncrementalGenerator
                         symbol.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat),
                         kind,
                         typeDecl.SyntaxTree.FilePath,
-                        typeDecl.Identifier.Span);
+                        typeDecl.Identifier.Span,
+                        typeDecl.Identifier.GetLocation().GetLineSpan().Span);
                 })
             .Where(static c => c.FilePath is not null);
 
         context.RegisterSourceOutput(candidates, static (spc, candidate) =>
         {
-            var location = Location.Create(candidate.FilePath!, candidate.Span,
-                new LinePositionSpan(LinePosition.Zero, LinePosition.Zero));
+            // The LINE span matters as much as the text span: Location.Create hands the caller
+            // the line span, so a zero one puts every report at (1,1) — the squiggle lands on the
+            // first character of the file and the warning cannot be navigated to.
+            var location = Location.Create(candidate.FilePath!, candidate.Span, candidate.LineSpan);
 
             spc.ReportDiagnostic(Diagnostic.Create(
                 DiagnosticDescriptors.InaccessibleHandlerSkipped,
@@ -113,9 +116,12 @@ public sealed class HandlerAccessibilityAnalyzer : IIncrementalGenerator
         public readonly string? HandlerKind;
         public readonly string? FilePath;
         public readonly TextSpan Span;
+        public readonly LinePositionSpan LineSpan;
 
-        public InaccessibleHandler(string typeName, string handlerKind, string filePath, TextSpan span)
+        public InaccessibleHandler(
+            string typeName, string handlerKind, string filePath, TextSpan span, LinePositionSpan lineSpan)
         {
+            LineSpan = lineSpan;
             TypeName = typeName;
             HandlerKind = handlerKind;
             FilePath = filePath;

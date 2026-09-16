@@ -1,4 +1,4 @@
-// Copyright (c) DSoftStudio. All rights reserved.
+﻿// Copyright (c) DSoftStudio. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using System;
@@ -87,15 +87,17 @@ public sealed class CqrsSemanticAnalyzer : IIncrementalGenerator
                         symbol.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat),
                         responseType ?? "TResponse",
                         typeDecl.SyntaxTree.FilePath,
-                        headerSpan);
+                        headerSpan,
+                        typeDecl.SyntaxTree.GetLineSpan(headerSpan).Span);
                 })
             .Where(static c => c.FilePath is not null);
 
         context.RegisterSourceOutput(candidates, static (spc, candidate) =>
         {
-            // Reconstruct a minimal location from the stored file path + span.
-            var location = Location.Create(candidate.FilePath!, candidate.Span,
-                new LinePositionSpan(LinePosition.Zero, LinePosition.Zero));
+            // The LINE span matters as much as the text span: Location.Create hands the caller
+            // the line span, so a zero one puts every report at (1,1) — the squiggle lands on the
+            // first character of the file and the warning cannot be navigated to.
+            var location = Location.Create(candidate.FilePath!, candidate.Span, candidate.LineSpan);
 
             spc.ReportDiagnostic(Diagnostic.Create(
                 DiagnosticDescriptors.PreferCqrsInterface,
@@ -115,13 +117,16 @@ public sealed class CqrsSemanticAnalyzer : IIncrementalGenerator
         public readonly string? ResponseType;
         public readonly string? FilePath;
         public readonly TextSpan Span;
+        public readonly LinePositionSpan LineSpan;
 
-        public CqrsCandidate(string typeName, string responseType, string filePath, TextSpan span)
+        public CqrsCandidate(
+            string typeName, string responseType, string filePath, TextSpan span, LinePositionSpan lineSpan)
         {
             TypeName = typeName;
             ResponseType = responseType;
             FilePath = filePath;
             Span = span;
+            LineSpan = lineSpan;
         }
 
         public bool Equals(CqrsCandidate other)
