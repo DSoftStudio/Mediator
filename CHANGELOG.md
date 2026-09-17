@@ -17,7 +17,36 @@ reference the core by project, so a published companion pins the core version it
 leaving `HybridCache` at rc.1 would keep pulling the rc.1 core — with the generator defect below —
 into any application that installs the companion without naming the core itself.
 
+### Added
+
+- **`MediatorCapabilities`** — a public declaration of what a build of the core guarantees, for source
+  generators written against it. `ChainLifetimeFold` is the first: the lifetime of a handler constrains
+  the lifetime of the pipeline chain that consumes it.
+
+  Tooling that registers its own pipeline components has to know this to pick their lifetime, and until
+  now it could only infer it — one generator was reading the presence of `IMediatorDispatchObserver` as
+  evidence of the fold, because the type and the fix shipped in the same commit. That inference would
+  have survived a rename by luck and failed silently otherwise, and the failure lands in the
+  consumer's `BuildServiceProvider` rather than at build time.
+
+  It lives in the core rather than in `Abstractions` on purpose. The core declares a dependency on a
+  MINIMUM version of `Abstractions`, not a pinned one, so NuGet can resolve an old core beside a new
+  `Abstractions` — and a capability declared there would then describe a core that does not have it.
+  Constants are `int` rather than `bool` so a capability can advance without needing a new name, and
+  `const` rather than `static readonly` so a generator can read the value through
+  `IFieldSymbol.ConstantValue`.
+
+
 ### Fixed
+- **Interceptors could rewrite a call inside an expression tree when the type name was ambiguous.**
+  The guard that keeps `Send`, `Publish` and `CreateStream` out of expression trees — the reason a Moq
+  `Setup` or `Verify` still works — resolved `Expression<T>` with `GetTypeByMetadataName`. That returns
+  null both when the type is absent and when it is declared in more than one referenced assembly, and
+  the two are not the same: with the type absent a consumer cannot write an expression tree at all,
+  but with it ambiguous they can, and the guard opened. Reachable by a project pulling the legacy
+  `System.Linq.Expressions` package alongside the framework one. Now resolved with the plural
+  `GetTypesByMetadataName`, matching against any candidate.
+
 
 - **A stream behavior that narrows its own constraint broke the consumer's build.** `StreamGenerator`
   closed it over every pair, producing `CS0311` in `StreamRegistry.g.cs`, a file nobody can edit. The

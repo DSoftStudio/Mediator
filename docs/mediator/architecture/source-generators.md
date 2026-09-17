@@ -65,3 +65,46 @@ Set `<DSoftMediatorSuppressInterceptors>true</DSoftMediatorSuppressInterceptors>
 | Rule | Severity | Description |
 |---|---|---|
 | **DSOFT004** | Warning | A mocking library (Moq, NSubstitute, FakeItEasy, JustMock, RhinoMocks, NimbleMocks) is referenced with interceptors enabled. In Release builds interceptors use a branchless cast that throws `InvalidCastException` on mock objects |
+
+
+## Writing a generator against this library
+
+If you are generating code that registers pipeline components, you need to know what the core it is
+being compiled against actually does — and a generator cannot ask a library that is not running. The
+temptation is to infer capability from a proxy: "type X exists, so behaviour Y is present". That holds
+exactly as long as the two happen to have shipped together, and it fails silently when they stop.
+
+`DSoftStudio.Mediator.MediatorCapabilities` says it instead:
+
+```csharp
+// In your generator, resolved from the compilation being built.
+var caps = compilation.GetTypesByMetadataName("DSoftStudio.Mediator.MediatorCapabilities");
+
+var fold = caps
+    .SelectMany(t => t.GetMembers("ChainLifetimeFold"))
+    .OfType<IFieldSymbol>()
+    .Select(f => f.ConstantValue as int?)
+    .FirstOrDefault(v => v is not null) ?? 0;
+
+if (fold >= 1)
+{
+    // The handler's lifetime constrains the chain's, so a Singleton component is safe here.
+}
+```
+
+Three details are deliberate, and each one matters to a reader:
+
+- **The plural `GetTypesByMetadataName`.** The singular returns null both when a type is missing and
+  when it is declared in more than one referenced assembly. Reading a capability as absent because it
+  was ambiguous is the failure this class exists to remove, reintroduced at the last step.
+- **Read the value, not the presence.** A marker that can only say "I am here" cannot express a second
+  revision of itself. The constants are `int`, so compare with `>=` against the revision you need.
+- **`const`, not `static readonly`.** A generator reads `IFieldSymbol.ConstantValue`, which is null for
+  a field that only has a value at run time.
+
+These constants live in the **core** package, not in `Abstractions`. The core depends on a minimum
+version of `Abstractions` rather than a pinned one, so NuGet can resolve an old core beside a new
+`Abstractions` — a capability declared there would be describing a core that may not have it.
+
+Each constant is covered by a test that exercises the behaviour it claims rather than the constant, so
+a capability cannot be left advertised after the core stops providing it.
