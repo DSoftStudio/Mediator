@@ -86,8 +86,11 @@ public class StreamInterceptorGeneratorTests
             }
             """;
 
+        // allowBrokenInput: the premise of this test is that the inferred call does NOT bind until
+        // the first generator emits the typed extension. The input compilation is supposed to be
+        // short of it, which is the one case the harness check has to be told about.
         var (result, _) = GeneratorTestHarness.RunChain<MediatorExtensionsGenerator, StreamInterceptorGenerator>(
-            inferred, interceptors: true);
+            inferred, interceptors: true, allowBrokenInput: true);
 
         result.AllSource().ShouldContain("InterceptsLocation");
     }

@@ -100,7 +100,7 @@ public class AotCompatibilityTests
             public record UserChanged(int Id) : INotification;
             public sealed class UserChangedHandler : INotificationHandler<UserChanged>
             {
-                public ValueTask Handle(UserChanged notification, CancellationToken ct) => default;
+                public Task Handle(UserChanged notification, CancellationToken ct) => Task.CompletedTask;
             }
 
             public record Ticks(int Count) : IStreamRequest<int>;

@@ -78,11 +78,11 @@ internal static class GeneratorTestHarness
     /// <c>InterceptorsNamespaces</c> feature flag or the compiler rejects the generated code with CS9137.
     /// </summary>
     public static (GeneratorRunResult Result, Compilation Output) Run<TGenerator>(
-        string source, bool interceptors = false, bool release = false,
+        string source, bool interceptors = false, bool release = false, bool allowBrokenInput = false,
         Dictionary<string, string>? buildProperties = null)
         where TGenerator : IIncrementalGenerator, new()
     {
-        var (parse, compilation) = Build(source, interceptors, release);
+        var (parse, compilation) = Build(source, interceptors, release, allowBrokenInput);
         var driver = DriverFor(new TGenerator(), parse, buildProperties)
             .RunGeneratorsAndUpdateCompilation(compilation, out var output, out _);
         return (driver.GetRunResult().Results.Single(), output);
@@ -96,12 +96,12 @@ internal static class GeneratorTestHarness
     /// type-inferred call bind, which the interceptor generator then intercepts.
     /// </summary>
     public static (GeneratorRunResult Result, Compilation Output) RunChain<TFirst, TSecond>(
-        string source, bool interceptors = false, bool release = false,
+        string source, bool interceptors = false, bool release = false, bool allowBrokenInput = false,
         Dictionary<string, string>? buildProperties = null)
         where TFirst : IIncrementalGenerator, new()
         where TSecond : IIncrementalGenerator, new()
     {
-        var (parse, compilation) = Build(source, interceptors, release);
+        var (parse, compilation) = Build(source, interceptors, release, allowBrokenInput);
         DriverFor(new TFirst(), parse, buildProperties)
             .RunGeneratorsAndUpdateCompilation(compilation, out var afterFirst, out _);
         var driver = DriverFor(new TSecond(), parse, buildProperties)
@@ -110,7 +110,7 @@ internal static class GeneratorTestHarness
     }
 
     private static (CSharpParseOptions Parse, CSharpCompilation Compilation) Build(
-        string source, bool interceptors, bool release)
+        string source, bool interceptors, bool release, bool allowBrokenInput)
     {
         var features = new Dictionary<string, string>();
         if (interceptors)
@@ -133,8 +133,70 @@ internal static class GeneratorTestHarness
                 // (e.g. [MethodImpl(AggressiveInlining)]) on the Release path, exercised by passing release: true.
                 optimizationLevel: release ? OptimizationLevel.Release : OptimizationLevel.Debug));
 
+        AssertInputResolves(compilation, allowBrokenInput);
+
         return (parse, compilation);
     }
+
+    /// <summary>
+    /// Names the INPUT compilation is allowed to be missing, because another generator supplies them
+    /// and this harness runs one generator at a time.
+    /// </summary>
+    private static readonly string[] SuppliedByOtherGenerators =
+    [
+        "AddMediator",
+        "RegisterMediatorHandlers",
+        "PrecompilePipelines",
+        "PrecompileNotifications",
+        "PrecompileStreams",
+        "ValidateMediatorHandlers",
+        "MediatorBuilder",
+    ];
+
+    /// <summary>
+    /// Fails when the fixture source does not compile for a reason this harness did not intend.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Three times in one day, across two repositories, a generator test passed while proving nothing:
+    /// the harness could not resolve a type the fixture needed, the fixture therefore did not compile,
+    /// and an assertion that only reads the generator's OUTPUT never noticed. Expression&lt;T&gt; without
+    /// System.Linq.Expressions, then Queryable.Where without System.Linq.Queryable — same shape, and in
+    /// the second case the fixture silently bound to a different overload instead of failing at all.
+    /// </para>
+    /// <para>
+    /// Filtering by diagnostic id does not close it: both were CS0246, which is also what a legitimately
+    /// missing generated method produces. The list is of SYMBOLS, not ids — what another generator
+    /// supplies is enumerated above, and anything else that fails to resolve is a broken fixture.
+    /// </para>
+    /// <para>
+    /// Pass <c>allowBrokenInput</c> for the tests whose subject IS source that does not compile.
+    /// </para>
+    /// </remarks>
+    private static void AssertInputResolves(Compilation compilation, bool allowBrokenInput)
+    {
+        if (allowBrokenInput)
+            return;
+
+        var unexpected = compilation.GetDiagnostics()
+            .Where(d => d.Severity == DiagnosticSeverity.Error)
+            .Where(d => !SuppliedByOtherGenerators.Any(name =>
+                d.GetMessage().Contains($"'{name}'", StringComparison.Ordinal)))
+            .Select(d => $"{d.Id} {d.Location.GetLineSpan().StartLinePosition}: {d.GetMessage()}")
+            .Distinct()
+            .ToList();
+
+        if (unexpected.Count == 0)
+            return;
+
+        throw new InvalidOperationException(
+            "The test fixture does not compile, so whatever this test asserts about the generator's " +
+            "output it is not asserting about the shape it meant to. Either the harness is missing a " +
+            "reference, or the fixture is wrong. If the source is SUPPOSED not to compile, pass " +
+            "allowBrokenInput: true." + Environment.NewLine + "  " +
+            string.Join(Environment.NewLine + "  ", unexpected));
+    }
+
 
     private static GeneratorDriver DriverFor(
         IIncrementalGenerator generator,
