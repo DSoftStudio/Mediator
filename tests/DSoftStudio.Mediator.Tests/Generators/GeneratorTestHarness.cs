@@ -49,6 +49,12 @@ internal static class GeneratorTestHarness
                      "System.Threading.Tasks.Extensions.dll",
                      "System.Collections.dll",
                      "System.Linq.dll",
+                     // System.Linq.Expressions: WITHOUT it, Expression<T> does not resolve -- netstandard.dll does
+                     // not forward it -- and IsInsideExpressionTreeLambda returns false unconditionally, because the
+                     // type it compares against is an error symbol. Every test for that guard then passed while the
+                     // guard never ran: the fixture source simply failed to compile, which the assertions do not read.
+                     // Verified by mutation: with the guard replaced by `if (false)` the tests stayed green.
+                     "System.Linq.Expressions.dll",
                      "System.ComponentModel.dll",
                  })
         {
