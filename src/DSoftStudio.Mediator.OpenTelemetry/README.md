@@ -40,6 +40,21 @@ fast path is already disarmed and decorating changes nothing that was not alread
 An application that registers no instrumentation pays nothing: the core takes the observers as an
 `IEnumerable` and the empty case is known before the container is built.
 
+## What tracing a stream costs
+
+Requests and notifications are observed at the dispatch boundary, so instrumentation is a fixed cost
+per operation. Streams are not: the span has to be made ambient again on every `MoveNextAsync`, or
+spans opened inside the handler leave the stream subtree from the second item onward.
+
+`Activity.Current` is an `AsyncLocal`, and writing one copies the ExecutionContext value map.
+Measured, the set-and-restore pair is **144 B and roughly 185 ns per item** — a thousand-item stream
+pays about 144 KB and 185 µs it would not pay untraced.
+
+That is the trade, and it is deliberate: the alternative is not a cheaper trace but a wrong one.
+**None of it applies without a listener** — with tracing disabled, or with nothing subscribed to the
+source, the behavior hands the stream straight to the next link and never enters the instrumented
+path. Requests, notifications and metrics are unaffected.
+
 ## Installation
 
 ```shell

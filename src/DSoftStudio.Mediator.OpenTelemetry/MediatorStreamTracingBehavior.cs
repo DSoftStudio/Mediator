@@ -83,6 +83,18 @@ public sealed class MediatorStreamTracingBehavior<TRequest, TResponse>(MediatorI
             {
                 bool moved;
 
+                // COST, measured: this pair of writes is 144 B and ~185 ns PER ITEM. Activity.Current is an
+                // AsyncLocal, and writing one copies the ExecutionContext value map -- twice here, set and
+                // restore. A thousand-item stream pays 144 KB and 185 us it did not pay before.
+                //
+                // Kept anyway, deliberately. The alternative is child spans that leave the stream subtree from
+                // the second item on, which is not a degraded trace but a wrong one. The cost lands only when a
+                // listener is attached -- Handle returns next.Handle directly when nothing is listening -- so an
+                // application without OpenTelemetry pays none of it.
+                //
+                // If you are here to remove this: measure the parenting first. And note that no benchmark in this
+                // repository covers the instrumented path, so a run will not tell you either way.
+                //
                 // Activity.Current is restored around every MoveNextAsync, not just the first.
                 //
                 // An async iterator only carries the ambient context it set while its own state
