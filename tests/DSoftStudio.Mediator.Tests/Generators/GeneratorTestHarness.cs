@@ -55,6 +55,11 @@ internal static class GeneratorTestHarness
                      // guard never ran: the fixture source simply failed to compile, which the assertions do not read.
                      // Verified by mutation: with the guard replaced by `if (false)` the tests stayed green.
                      "System.Linq.Expressions.dll",
+                     // System.Linq.Queryable: Queryable.Where takes an Expression<Func<>>; Enumerable.Where takes a
+                     // plain delegate. Without this, a fixture written over IQueryable silently binds to the
+                     // Enumerable overload and stops being an expression tree at all -- so a test asserting the guard
+                     // rejects LINQ-over-IQueryable would be asserting against a shape it never produced.
+                     "System.Linq.Queryable.dll",
                      "System.ComponentModel.dll",
                  })
         {

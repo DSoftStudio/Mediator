@@ -508,10 +508,19 @@ internal static class InterceptorHelpers
         SyntaxNode node,
         CancellationToken ct)
     {
+        // GetTypesByMetadataName, plural. The singular collapses to null when the metadata name is
+        // found in MORE than one referenced assembly, and that is not the same as "not found": with
+        // the type absent a consumer cannot write an expression tree at all, so opening the guard is
+        // harmless -- but with it ambiguous the consumer HAS expression trees and the guard would open
+        // anyway, rewriting the Setup and Verify calls it exists to leave alone.
+        //
+        // Ambiguity is reachable: a project pulling the legacy System.Linq.Expressions package next to
+        // the framework one declares it twice. Measured on Roslyn 4.12 by the Pipeline Explorer team --
+        // singular returns null where plural returns both.
         var expressionOfT = semanticModel.Compilation
-            .GetTypeByMetadataName("System.Linq.Expressions.Expression`1");
+            .GetTypesByMetadataName("System.Linq.Expressions.Expression`1");
 
-        if (expressionOfT is null)
+        if (expressionOfT.Length == 0)
             return false;
 
         SyntaxNode? current = node.Parent;
@@ -520,11 +529,15 @@ internal static class InterceptorHelpers
             if (current is LambdaExpressionSyntax lambda)
             {
                 var typeInfo = semanticModel.GetTypeInfo(lambda, ct);
-                if (typeInfo.ConvertedType is INamedTypeSymbol convertedType
-                    && SymbolEqualityComparer.Default.Equals(
-                        convertedType.OriginalDefinition, expressionOfT))
+                // Any of them: with an ambiguous name every candidate is the same type as far as the
+                // consumer is concerned, and a lambda converted to one of them is an expression tree.
+                if (typeInfo.ConvertedType is INamedTypeSymbol convertedType)
                 {
-                    return true;
+                    foreach (var candidate in expressionOfT)
+                    {
+                        if (SymbolEqualityComparer.Default.Equals(convertedType.OriginalDefinition, candidate))
+                            return true;
+                    }
                 }
             }
 
