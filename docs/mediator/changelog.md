@@ -65,8 +65,10 @@ into any application that installs the companion without naming the core itself.
   span, since tags are set under `IsAllDataRequested` and any head sampler returning `PropagationData`
   leaves the envelope alive and untagged.
 - **The README's manual registration armed one dispatch table of three.** `AddMediator()
-  .RegisterMediatorHandlers().PrecompilePipelines()` left `Publish` reaching no handlers and
-  `CreateStream` producing nothing, with no build error and no exception. The generated
+  .RegisterMediatorHandlers().PrecompilePipelines()`. The two you can forget fail very differently:
+  can forget fail very differently. `CreateStream` throws and names the missing call. `Publish` says
+  nothing at all — it reaches no handlers and returns a completed task, because an empty table is
+  indistinguishable from an application that has no notifications. The generated
   `AddMediator(configure)` overload calls all three.
 
 ### Documentation
